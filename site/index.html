@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hello World</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #121933;
+      --text: #e8ecf6;
+      --muted: #9fb0d1;
+      --accent: #4f8cff;
+      --success: #30c48d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, Arial, Helvetica, sans-serif;
+      background: linear-gradient(135deg, #0b1020 0%, #16203f 100%);
+      color: var(--text);
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    .card {
+      width: min(760px, 100%);
+      background: rgba(18, 25, 51, 0.88);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 20px;
+      padding: 40px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+    }
+    h1 {
+      font-size: clamp(2rem, 5vw, 3.6rem);
+      margin: 0 0 12px;
+      letter-spacing: -0.04em;
+    }
+    p {
+      line-height: 1.7;
+      color: var(--muted);
+      font-size: 1.05rem;
+    }
+   
+    .stack {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 22px;
+    }
+    .chip {
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 999px;
+      padding: 10px 14px;
+      color: var(--text);
+      background: rgba(255,255,255,0.04);
+      font-size: 0.95rem;
+    }
+    code {
+      color: #b8d3ff;
+      background: rgba(255,255,255,0.06);
+      padding: 2px 8px;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>Hello, World</h1>
+    <p>
+      This static site is served from <code>Amazon S3</code>, accelerated by
+      <code>CloudFront</code>, and routed through <code>Route 53</code>.
+    </p>
+    <p>
+      The origin bucket is private and accessible only through CloudFront Origin Access Control.
+      HTTPS is terminated with an ACM certificate attached to the distribution.
+    </p>
+    <div class="stack">
+      <span class="chip">S3</span>
+      <span class="chip">CloudFront</span>
+      <span class="chip">Route 53</span>
+      <span class="chip">ACM</span>
+      <span class="chip">Terraform</span>
+    </div>
+  </main>
+</body>
+</html>

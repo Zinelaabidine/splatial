@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Error</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #121933;
+      --text: #e8ecf6;
+      --muted: #9fb0d1;
+      --accent: #4f8cff;
+      --success: #30c48d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, Arial, Helvetica, sans-serif;
+      background: linear-gradient(135deg, #0b1020 0%, #16203f 100%);
+      color: var(--text);
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    .card {
+      width: min(760px, 100%);
+      background: rgba(18, 25, 51, 0.88);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 20px;
+      padding: 40px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+    }
+    h1 {
+      font-size: clamp(2rem, 5vw, 3.6rem);
+      margin: 0 0 12px;
+      letter-spacing: -0.04em;
+    }
+    p {
+      line-height: 1.7;
+      color: var(--muted);
+      font-size: 1.05rem;
+    }
+  
+  
+    code {
+      color: #b8d3ff;
+      background: rgba(255,255,255,0.06);
+      padding: 2px 8px;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>Page not found</h1>
+    <p>The requested page could not be loaded. It may have moved or the URL might be incorrect.</p>
+   
+  </main>
+</body>
+</html>
