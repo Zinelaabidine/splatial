@@ -35,3 +35,19 @@ output "acm_certificate_domain" {
   value       = data.aws_acm_certificate.site.domain
 }
 
+
+output "cloudfront_distribution_id" {
+  value = aws_cloudfront_distribution.site.id
+}
+
+output "cloudfront_domain_name" {
+  value = aws_cloudfront_distribution.site.domain_name
+}
+
+output "cloudfront_distribution_arn" {
+  value = aws_cloudfront_distribution.site.arn
+}
+
+output "site_url" {
+  value = "https://${var.domain_name}"
+}

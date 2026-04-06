@@ -22,4 +22,7 @@ variable "hosted_zone_name" {
   #default     = "zinelaabidine-nadir.com"
 }
 
- 
+variable "certificate_domain_name" {
+  description = "Existing ACM certificate domain name to use for CloudFront"
+  type        = string
+}
