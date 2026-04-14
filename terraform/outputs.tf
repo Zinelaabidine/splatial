@@ -27,12 +27,12 @@ output "s3_bucket_regional_domain_name" {
 
 output "acm_certificate_arn" {
   description = "The ARN of the ACM certificate for the static site"
-  value       = data.aws_acm_certificate.site.arn
+  value       = aws_acm_certificate.site.arn
 }
 
 output "acm_certificate_domain" {
   description = "The domain name of the ACM certificate for the static site"
-  value       = data.aws_acm_certificate.site.domain
+  value       = aws_acm_certificate.site.domain_name
 }
 
 
