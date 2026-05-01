@@ -51,3 +51,8 @@ output "cloudfront_distribution_arn" {
 output "site_url" {
   value = "https://${var.domain_name}"
 }
+
+output "github_oidc_role_arn" {
+  description = "The ARN of the IAM role for GitHub OIDC"
+  value       = aws_iam_role.github_oidc_role.arn
+}
