@@ -1,0 +1,38 @@
+name: deploy hello world
+on:
+  push:
+    branches:
+      - main
+permissions:
+  contents: read
+  id-token: write
+env:
+  AWS_REGION: us-east-1
+  AWS_ROLE_ARN: arn:aws:iam::886601940523:role/github-actions-s3-cloudfront-deploy
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Deploy to S3 and invalidate CloudFront
+        run: |
+          aws s3 sync ./site s3://hello.openspacenexus.store \
+            --delete \
+            --exclude ".git/*" \
+            --exclude ".github/*" \
+            --exclude "node_modules/*" \
+            --exclude ".terraform/*" \
+            --exclude "*.tf" \
+            --exclude "*.tfvars" \
+            --exclude "README.md"
+          aws cloudfront create-invalidation --distribution-id E1B8UM3UF12208 --paths "/*"
+
+
+
+
