@@ -1,5 +1,5 @@
 resource "aws_cloudfront_origin_access_control" "site" {
-  name                              = "${var.project_name}-oac"
+  name                              = "${local.name_prefix}-oac"
   description                       = "OAC for ${var.domain_name}"
   origin_access_control_origin_type = "s3"
   signing_behavior                  = "always"
@@ -62,7 +62,7 @@ resource "aws_cloudfront_distribution" "site" {
   }
 
   viewer_certificate {
-    acm_certificate_arn      = aws_acm_certificate_validation.site.certificate_arn
+    acm_certificate_arn      = data.aws_acm_certificate.wildcard.arn
     ssl_support_method       = "sni-only"
     minimum_protocol_version = "TLSv1.2_2021"
   }

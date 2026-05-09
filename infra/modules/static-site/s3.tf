@@ -1,7 +1,3 @@
-locals {
-  bucket_name = replace(var.domain_name, "*.", ".")
-}
-
 resource "aws_s3_bucket" "site" {
   bucket = local.bucket_name
 }
@@ -40,4 +36,3 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "site" {
     }
   }
 }
-

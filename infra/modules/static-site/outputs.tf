@@ -27,12 +27,12 @@ output "s3_bucket_regional_domain_name" {
 
 output "acm_certificate_arn" {
   description = "The ARN of the ACM certificate for the static site"
-  value       = aws_acm_certificate.site.arn
+  value       = data.aws_acm_certificate.wildcard.arn
 }
 
 output "acm_certificate_domain" {
   description = "The domain name of the ACM certificate for the static site"
-  value       = aws_acm_certificate.site.domain_name
+  value       = data.aws_acm_certificate.wildcard.domain
 }
 
 
@@ -52,7 +52,7 @@ output "site_url" {
   value = "https://${var.domain_name}"
 }
 
-output "github_oidc_role_arn" {
-  description = "The ARN of the IAM role for GitHub OIDC"
-  value       = aws_iam_role.github_oidc_role.arn
+output "github_oidc_deploy_role_arn" {
+  description = "The ARN of the IAM role used by GitHub Actions to deploy the static site"
+  value       = aws_iam_role.github_oidc_deploy_role.arn
 }

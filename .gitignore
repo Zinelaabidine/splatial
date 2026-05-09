@@ -1,2 +1,13 @@
 terraform/.terraform/providers/registry.terraform.io/hashicorp/aws/6.39.0/darwin_arm64/LICENSE.txt
 terraform/.terraform/providers/registry.terraform.io/hashicorp/aws/6.39.0/darwin_arm64/terraform-provider-aws_v6.39.0_x5
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraform.lock.hcl
+.DS_Store

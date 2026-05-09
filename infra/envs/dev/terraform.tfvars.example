@@ -1,0 +1,7 @@
+environment = "dev"
+
+github_owner = "Zinelaabidine"
+github_repo  = "hello-world-static-site"
+
+domain_name      = "dev.zinelaabidine-nadir.com"
+hosted_zone_name = "zinelaabidine-nadir.com"

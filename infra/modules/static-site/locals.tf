@@ -1,0 +1,5 @@
+locals {
+  name_prefix      = "${var.project_name}-${var.environment}"
+  github_repo_full = "${var.github_owner}/${var.github_repo}"
+  bucket_name      = replace(var.domain_name, ".", "-")
+}
