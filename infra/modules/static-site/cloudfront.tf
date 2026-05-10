@@ -1,4 +1,6 @@
 resource "aws_cloudfront_origin_access_control" "site" {
+  provider = aws.this
+  
   name                              = "${local.name_prefix}-oac"
   description                       = "OAC for ${var.domain_name}"
   origin_access_control_origin_type = "s3"
@@ -7,6 +9,8 @@ resource "aws_cloudfront_origin_access_control" "site" {
 }
 
 resource "aws_cloudfront_distribution" "site" {
+  provider = aws.this
+  
   enabled             = true
   is_ipv6_enabled     = true
   comment             = "Static site for ${var.domain_name}"

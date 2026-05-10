@@ -57,6 +57,8 @@ resource "aws_subnet" "private" {
 
 
 resource "aws_internet_gateway" "static_site" {
+  provider = aws.this
+  
   vpc_id = aws_vpc.static_site.id
 
   tags = {
@@ -66,6 +68,8 @@ resource "aws_internet_gateway" "static_site" {
 }
 
 resource "aws_route_table" "public" {
+  provider = aws.this
+  
   vpc_id = aws_vpc.static_site.id
 
   tags = {
@@ -75,14 +79,65 @@ resource "aws_route_table" "public" {
 }
 
 resource "aws_route" "public_internet" {
+  provider = aws.this
+  
   route_table_id         = aws_route_table.public.id
   destination_cidr_block = "0.0.0.0/0"
   gateway_id             = aws_internet_gateway.static_site.id
 }
 
 resource "aws_route_table_association" "public" {
+  provider = aws.this
+  
   for_each = aws_subnet.public
 
   subnet_id      = each.value.id
   route_table_id = aws_route_table.public.id
+}
+
+
+# Create the HTTP API Gateway
+resource "aws_apigatewayv2_api" "http_api" {
+  provider = aws.this
+  
+  name          = "${var.name}-gateway-api"
+  protocol_type = "HTTP"
+}
+
+resource "aws_apigatewayv2_stage" "http_api" {
+  provider = aws.this
+  
+  api_id      = aws_apigatewayv2_api.http_api.id
+  name        = "$default"
+  auto_deploy = true
+}
+
+resource "aws_apigatewayv2_authorizer" "cognito" {
+  provider = aws.this
+  
+  api_id = aws_apigatewayv2_api.http_api.id
+
+  name = "${var.name}-cognito-authorizer"
+
+  authorizer_type = "JWT"
+
+  identity_sources = ["$request.header.Authorization"]
+
+  jwt_configuration {
+    audience = [aws_cognito_user_pool_client.this.id]
+    issuer   = "https://${aws_cognito_user_pool.this.endpoint}"
+  }
+
+  depends_on = [
+    aws_cognito_user_pool.this,
+    aws_cognito_user_pool_client.this,
+    aws_apigatewayv2_stage.http_api
+  ]
+}
+
+
+resource "aws_apigatewayv2_route" "example" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "GET /hello" # <--- THIS is what you need to add to the URL
+  # ...
 }
