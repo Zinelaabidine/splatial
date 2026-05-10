@@ -1,8 +1,12 @@
 resource "aws_s3_bucket" "site" {
+  provider = aws.this
+  
   bucket = local.bucket_name
 }
 
 resource "aws_s3_bucket_public_access_block" "site" {
+  provider = aws.this
+  
   bucket = aws_s3_bucket.site.id
 
   block_public_acls       = true
@@ -12,6 +16,8 @@ resource "aws_s3_bucket_public_access_block" "site" {
 }
 
 resource "aws_s3_bucket_ownership_controls" "site" {
+  provider = aws.this
+  
   bucket = aws_s3_bucket.site.id
 
   rule {
@@ -20,6 +26,8 @@ resource "aws_s3_bucket_ownership_controls" "site" {
 }
 
 resource "aws_s3_bucket_versioning" "site" {
+  provider = aws.this
+  
   bucket = aws_s3_bucket.site.id
 
   versioning_configuration {
@@ -28,6 +36,8 @@ resource "aws_s3_bucket_versioning" "site" {
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "site" {
+  provider = aws.this
+  
   bucket = aws_s3_bucket.site.id
 
   rule {

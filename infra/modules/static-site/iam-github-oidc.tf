@@ -1,4 +1,6 @@
 data "aws_iam_openid_connect_provider" "github" {
+  provider = aws.this
+  
   url = "https://token.actions.githubusercontent.com"
 }
 
@@ -37,6 +39,8 @@ data "aws_iam_policy_document" "github_oidc_assume_role_policy" {
 }
 
 resource "aws_iam_role" "github_oidc_deploy_role" {
+  provider = aws.this
+  
   name               = "${local.name_prefix}-github-deploy-role"
   assume_role_policy = data.aws_iam_policy_document.github_oidc_assume_role_policy.json
 }
@@ -88,6 +92,8 @@ data "aws_iam_policy_document" "github_deploy_policy" {
 }
 
 resource "aws_iam_role_policy" "github_deploy_policy" {
+  provider = aws.this
+  
   name   = "${local.name_prefix}-github-deploy-policy"
   role   = aws_iam_role.github_oidc_deploy_role.id
   policy = data.aws_iam_policy_document.github_deploy_policy.json

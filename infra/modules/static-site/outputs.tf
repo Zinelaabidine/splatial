@@ -68,3 +68,23 @@ output "public_subnet_ids" {
 output "private_subnet_ids" {
   value = [for s in aws_subnet.private : s.id]
 }
+
+
+output "cognito_user_pool_id" {
+  value = aws_cognito_user_pool.this.id
+}
+
+ 
+output "cognito_client_id" {
+  value = aws_cognito_user_pool_client.this.id
+}
+
+output "api_endpoint" {
+  value = aws_apigatewayv2_stage.http_api.invoke_url
+}
+
+ 
+output "invoke_url" {
+  value = aws_apigatewayv2_stage.http_api.invoke_url
+}
+ 
