@@ -48,3 +48,12 @@ variable "certificate_domain_name" {
   description = "Existing wildcard ACM certificate domain name. Example: *.openspacenexus.store"
   type        = string
 }
+
+
+variable "name" { type = string }
+
+variable "vpc_cidr" { type = string }
+variable "azs" { type = list(string) }
+variable "public_cidrs" { type = list(string) }
+variable "private_cidrs" { type = list(string) }
+

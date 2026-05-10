@@ -70,3 +70,7 @@ resource "aws_cloudfront_distribution" "site" {
 
 
 }
+
+ 
+
+

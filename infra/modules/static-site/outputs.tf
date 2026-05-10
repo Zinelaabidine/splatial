@@ -56,3 +56,15 @@ output "github_oidc_deploy_role_arn" {
   description = "The ARN of the IAM role used by GitHub Actions to deploy the static site"
   value       = aws_iam_role.github_oidc_deploy_role.arn
 }
+
+output "vpc_id" {
+  value = aws_vpc.static_site.id
+}
+
+output "public_subnet_ids" {
+  value = [for s in aws_subnet.public : s.id]
+}
+
+output "private_subnet_ids" {
+  value = [for s in aws_subnet.private : s.id]
+}
