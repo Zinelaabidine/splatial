@@ -1,5 +1,6 @@
 terraform {
   required_version = ">= 1.10.0"
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"
@@ -7,6 +8,11 @@ terraform {
       configuration_aliases = [
         aws.this,
       ]
+    }
+
+    archive = {
+      source  = "hashicorp/archive"
+      version = "~> 2.0"
     }
   }
 }

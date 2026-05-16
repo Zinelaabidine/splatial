@@ -58,7 +58,7 @@ resource "aws_subnet" "private" {
 
 resource "aws_internet_gateway" "static_site" {
   provider = aws.this
-  
+
   vpc_id = aws_vpc.static_site.id
 
   tags = {
@@ -69,7 +69,7 @@ resource "aws_internet_gateway" "static_site" {
 
 resource "aws_route_table" "public" {
   provider = aws.this
-  
+
   vpc_id = aws_vpc.static_site.id
 
   tags = {
@@ -80,7 +80,7 @@ resource "aws_route_table" "public" {
 
 resource "aws_route" "public_internet" {
   provider = aws.this
-  
+
   route_table_id         = aws_route_table.public.id
   destination_cidr_block = "0.0.0.0/0"
   gateway_id             = aws_internet_gateway.static_site.id
@@ -88,7 +88,7 @@ resource "aws_route" "public_internet" {
 
 resource "aws_route_table_association" "public" {
   provider = aws.this
-  
+
   for_each = aws_subnet.public
 
   subnet_id      = each.value.id
@@ -99,14 +99,14 @@ resource "aws_route_table_association" "public" {
 # Create the HTTP API Gateway
 resource "aws_apigatewayv2_api" "http_api" {
   provider = aws.this
-  
+
   name          = "${var.name}-gateway-api"
   protocol_type = "HTTP"
 }
 
 resource "aws_apigatewayv2_stage" "http_api" {
   provider = aws.this
-  
+
   api_id      = aws_apigatewayv2_api.http_api.id
   name        = "$default"
   auto_deploy = true
@@ -114,7 +114,7 @@ resource "aws_apigatewayv2_stage" "http_api" {
 
 resource "aws_apigatewayv2_authorizer" "cognito" {
   provider = aws.this
-  
+
   api_id = aws_apigatewayv2_api.http_api.id
 
   name = "${var.name}-cognito-authorizer"
@@ -136,8 +136,34 @@ resource "aws_apigatewayv2_authorizer" "cognito" {
 }
 
 
-resource "aws_apigatewayv2_route" "example" {
+
+
+resource "aws_apigatewayv2_integration" "hello_from_lambda" {
+  api_id           = aws_apigatewayv2_api.http_api.id
+  integration_type = "AWS_PROXY" # "AWS_PROXY" is used for Lambda
+
+  integration_uri        = aws_lambda_function.myfunc.invoke_arn
+  payload_format_version = "2.0" # Always use 2.0 for HTTP APIs
+}
+
+
+resource "aws_lambda_permission" "apigw_lambda" {
+  statement_id  = "AllowExecutionFromAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.myfunc.function_name
+  principal     = "apigateway.amazonaws.com"
+
+  # This scope ensures ONLY your specific API can call the function
+  source_arn = "${aws_apigatewayv2_api.http_api.execution_arn}/*/*"
+}
+
+
+resource "aws_apigatewayv2_route" "hello_from_lambda" {
   api_id    = aws_apigatewayv2_api.http_api.id
-  route_key = "GET /hello" # <--- THIS is what you need to add to the URL
-  # ...
+  route_key = "GET /helloFromLambda"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.hello_from_lambda.id}"
 }
