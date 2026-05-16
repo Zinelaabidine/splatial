@@ -102,6 +102,14 @@ resource "aws_apigatewayv2_api" "http_api" {
 
   name          = "${var.name}-gateway-api"
   protocol_type = "HTTP"
+
+  cors_configuration {
+    allow_headers = ["content-type", "authorization"] # CRITICAL: Must include authorization
+    allow_methods = ["GET", "POST", "OPTIONS", "DELETE", "PUT"]
+    allow_origins = ["http://localhost:3000"] # Your local frontend URL
+    max_age       = 300
+  }
+  
 }
 
 resource "aws_apigatewayv2_stage" "http_api" {
