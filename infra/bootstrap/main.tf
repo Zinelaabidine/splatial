@@ -6,8 +6,8 @@ resource "aws_s3_bucket" "terraform_state" {
   bucket = "openspacenexus-terraform-state"
 
   tags = {
-    Name        = "terraform-state"
-    ManagedBy   = "Terraform"
+    Name      = "terraform-state"
+    ManagedBy = "Terraform"
   }
 }
 

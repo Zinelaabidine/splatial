@@ -1,6 +1,6 @@
 resource "aws_cognito_user_pool" "this" {
   provider = aws.this
-  
+
   name = "${var.name}-user-pool"
 
   auto_verified_attributes = ["email"]
@@ -16,12 +16,12 @@ resource "aws_cognito_user_pool" "this" {
 
 resource "aws_cognito_user_pool_client" "this" {
   provider = aws.this
-  
+
   name         = "${var.name}-user-pool-client"
   user_pool_id = aws_cognito_user_pool.this.id
 
-  generate_secret = false 
-  
+  generate_secret = false
+
   explicit_auth_flows = [
     "ALLOW_USER_PASSWORD_AUTH",
     "ALLOW_REFRESH_TOKEN_AUTH",
