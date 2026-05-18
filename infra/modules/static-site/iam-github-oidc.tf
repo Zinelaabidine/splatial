@@ -116,7 +116,7 @@ data "aws_iam_policy_document" "github_deploy_policy" {
       "arn:aws:s3:::openspacenexus-terraform-state/*"
     ]
   }
-  
+
 }
 
 resource "aws_iam_role_policy" "github_deploy_policy" {
