@@ -89,6 +89,34 @@ data "aws_iam_policy_document" "github_deploy_policy" {
       aws_cloudfront_distribution.site.arn
     ]
   }
+  statement {
+    sid    = "AllowListStateBucket"
+    effect = "Allow"
+
+    actions = [
+      "s3:ListBucket"
+    ]
+
+    resources = [
+      "arn:aws:s3:::openspacenexus-terraform-state"
+    ]
+  }
+
+  statement {
+    sid    = "AllowManageStateObjects"
+    effect = "Allow"
+
+    actions = [
+      "s3:GetObject",
+      "s3:PutObject",
+      "s3:DeleteObject"
+    ]
+
+    resources = [
+      "arn:aws:s3:::openspacenexus-terraform-state/*"
+    ]
+  }
+  
 }
 
 resource "aws_iam_role_policy" "github_deploy_policy" {
