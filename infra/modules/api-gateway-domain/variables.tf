@@ -33,16 +33,9 @@ variable "aws_region" {
   default     = "us-east-1"
 }
 
-variable "endpoint_type" {
-  description = "API Gateway domain name endpoint type. EDGE certificates must live in us-east-1; REGIONAL certificates must match the API region."
-  type        = string
-  default     = "EDGE"
-
-  validation {
-    condition     = contains(["EDGE", "REGIONAL"], var.endpoint_type)
-    error_message = "endpoint_type must be EDGE or REGIONAL."
-  }
-}
+# API Gateway v2 (HTTP API) only supports REGIONAL endpoints, so no
+# endpoint_type variable is needed. The ACM certificate must be in the
+# same region as the API (aws.us_east_1 when the API is in us-east-1).
 
 variable "cert_validation_ttl" {
   description = "TTL (seconds) for the Route 53 DNS validation records created for the ACM certificate."

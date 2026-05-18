@@ -1,26 +1,21 @@
-# ---------------------------------------------------------------------------
-# Outputs – expose values callers commonly need for cross-module references
-# or for display after `terraform apply`.
-# ---------------------------------------------------------------------------
-
 output "subdomain" {
   description = "The fully-qualified subdomain created for this environment (e.g. api-dev.openspacenexus.store)."
   value       = local.subdomain
 }
 
 output "api_gateway_domain_name" {
-  description = "The custom domain name resource name registered with API Gateway."
-  value       = aws_api_gateway_domain_name.api.domain_name
+  description = "The custom domain name registered with API Gateway v2."
+  value       = aws_apigatewayv2_domain_name.api.domain_name
 }
 
-output "cloudfront_domain_name" {
-  description = "The CloudFront distribution hostname that backs the API Gateway custom domain (EDGE endpoint type)."
-  value       = aws_api_gateway_domain_name.api.cloudfront_domain_name
+output "regional_domain_name" {
+  description = "The regional hostname that backs the API Gateway v2 custom domain – used in Route 53 alias records."
+  value       = aws_apigatewayv2_domain_name.api.domain_name_configuration[0].target_domain_name
 }
 
-output "cloudfront_zone_id" {
-  description = "The hosted zone ID of the CloudFront distribution used in Route 53 alias records."
-  value       = aws_api_gateway_domain_name.api.cloudfront_zone_id
+output "regional_zone_id" {
+  description = "The hosted zone ID of the regional endpoint used in Route 53 alias records."
+  value       = aws_apigatewayv2_domain_name.api.domain_name_configuration[0].hosted_zone_id
 }
 
 output "acm_certificate_arn" {
@@ -33,7 +28,7 @@ output "route53_record_fqdn" {
   value       = aws_route53_record.api_a.fqdn
 }
 
-output "base_path_mapping_id" {
-  description = "The composite ID of the API Gateway base path mapping (domain/base-path)."
-  value       = aws_api_gateway_base_path_mapping.api.id
+output "api_mapping_id" {
+  description = "The ID of the API Gateway v2 API mapping."
+  value       = aws_apigatewayv2_api_mapping.api.id
 }

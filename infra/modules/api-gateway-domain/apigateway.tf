@@ -1,22 +1,22 @@
 # ---------------------------------------------------------------------------
-# API Gateway Custom Domain Name
+# API Gateway v2 Custom Domain Name
 #
-# Registers the subdomain (e.g. api-dev.openspacenexus.store) with API
-# Gateway so it can serve traffic on that hostname.
+# Registers the subdomain (e.g. api-dev.openspacenexus.store) with the
+# HTTP API so it can serve traffic on that hostname.
 #
-# The resource depends on the certificate validation waiter so the ARN
-# is guaranteed to belong to an ISSUED certificate.
+# HTTP API (v2) custom domains are always REGIONAL – the certificate must
+# live in the same region as the API, which is why aws.us_east_1 is used
+# for ACM when the API is deployed in us-east-1.
 # ---------------------------------------------------------------------------
 
-resource "aws_api_gateway_domain_name" "api" {
-  provider        = aws.this
-  domain_name     = local.subdomain
-  certificate_arn = aws_acm_certificate_validation.api.certificate_arn
+resource "aws_apigatewayv2_domain_name" "api" {
+  provider    = aws.this
+  domain_name = local.subdomain
 
-  # Match the endpoint type used when deploying the REST API. EDGE routes
-  # traffic through CloudFront POPs; REGIONAL keeps traffic within one region.
-  endpoint_configuration {
-    types = [var.endpoint_type]
+  domain_name_configuration {
+    certificate_arn = aws_acm_certificate_validation.api.certificate_arn
+    endpoint_type   = "REGIONAL"
+    security_policy = "TLS_1_2"
   }
 
   tags = merge(local.common_tags, {
@@ -25,29 +25,21 @@ resource "aws_api_gateway_domain_name" "api" {
 }
 
 # ---------------------------------------------------------------------------
-# Base Path Mapping
+# API Mapping
 #
-# Maps the root path ("/") of the custom domain to the environment stage of
-# the target REST API. With an empty base_path callers reach the API at:
-#   https://api-<env>.openspacenexus.store/<resource>
+# Binds the custom domain to the HTTP API's $default stage so all traffic
+# arriving at api-<env>.openspacenexus.store is forwarded to the API.
 #
-# If you need to host multiple APIs under the same custom domain, create
-# additional mappings with distinct base_path values and different
-# api_gateway_id/stage_name combinations.
+# stage = "$default" matches the auto-deployed stage created in network.tf.
+# Leave api_mapping_key empty ("") to serve the API at the domain root.
 # ---------------------------------------------------------------------------
 
-resource "aws_api_gateway_base_path_mapping" "api" {
-  provider    = aws.this
-  api_id      = data.aws_api_gateway_rest_api.api.id
-  stage_name  = local.stage_name
-  domain_name = aws_api_gateway_domain_name.api.domain_name
+resource "aws_apigatewayv2_api_mapping" "api" {
+  provider        = aws.this
+  api_id          = data.aws_apigatewayv2_api.api.id
+  domain_name     = aws_apigatewayv2_domain_name.api.id
+  stage           = "$default"
+  api_mapping_key = ""
 
-  # Empty base_path means the API is accessible at the domain root.
-  # Set to a non-empty string (e.g. "v1") if a path prefix is required.
-  base_path = ""
-
-  # The custom domain name resource must be fully created before API Gateway
-  # will accept a base-path mapping against it. AWS returns
-  # "Invalid REST API identifier" if this ordering is not enforced.
-  depends_on = [aws_api_gateway_domain_name.api]
+  depends_on = [aws_apigatewayv2_domain_name.api]
 }

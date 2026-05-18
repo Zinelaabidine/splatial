@@ -45,7 +45,7 @@ module "api_gateway_domain" {
   }
 
   environment      = "staging"
-  api_gateway_name = "hello-staging"
+  api_gateway_name = "hello-staging-gateway-api"   # matches ${var.name}-gateway-api in network.tf
   domain_name      = "openspacenexus.store"
 }
 
