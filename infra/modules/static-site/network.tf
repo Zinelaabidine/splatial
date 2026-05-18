@@ -104,10 +104,13 @@ resource "aws_apigatewayv2_api" "http_api" {
   protocol_type = "HTTP"
 
   cors_configuration {
-    allow_headers = ["content-type", "authorization"] # CRITICAL: Must include authorization
+    allow_headers = ["content-type", "authorization"]
     allow_methods = ["GET", "POST", "OPTIONS", "DELETE", "PUT"]
-    allow_origins = ["http://localhost:3000"] # Your local frontend URL
-    max_age       = 300
+    allow_origins = [
+      "https://${var.domain_name}",
+      "http://localhost:3000",
+    ]
+    max_age = 300
   }
 
 }
