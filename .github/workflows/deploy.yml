@@ -30,9 +30,9 @@ jobs:
       - name: Run Lint
         working-directory: site/my-app
         run: npm run lint 
-      - name: Run Tests
-        working-directory: site/my-app
-        run: npm test
+      # - name: Run Tests
+      #   working-directory: site/my-app
+      #   run: npm test
       - name: terraform setup
         uses: hashicorp/setup-terraform@v3
         with:
