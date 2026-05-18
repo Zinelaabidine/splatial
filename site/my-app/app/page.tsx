@@ -16,8 +16,9 @@ export default function Home() {
       // NOTE: Replace '/' with your specific API Gateway resource path if applicable (e.g., '/hello')
       const data = await authenticatedFetch('/helloFromLambda'); 
       setApiResponse(JSON.stringify(data, null, 2));
-    } catch (error: any) {
-      setApiResponse(`API Request Failed: ${error.message || error}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      setApiResponse(`API Request Failed: ${message}`);
     } finally {
       setLoading(false);
     }
