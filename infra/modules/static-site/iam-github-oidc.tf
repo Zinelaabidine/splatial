@@ -223,6 +223,24 @@ data "aws_iam_policy_document" "github_deploy_policy" {
     ]
   }
 
+  statement {
+    sid    = "APIGatewayDomainNamesManage"
+    effect = "Allow"
+    actions = [
+      "apigateway:GET",
+      "apigateway:POST",
+      "apigateway:PUT",
+      "apigateway:PATCH",
+      "apigateway:DELETE",
+      "apigateway:TagResource",
+      "apigateway:UntagResource",
+    ]
+    resources = [
+      "arn:aws:apigateway:${var.aws_region}::/domainnames",
+      "arn:aws:apigateway:${var.aws_region}::/domainnames/*",
+    ]
+  }
+
   # ─── Lambda ───────────────────────────────────────────────────────────────────
 
   statement {
