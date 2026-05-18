@@ -46,78 +46,364 @@ resource "aws_iam_role" "github_oidc_deploy_role" {
 }
 
 data "aws_iam_policy_document" "github_deploy_policy" {
-  statement {
-    sid    = "AllowListSiteBucket"
-    effect = "Allow"
 
+  # ─── Cognito ──────────────────────────────────────────────────────────────────
+
+  statement {
+    sid    = "CognitoListGlobal"
+    effect = "Allow"
+    actions = [
+      "cognito-idp:ListUserPools",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "CognitoManage"
+    effect = "Allow"
+    actions = [
+      "cognito-idp:CreateUserPool",
+      "cognito-idp:DescribeUserPool",
+      "cognito-idp:UpdateUserPool",
+      "cognito-idp:DeleteUserPool",
+      "cognito-idp:SetUserPoolMfaConfig",
+      "cognito-idp:GetUserPoolMfaConfig",
+      "cognito-idp:ListUserPoolClients",
+      "cognito-idp:CreateUserPoolClient",
+      "cognito-idp:DescribeUserPoolClient",
+      "cognito-idp:UpdateUserPoolClient",
+      "cognito-idp:DeleteUserPoolClient",
+      "cognito-idp:TagResource",
+      "cognito-idp:UntagResource",
+      "cognito-idp:ListTagsForResource",
+    ]
+    resources = [
+      "arn:aws:cognito-idp:${var.aws_region}:886601940523:userpool/*",
+    ]
+  }
+
+  # ─── S3 ───────────────────────────────────────────────────────────────────────
+
+  statement {
+    sid    = "S3ListAllBuckets"
+    effect = "Allow"
+    actions = [
+      "s3:ListAllMyBuckets",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "S3SiteBucketManage"
+    effect = "Allow"
+    actions = [
+      "s3:CreateBucket",
+      "s3:DeleteBucket",
+      "s3:ListBucket",
+      "s3:GetBucketLocation",
+      "s3:GetBucketVersioning",
+      "s3:PutBucketVersioning",
+      "s3:GetBucketPublicAccessBlock",
+      "s3:PutBucketPublicAccessBlock",
+      "s3:GetBucketOwnershipControls",
+      "s3:PutBucketOwnershipControls",
+      "s3:GetEncryptionConfiguration",
+      "s3:PutEncryptionConfiguration",
+      "s3:GetBucketPolicy",
+      "s3:PutBucketPolicy",
+      "s3:DeleteBucketPolicy",
+      "s3:GetBucketTagging",
+      "s3:PutBucketTagging",
+    ]
+    resources = [
+      aws_s3_bucket.site.arn,
+    ]
+  }
+
+  statement {
+    sid    = "S3SiteObjectsAccess"
+    effect = "Allow"
+    actions = [
+      "s3:GetObject",
+      "s3:PutObject",
+      "s3:DeleteObject",
+    ]
+    resources = [
+      "${aws_s3_bucket.site.arn}/*",
+    ]
+  }
+
+  statement {
+    sid    = "S3TerraformStateBackend"
+    effect = "Allow"
     actions = [
       "s3:ListBucket",
-      "s3:GetBucketLocation"
-    ]
-
-    resources = [
-      aws_s3_bucket.site.arn
-    ]
-  }
-
-  statement {
-    sid    = "AllowManageSiteObjects"
-    effect = "Allow"
-
-    actions = [
       "s3:GetObject",
       "s3:PutObject",
-      "s3:DeleteObject"
+      "s3:DeleteObject",
     ]
-
     resources = [
-      "${aws_s3_bucket.site.arn}/*"
+      "arn:aws:s3:::openspacenexus-terraform-state",
+      "arn:aws:s3:::openspacenexus-terraform-state/*",
     ]
   }
 
-  statement {
-    sid    = "AllowCloudFrontInvalidation"
-    effect = "Allow"
+  # ─── EC2 / VPC ────────────────────────────────────────────────────────────────
 
+  statement {
+    sid    = "EC2DescribeGlobal"
+    effect = "Allow"
     actions = [
-      "cloudfront:CreateInvalidation",
+      "ec2:DescribeVpcs",
+      "ec2:DescribeSubnets",
+      "ec2:DescribeInternetGateways",
+      "ec2:DescribeRouteTables",
+      "ec2:DescribeAvailabilityZones",
+      "ec2:DescribeTags",
+      "ec2:DescribeNetworkInterfaces",
+      "ec2:DescribeSecurityGroups",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "EC2VPCManage"
+    effect = "Allow"
+    actions = [
+      "ec2:CreateVpc",
+      "ec2:ModifyVpcAttribute",
+      "ec2:DeleteVpc",
+      "ec2:CreateSubnet",
+      "ec2:ModifySubnetAttribute",
+      "ec2:DeleteSubnet",
+      "ec2:CreateInternetGateway",
+      "ec2:AttachInternetGateway",
+      "ec2:DetachInternetGateway",
+      "ec2:DeleteInternetGateway",
+      "ec2:CreateRouteTable",
+      "ec2:DeleteRouteTable",
+      "ec2:CreateRoute",
+      "ec2:DeleteRoute",
+      "ec2:AssociateRouteTable",
+      "ec2:DisassociateRouteTable",
+      "ec2:CreateTags",
+      "ec2:DeleteTags",
+    ]
+    resources = ["*"]
+  }
+
+  # ─── API Gateway v2 ───────────────────────────────────────────────────────────
+
+  statement {
+    sid    = "APIGatewayManage"
+    effect = "Allow"
+    actions = [
+      "apigateway:GET",
+      "apigateway:POST",
+      "apigateway:PUT",
+      "apigateway:PATCH",
+      "apigateway:DELETE",
+      "apigateway:TagResource",
+      "apigateway:UntagResource",
+    ]
+    resources = [
+      "arn:aws:apigateway:${var.aws_region}::/apis",
+      "arn:aws:apigateway:${var.aws_region}::/apis/*",
+    ]
+  }
+
+  # ─── Lambda ───────────────────────────────────────────────────────────────────
+
+  statement {
+    sid    = "LambdaFunctionManage"
+    effect = "Allow"
+    actions = [
+      "lambda:CreateFunction",
+      "lambda:GetFunction",
+      "lambda:GetFunctionConfiguration",
+      "lambda:UpdateFunctionCode",
+      "lambda:UpdateFunctionConfiguration",
+      "lambda:DeleteFunction",
+      "lambda:AddPermission",
+      "lambda:RemovePermission",
+      "lambda:GetPolicy",
+      "lambda:ListTags",
+      "lambda:TagResource",
+      "lambda:UntagResource",
+      "lambda:GetFunctionCodeSigningConfig",
+    ]
+    resources = [
+      aws_lambda_function.myfunc.arn,
+    ]
+  }
+
+  # ─── CloudFront ───────────────────────────────────────────────────────────────
+
+  # OAC IDs are opaque at plan time; AWS does not support resource-level ARN
+  # scoping for these OAC-specific actions.
+  statement {
+    sid    = "CloudFrontOACManage"
+    effect = "Allow"
+    actions = [
+      "cloudfront:CreateOriginAccessControl",
+      "cloudfront:GetOriginAccessControl",
+      "cloudfront:GetOriginAccessControlConfig",
+      "cloudfront:UpdateOriginAccessControl",
+      "cloudfront:DeleteOriginAccessControl",
+      "cloudfront:ListOriginAccessControls",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "CloudFrontDistributionManage"
+    effect = "Allow"
+    actions = [
+      "cloudfront:CreateDistribution",
       "cloudfront:GetDistribution",
-      "cloudfront:GetInvalidation"
+      "cloudfront:GetDistributionConfig",
+      "cloudfront:UpdateDistribution",
+      "cloudfront:DeleteDistribution",
+      "cloudfront:ListDistributions",
+      "cloudfront:CreateInvalidation",
+      "cloudfront:GetInvalidation",
+      "cloudfront:ListInvalidations",
+      "cloudfront:TagResource",
+      "cloudfront:UntagResource",
+      "cloudfront:ListTagsForResource",
     ]
-
+    # Scoped to this account; CloudFront distribution IDs are assigned by AWS
+    # and are not known until after the first apply, so a specific ARN reference
+    # cannot be used for CreateDistribution.
     resources = [
-      aws_cloudfront_distribution.site.arn
+      "arn:aws:cloudfront::886601940523:distribution/*",
     ]
   }
+
+  # ─── Route 53 ─────────────────────────────────────────────────────────────────
+
   statement {
-    sid    = "AllowListStateBucket"
+    sid    = "Route53ListGlobal"
     effect = "Allow"
-
     actions = [
-      "s3:ListBucket"
+      "route53:ListHostedZones",
+      "route53:ListHostedZonesByName",
     ]
-
-    resources = [
-      "arn:aws:s3:::openspacenexus-terraform-state"
-    ]
+    resources = ["*"]
   }
 
   statement {
-    sid    = "AllowManageStateObjects"
+    sid    = "Route53ZoneManage"
     effect = "Allow"
-
     actions = [
-      "s3:GetObject",
-      "s3:PutObject",
-      "s3:DeleteObject"
+      "route53:GetHostedZone",
+      "route53:ChangeResourceRecordSets",
+      "route53:ListResourceRecordSets",
+      "route53:GetChange",
     ]
-
     resources = [
-      "arn:aws:s3:::openspacenexus-terraform-state/*"
+      "arn:aws:route53:::hostedzone/*",
+      "arn:aws:route53:::change/*",
     ]
+  }
+
+  # ─── ACM ──────────────────────────────────────────────────────────────────────
+
+  statement {
+    sid    = "ACMListGlobal"
+    effect = "Allow"
+    actions = [
+      "acm:ListCertificates",
+    ]
+    resources = ["*"]
+  }
+
+  # Certificate is a pre-existing data source in us-east-1 (wildcard domain).
+  statement {
+    sid    = "ACMDescribeCertificate"
+    effect = "Allow"
+    actions = [
+      "acm:DescribeCertificate",
+      "acm:GetCertificate",
+      "acm:ListTagsForCertificate",
+    ]
+    resources = [
+      "arn:aws:acm:us-east-1:886601940523:certificate/*",
+    ]
+  }
+
+  # ─── IAM ──────────────────────────────────────────────────────────────────────
+
+  # ListOpenIDConnectProviders is a list API that AWS requires on "*".
+  statement {
+    sid    = "IAMListOIDCGlobal"
+    effect = "Allow"
+    actions = [
+      "iam:ListOpenIDConnectProviders",
+    ]
+    resources = ["*"]
+  }
+
+  # Read the pre-existing GitHub Actions OIDC provider (data source only).
+  statement {
+    sid    = "IAMOIDCProviderRead"
+    effect = "Allow"
+    actions = [
+      "iam:GetOpenIDConnectProvider",
+    ]
+    resources = [
+      "arn:aws:iam::886601940523:oidc-provider/token.actions.githubusercontent.com",
+    ]
+  }
+
+  # Scoped exclusively to the two roles this module owns: the GitHub deployment
+  # role and the Lambda execution role. No other role ARN is permitted here to
+  # prevent unchecked privilege escalation.
+  statement {
+    sid    = "IAMProjectRolesManage"
+    effect = "Allow"
+    actions = [
+      "iam:GetRole",
+      "iam:CreateRole",
+      "iam:DeleteRole",
+      "iam:UpdateRole",
+      "iam:PutRolePolicy",
+      "iam:DeleteRolePolicy",
+      "iam:GetRolePolicy",
+      "iam:ListRolePolicies",
+      "iam:AttachRolePolicy",
+      "iam:DetachRolePolicy",
+      "iam:ListAttachedRolePolicies",
+      "iam:TagRole",
+      "iam:UntagRole",
+      "iam:ListRoleTags",
+    ]
+    resources = [
+      "arn:aws:iam::886601940523:role/${local.name_prefix}-github-deploy-role",
+      "arn:aws:iam::886601940523:role/myFunc_execution_role",
+    ]
+  }
+
+  # PassRole is constrained to Lambda only via the iam:PassedToService condition,
+  # preventing the execution role from being passed to any other AWS service.
+  statement {
+    sid    = "IAMPassRoleToLambda"
+    effect = "Allow"
+    actions = [
+      "iam:PassRole",
+    ]
+    resources = [
+      "arn:aws:iam::886601940523:role/myFunc_execution_role",
+    ]
+    condition {
+      test     = "StringEquals"
+      variable = "iam:PassedToService"
+      values   = ["lambda.amazonaws.com"]
+    }
   }
 
 }
+
 
 resource "aws_iam_role_policy" "github_deploy_policy" {
   provider = aws.this
@@ -126,3 +412,5 @@ resource "aws_iam_role_policy" "github_deploy_policy" {
   role   = aws_iam_role.github_oidc_deploy_role.id
   policy = data.aws_iam_policy_document.github_deploy_policy.json
 }
+
+ 
