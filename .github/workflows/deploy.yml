@@ -10,57 +10,95 @@ env:
   AWS_REGION: us-east-1
   #AWS_ROLE_ARN: arn:aws:iam::886601940523:role/github-actions-s3-cloudfront-deploy
   SITE_BUCKET_NAME: hello-dev-openspacenexus-store
-  TERRAFORM_DIR: ./terraform/dev
+  TERRAFORM_DIR: ./infra 
 jobs:
-  deploy-dev:
+  ci:
+    name: lint and test
     runs-on: ubuntu-latest
-    environment: dev
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      - name: Configure AWS credentials to read Terraform state 
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          role-to-assume: ${{ vars.TERRAFORM_READ_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-          
-
-      - name: Setup Terraform
+          node-version: 20
+          cache: "npm"
+          cache-dependency-path: site/my-app/package-lock.json
+      - name: Install Frontend Dependencies
+        working-directory: site/my-app
+        run: npm ci
+      - name: Run Lint
+        working-directory: site/my-app
+        run: npm run lint 
+      - name: Run Tests
+        working-directory: site/my-app
+        run: npm test
+      - name: terraform setup
         uses: hashicorp/setup-terraform@v3
         with:
+          terraform_version: 1.9.0
           terraform_wrapper: false
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+        working-directory: infra
 
-      - name: Read Terraform outputs
-        id: tf
-        working-directory: ${{ env.TERRAFORM_DIR }}
-        run: |
-          terraform init
-          echo "aws_role_arn=$(terraform output -raw github_oidc_deploy_role_arn)" >> "$GITHUB_OUTPUT"
-          echo "s3_bucket_name=$(terraform output -raw s3_bucket_name)" >> "$GITHUB_OUTPUT"
-          echo "cloudfront_distribution_id=$(terraform output -raw cloudfront_distribution_id)" >> "$GITHUB_OUTPUT"
-          echo "site_url=$(terraform output -raw site_url)" >> "$GITHUB_OUTPUT"
-      - name: Configure AWS credentials for deployment
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ steps.tf.outputs.aws_role_arn }}
-          aws-region: ${{ env.AWS_REGION }}
+
+    
+        
+        
+        
+
+
+
+  # deploy-dev:
+  #   runs-on: ubuntu-latest
+  #   environment: dev
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
+  #     - name: Configure AWS credentials to read Terraform state 
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         role-to-assume: ${{ vars.TERRAFORM_READ_ROLE_ARN }}
+  #         aws-region: ${{ env.AWS_REGION }}
+          
+
+  #     - name: Setup Terraform
+  #       uses: hashicorp/setup-terraform@v3
+  #       with:
+  #         terraform_wrapper: false
+
+  #     - name: Read Terraform outputs
+  #       id: tf
+  #       working-directory: ${{ env.TERRAFORM_DIR }}
+  #       run: |
+  #         terraform init
+  #         echo "aws_role_arn=$(terraform output -raw github_oidc_deploy_role_arn)" >> "$GITHUB_OUTPUT"
+  #         echo "s3_bucket_name=$(terraform output -raw s3_bucket_name)" >> "$GITHUB_OUTPUT"
+  #         echo "cloudfront_distribution_id=$(terraform output -raw cloudfront_distribution_id)" >> "$GITHUB_OUTPUT"
+  #         echo "site_url=$(terraform output -raw site_url)" >> "$GITHUB_OUTPUT"
+  #     - name: Configure AWS credentials for deployment
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         role-to-assume: ${{ steps.tf.outputs.aws_role_arn }}
+  #         aws-region: ${{ env.AWS_REGION }}
       
-      - name: Deploy to S3 and invalidate CloudFront
-        run: |
-          aws s3 sync ./site s3://${{ steps.tf.outputs.s3_bucket_name }} \
-            --delete \
-            --exclude ".git/*" \
-            --exclude ".github/*" \
-            --exclude "node_modules/*" \
-            --exclude ".terraform/*" \
-            --exclude "*.tf" \
-            --exclude "*.tfvars" \
-            --exclude "README.md"
-      - name: Invalidate CloudFront
-        run: |
-          aws cloudfront create-invalidation \
-            --distribution-id ${{ steps.tf.outputs.cloudfront_distribution_id }} \
-            --paths "/*"
-      - name: Show deployed site URL
-        run: |
-          echo "Deployed to: ${{ steps.tf.outputs.site_url }}"
+  #     - name: Deploy to S3 and invalidate CloudFront
+  #       run: |
+  #         aws s3 sync ./site s3://${{ steps.tf.outputs.s3_bucket_name }} \
+  #           --delete \
+  #           --exclude ".git/*" \
+  #           --exclude ".github/*" \
+  #           --exclude "node_modules/*" \
+  #           --exclude ".terraform/*" \
+  #           --exclude "*.tf" \
+  #           --exclude "*.tfvars" \
+  #           --exclude "README.md"
+  #     - name: Invalidate CloudFront
+  #       run: |
+  #         aws cloudfront create-invalidation \
+  #           --distribution-id ${{ steps.tf.outputs.cloudfront_distribution_id }} \
+  #           --paths "/*"
+  #     - name: Show deployed site URL
+  #       run: |
+  #         echo "Deployed to: ${{ steps.tf.outputs.site_url }}"
