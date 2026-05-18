@@ -28,7 +28,7 @@ output "cognito_client_id" {
 }
 
 output "api_endpoint" {
-  value = module.static_site.api_endpoint
+  value = "https://${module.api_gateway_domain.subdomain}"
 }
 
 output "api_url" {
