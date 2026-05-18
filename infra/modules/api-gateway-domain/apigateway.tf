@@ -38,11 +38,16 @@ resource "aws_api_gateway_domain_name" "api" {
 
 resource "aws_api_gateway_base_path_mapping" "api" {
   provider    = aws.this
-  api_id      = var.api_gateway_id
+  api_id      = data.aws_api_gateway_rest_api.api.id
   stage_name  = local.stage_name
   domain_name = aws_api_gateway_domain_name.api.domain_name
 
   # Empty base_path means the API is accessible at the domain root.
   # Set to a non-empty string (e.g. "v1") if a path prefix is required.
   base_path = ""
+
+  # The custom domain name resource must be fully created before API Gateway
+  # will accept a base-path mapping against it. AWS returns
+  # "Invalid REST API identifier" if this ordering is not enforced.
+  depends_on = [aws_api_gateway_domain_name.api]
 }

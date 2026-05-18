@@ -1,0 +1,34 @@
+---
+description: Always suggest a conventional commit message after making code changes
+alwaysApply: true
+---
+
+# Commit Message Suggestion
+
+After every session where files were modified, always end the response with a commit message suggestion.
+
+## Format
+
+Follow the project's existing Conventional Commits style:
+
+```
+<type>(<scope>): <short description>
+```
+
+### Types
+- `feat` – new feature or resource
+- `fix` – bug or error fix
+- `refactor` – restructure without behaviour change
+- `docs` – documentation only
+- `style` – formatting, no logic change (e.g. `terraform fmt`)
+- `chore` – maintenance (deps, config, CI tweaks)
+- `security` – IAM, policy, or auth hardening
+
+### Scope
+Match the area changed: `terraform`, `iam`, `ci`, `lambda`, `auth`, `infra`, `frontend`, etc.
+
+## Rules
+- Always run `git log --oneline -5` to match the project's existing commit style before suggesting.
+- Suggest exactly one commit message per response where changes were made.
+- Present it in a fenced code block labelled `Suggested commit`.
+- Do not commit automatically unless the user explicitly asks.

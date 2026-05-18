@@ -8,3 +8,14 @@ data "aws_route53_zone" "root" {
   name         = var.domain_name
   private_zone = false
 }
+
+# ---------------------------------------------------------------------------
+# Look up the REST API Gateway by name.
+# Terraform fetches the ID automatically so callers never need to hard-code
+# or manually look up the opaque 10-character resource ID.
+# ---------------------------------------------------------------------------
+
+data "aws_api_gateway_rest_api" "api" {
+  provider = aws.this
+  name     = var.api_gateway_name
+}

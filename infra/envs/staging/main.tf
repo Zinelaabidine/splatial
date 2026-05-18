@@ -44,8 +44,8 @@ module "api_gateway_domain" {
     aws.us_east_1 = aws.us_east_1
   }
 
-  environment    = "staging"
-  api_gateway_id = "<YOUR_STAGING_API_GATEWAY_ID>"   # replace with actual REST API ID
-  domain_name    = "openspacenexus.store"
+  environment      = "staging"
+  api_gateway_name = "hello-staging"
+  domain_name      = "openspacenexus.store"
 }
 
