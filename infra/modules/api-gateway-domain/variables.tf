@@ -12,8 +12,8 @@ variable "environment" {
   }
 }
 
-variable "api_gateway_name" {
-  description = "The name of the existing REST API Gateway. Terraform looks up its ID automatically via a data source. Must match the name shown in AWS Console → API Gateway → APIs."
+variable "api_gateway_id" {
+  description = "The ID of the HTTP API Gateway to attach the custom domain to. Pass this directly from the module that creates the gateway (e.g. module.static_site.api_gateway_id) so Terraform can infer the dependency and avoid plan-time lookup failures."
   type        = string
 }
 

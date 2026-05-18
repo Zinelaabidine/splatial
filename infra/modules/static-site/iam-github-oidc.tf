@@ -411,7 +411,7 @@ data "aws_iam_policy_document" "github_deploy_policy" {
     ]
     resources = [
       "arn:aws:iam::886601940523:role/${local.name_prefix}-github-deploy-role",
-      "arn:aws:iam::886601940523:role/myFunc_execution_role",
+      aws_iam_role.lambda_exec.arn,
     ]
   }
 
@@ -424,7 +424,7 @@ data "aws_iam_policy_document" "github_deploy_policy" {
       "iam:PassRole",
     ]
     resources = [
-      "arn:aws:iam::886601940523:role/myFunc_execution_role",
+      aws_iam_role.lambda_exec.arn,
     ]
     condition {
       test     = "StringEquals"

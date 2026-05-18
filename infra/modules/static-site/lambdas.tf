@@ -1,6 +1,6 @@
 resource "aws_lambda_function" "myfunc" {
   provider      = aws.this
-  function_name = "myFunc"
+  function_name = "${var.name}-lambda"
   role          = aws_iam_role.lambda_exec.arn
   handler       = "index.handler" # Filename.functionName
   runtime       = "nodejs18.x"    # Adjust to your language
@@ -17,7 +17,7 @@ resource "aws_lambda_function" "myfunc" {
 }
 
 resource "aws_iam_role" "lambda_exec" {
-  name = "myFunc_execution_role"
+  name = "${var.name}-lambda-exec-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"

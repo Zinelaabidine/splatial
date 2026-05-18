@@ -87,4 +87,9 @@ output "api_endpoint" {
 output "invoke_url" {
   value = aws_apigatewayv2_stage.http_api.invoke_url
 }
+
+output "api_gateway_id" {
+  description = "The ID of the HTTP API Gateway created by this module."
+  value       = aws_apigatewayv2_api.http_api.id
+}
  

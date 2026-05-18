@@ -36,7 +36,7 @@ resource "aws_apigatewayv2_domain_name" "api" {
 
 resource "aws_apigatewayv2_api_mapping" "api" {
   provider        = aws.this
-  api_id          = data.aws_apigatewayv2_api.api.id
+  api_id          = var.api_gateway_id
   domain_name     = aws_apigatewayv2_domain_name.api.id
   stage           = "$default"
   api_mapping_key = ""

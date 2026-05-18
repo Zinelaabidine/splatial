@@ -44,8 +44,8 @@ module "api_gateway_domain" {
     aws.us_east_1 = aws.us_east_1
   }
 
-  environment      = "staging"
-  api_gateway_name = "hello-staging-gateway-api" # matches ${var.name}-gateway-api in network.tf
-  domain_name      = "openspacenexus.store"
+  environment    = "staging"
+  api_gateway_id = module.static_site.api_gateway_id
+  domain_name    = "openspacenexus.store"
 }
 
