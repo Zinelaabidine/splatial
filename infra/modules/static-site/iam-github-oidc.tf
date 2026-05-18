@@ -114,6 +114,16 @@ data "aws_iam_policy_document" "github_deploy_policy" {
       "s3:DeleteBucketPolicy",
       "s3:GetBucketTagging",
       "s3:PutBucketTagging",
+      "s3:GetBucketAcl",
+      "s3:GetBucketCORS",
+      "s3:GetBucketWebsite",
+      "s3:GetBucketLogging",
+      "s3:GetBucketRequestPayment",
+      "s3:GetBucketObjectLockConfiguration",
+      "s3:GetLifecycleConfiguration",
+      "s3:GetReplicationConfiguration",
+      "s3:GetAccelerateConfiguration",
+      "s3:GetIntelligentTieringConfiguration",
     ]
     resources = [
       aws_s3_bucket.site.arn,
@@ -155,6 +165,7 @@ data "aws_iam_policy_document" "github_deploy_policy" {
     effect = "Allow"
     actions = [
       "ec2:DescribeVpcs",
+      "ec2:DescribeVpcAttribute",
       "ec2:DescribeSubnets",
       "ec2:DescribeInternetGateways",
       "ec2:DescribeRouteTables",
@@ -231,6 +242,7 @@ data "aws_iam_policy_document" "github_deploy_policy" {
       "lambda:TagResource",
       "lambda:UntagResource",
       "lambda:GetFunctionCodeSigningConfig",
+      "lambda:ListVersionsByFunction",
     ]
     resources = [
       aws_lambda_function.myfunc.arn,
@@ -300,6 +312,7 @@ data "aws_iam_policy_document" "github_deploy_policy" {
       "route53:ChangeResourceRecordSets",
       "route53:ListResourceRecordSets",
       "route53:GetChange",
+      "route53:ListTagsForResource",
     ]
     resources = [
       "arn:aws:route53:::hostedzone/*",
