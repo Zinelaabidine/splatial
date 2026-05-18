@@ -32,3 +32,20 @@ module "static_site" {
 
 }
 
+# ---------------------------------------------------------------------------
+# API Gateway custom domain – staging
+# Produces: api-staging.openspacenexus.store → <api_gateway_id>/staging
+# ---------------------------------------------------------------------------
+module "api_gateway_domain" {
+  source = "../../modules/api-gateway-domain"
+
+  providers = {
+    aws.this      = aws.us_east_1
+    aws.us_east_1 = aws.us_east_1
+  }
+
+  environment    = "staging"
+  api_gateway_id = "<YOUR_STAGING_API_GATEWAY_ID>"   # replace with actual REST API ID
+  domain_name    = "openspacenexus.store"
+}
+
