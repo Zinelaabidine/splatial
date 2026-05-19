@@ -88,6 +88,8 @@ jobs:
           echo "cognito_user_pool_id=$(terraform output -raw cognito_user_pool_id)" >> "$GITHUB_OUTPUT"
           echo "cognito_client_id=$(terraform output -raw cognito_client_id)" >> "$GITHUB_OUTPUT"
           echo "api_endpoint=$(terraform output -raw api_endpoint)" >> "$GITHUB_OUTPUT"
+          echo "raw_scenes_bucket_name=$(terraform output -raw raw_scenes_bucket_name)" >> "$GITHUB_OUTPUT"
+          echo "scenes_table_name=$(terraform output -raw scenes_table_name)" >> "$GITHUB_OUTPUT"
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -105,6 +107,8 @@ jobs:
           NEXT_PUBLIC_USER_POOL_ID: ${{ steps.tf.outputs.cognito_user_pool_id }}
           NEXT_PUBLIC_CLIENT_ID: ${{ steps.tf.outputs.cognito_client_id }}
           NEXT_PUBLIC_API_GATEWAY_URL: ${{ steps.tf.outputs.api_endpoint }}
+          NEXT_PUBLIC_RAW_SCENES_BUCKET: ${{ steps.tf.outputs.raw_scenes_bucket_name }}
+          NEXT_PUBLIC_SCENES_TABLE: ${{ steps.tf.outputs.scenes_table_name }}
       - name: Sync Static Assets to S3
         working-directory: site/my-app
         run: |
