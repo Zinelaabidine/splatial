@@ -33,3 +33,13 @@ output "api_endpoint" {
 output "api_url" {
   value = module.static_site.invoke_url
 }
+
+output "raw_scenes_bucket_name" {
+  description = "Staging raw scenes S3 bucket name"
+  value       = module.static_site.raw_scenes_bucket_name
+}
+
+output "raw_scenes_bucket_arn" {
+  description = "Staging raw scenes S3 bucket ARN"
+  value       = module.static_site.raw_scenes_bucket_arn
+}

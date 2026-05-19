@@ -92,4 +92,14 @@ output "api_gateway_id" {
   description = "The ID of the HTTP API Gateway created by this module."
   value       = aws_apigatewayv2_api.http_api.id
 }
+
+output "raw_scenes_bucket_name" {
+  description = "The name of the S3 bucket for raw scene uploads"
+  value       = aws_s3_bucket.raw_scenes.bucket
+}
+
+output "raw_scenes_bucket_arn" {
+  description = "The ARN of the S3 bucket for raw scene uploads"
+  value       = aws_s3_bucket.raw_scenes.arn
+}
  
