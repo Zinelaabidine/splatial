@@ -196,3 +196,23 @@ resource "aws_apigatewayv2_route" "upload_init" {
 
   target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
 }
+
+resource "aws_apigatewayv2_route" "upload_presign" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "POST /upload/presign"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
+resource "aws_apigatewayv2_route" "upload_complete" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "POST /upload/complete"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
