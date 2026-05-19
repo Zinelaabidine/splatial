@@ -54,9 +54,7 @@ resource "aws_iam_role_policy" "upload_lambda_data_access" {
         Sid    = "S3MultipartUpload"
         Effect = "Allow"
         Action = [
-          "s3:CreateMultipartUpload",
-          "s3:UploadPart",
-          "s3:CompleteMultipartUpload",
+          "s3:PutObject",
           "s3:AbortMultipartUpload",
           "s3:ListMultipartUploadParts",
         ]
@@ -101,6 +99,8 @@ resource "aws_lambda_function" "upload_lambda" {
 }
 
 resource "aws_lambda_permission" "apigw_upload_lambda" {
+  provider = aws.this
+
   statement_id  = "AllowExecutionFromAPIGateway"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.upload_lambda.function_name
