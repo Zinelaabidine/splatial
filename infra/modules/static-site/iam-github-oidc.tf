@@ -144,6 +144,45 @@ data "aws_iam_policy_document" "github_deploy_policy" {
   }
 
   statement {
+    sid    = "S3RawScenesBucketManage"
+    effect = "Allow"
+    actions = [
+      "s3:CreateBucket",
+      "s3:DeleteBucket",
+      "s3:ListBucket",
+      "s3:GetBucketLocation",
+      "s3:GetBucketVersioning",
+      "s3:PutBucketVersioning",
+      "s3:GetBucketPublicAccessBlock",
+      "s3:PutBucketPublicAccessBlock",
+      "s3:GetBucketOwnershipControls",
+      "s3:PutBucketOwnershipControls",
+      "s3:GetEncryptionConfiguration",
+      "s3:PutEncryptionConfiguration",
+      "s3:GetBucketPolicy",
+      "s3:PutBucketPolicy",
+      "s3:DeleteBucketPolicy",
+      "s3:GetBucketTagging",
+      "s3:PutBucketTagging",
+      "s3:GetBucketAcl",
+      "s3:GetBucketCORS",
+      "s3:PutBucketCORS",
+      "s3:GetBucketWebsite",
+      "s3:GetBucketLogging",
+      "s3:GetBucketRequestPayment",
+      "s3:GetBucketObjectLockConfiguration",
+      "s3:GetLifecycleConfiguration",
+      "s3:GetReplicationConfiguration",
+      "s3:GetAccelerateConfiguration",
+      "s3:PutAccelerateConfiguration",
+      "s3:GetIntelligentTieringConfiguration",
+    ]
+    resources = [
+      aws_s3_bucket.raw_scenes.arn,
+    ]
+  }
+
+  statement {
     sid    = "S3TerraformStateBackend"
     effect = "Allow"
     actions = [
