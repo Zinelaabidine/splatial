@@ -34,6 +34,10 @@ resource "aws_iam_role" "upload_lambda_exec" {
       Principal = { Service = "lambda.amazonaws.com" }
     }]
   })
+
+  # iam:CreateRole for this role is scoped in the deploy-role policy. Ensure
+  # that policy update lands before creation is attempted.
+  depends_on = [aws_iam_role_policy.github_deploy_policy]
 }
 
 resource "aws_iam_role_policy_attachment" "upload_lambda_logs" {

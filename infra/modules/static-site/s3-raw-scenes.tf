@@ -2,6 +2,10 @@ resource "aws_s3_bucket" "raw_scenes" {
   provider = aws.this
 
   bucket = "${local.name_prefix}-raw-scenes"
+
+  # s3:CreateBucket for this bucket is scoped in the deploy-role policy. Ensure
+  # that policy update lands before creation is attempted.
+  depends_on = [aws_iam_role_policy.github_deploy_policy]
 }
 
 resource "aws_s3_bucket_public_access_block" "raw_scenes" {
