@@ -178,3 +178,21 @@ resource "aws_apigatewayv2_route" "hello_from_lambda" {
 
   target = "integrations/${aws_apigatewayv2_integration.hello_from_lambda.id}"
 }
+
+resource "aws_apigatewayv2_integration" "upload_init" {
+  api_id           = aws_apigatewayv2_api.http_api.id
+  integration_type = "AWS_PROXY"
+
+  integration_uri        = aws_lambda_function.upload_lambda.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "upload_init" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "POST /upload/init"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
