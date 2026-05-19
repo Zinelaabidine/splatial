@@ -1,7 +1,22 @@
+resource "null_resource" "upload_lambda_deps" {
+  triggers = {
+    # Re-run npm ci whenever the source files change.
+    package_json = filesha256("${path.module}/src-upload/package.json")
+    handler      = filesha256("${path.module}/src-upload/upload.js")
+  }
+
+  provisioner "local-exec" {
+    command     = "npm ci --omit=dev"
+    working_dir = "${path.module}/src-upload"
+  }
+}
+
 data "archive_file" "upload_zip" {
   type        = "zip"
   source_dir  = "${path.module}/src-upload"
   output_path = "${path.module}/upload_payload.zip"
+
+  depends_on = [null_resource.upload_lambda_deps]
 }
 
 resource "aws_iam_role" "upload_lambda_exec" {
