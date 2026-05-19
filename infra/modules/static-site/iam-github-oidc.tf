@@ -178,7 +178,10 @@ data "aws_iam_policy_document" "github_deploy_policy" {
       "s3:GetIntelligentTieringConfiguration",
     ]
     resources = [
-      aws_s3_bucket.raw_scenes.arn,
+      # Constructed ARN avoids a circular dependency: the deploy role policy must
+      # exist before Terraform can create the bucket, so we cannot reference the
+      # resource object here.
+      "arn:aws:s3:::${local.name_prefix}-raw-scenes",
     ]
   }
 
@@ -194,6 +197,40 @@ data "aws_iam_policy_document" "github_deploy_policy" {
     resources = [
       "arn:aws:s3:::openspacenexus-terraform-state",
       "arn:aws:s3:::openspacenexus-terraform-state/*",
+    ]
+  }
+
+  # ─── DynamoDB ─────────────────────────────────────────────────────────────────
+
+  statement {
+    sid    = "DynamoDBListGlobal"
+    effect = "Allow"
+    actions = [
+      "dynamodb:ListTables",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "DynamoDBScenesTableManage"
+    effect = "Allow"
+    actions = [
+      "dynamodb:CreateTable",
+      "dynamodb:DeleteTable",
+      "dynamodb:DescribeTable",
+      "dynamodb:UpdateTable",
+      "dynamodb:DescribeTimeToLive",
+      "dynamodb:UpdateTimeToLive",
+      "dynamodb:DescribeContinuousBackups",
+      "dynamodb:UpdateContinuousBackups",
+      "dynamodb:ListTagsOfResource",
+      "dynamodb:TagResource",
+      "dynamodb:UntagResource",
+    ]
+    resources = [
+      # Constructed ARNs — table does not exist yet on first apply.
+      "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-scenes",
+      "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-scenes/index/*",
     ]
   }
 
@@ -303,6 +340,8 @@ data "aws_iam_policy_document" "github_deploy_policy" {
     ]
     resources = [
       aws_lambda_function.myfunc.arn,
+      # Constructed ARN for the upload Lambda (does not exist yet on first apply).
+      "arn:aws:lambda:${var.aws_region}:886601940523:function:${var.name}-upload-lambda",
     ]
   }
 
@@ -451,6 +490,8 @@ data "aws_iam_policy_document" "github_deploy_policy" {
     resources = [
       "arn:aws:iam::886601940523:role/${local.name_prefix}-github-deploy-role",
       aws_iam_role.lambda_exec.arn,
+      # Constructed ARN for the upload Lambda execution role (does not exist yet).
+      "arn:aws:iam::886601940523:role/${var.name}-upload-lambda-exec-role",
     ]
   }
 
@@ -464,6 +505,8 @@ data "aws_iam_policy_document" "github_deploy_policy" {
     ]
     resources = [
       aws_iam_role.lambda_exec.arn,
+      # Constructed ARN for the upload Lambda execution role (does not exist yet).
+      "arn:aws:iam::886601940523:role/${var.name}-upload-lambda-exec-role",
     ]
     condition {
       test     = "StringEquals"
