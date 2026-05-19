@@ -3,9 +3,10 @@ resource "aws_s3_bucket" "raw_scenes" {
 
   bucket = "${local.name_prefix}-raw-scenes"
 
-  # s3:CreateBucket for this bucket is scoped in the deploy-role policy. Ensure
-  # that policy update lands before creation is attempted.
-  depends_on = [aws_iam_role_policy.github_deploy_policy]
+  # Wait for the deploy-role policy update AND the IAM propagation delay before
+  # attempting to create this bucket. See time_sleep.iam_propagation in
+  # iam-github-oidc.tf for the rationale.
+  depends_on = [time_sleep.iam_propagation]
 }
 
 resource "aws_s3_bucket_public_access_block" "raw_scenes" {

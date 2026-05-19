@@ -5,11 +5,10 @@ resource "aws_dynamodb_table" "scenes" {
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "scene_id"
 
-  # Ensure the GitHub deploy-role policy is updated with DynamoDB permissions
-  # before Terraform attempts to create this table. Without this, a first-time
-  # apply against an environment whose role policy pre-dates this resource will
-  # race and fail with AccessDenied.
-  depends_on = [aws_iam_role_policy.github_deploy_policy]
+  # Wait for the deploy-role policy update AND the IAM propagation delay before
+  # attempting to create this table. See time_sleep.iam_propagation in
+  # iam-github-oidc.tf for the rationale.
+  depends_on = [time_sleep.iam_propagation]
 
   attribute {
     name = "scene_id"

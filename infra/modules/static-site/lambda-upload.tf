@@ -35,9 +35,10 @@ resource "aws_iam_role" "upload_lambda_exec" {
     }]
   })
 
-  # iam:CreateRole for this role is scoped in the deploy-role policy. Ensure
-  # that policy update lands before creation is attempted.
-  depends_on = [aws_iam_role_policy.github_deploy_policy]
+  # Wait for the deploy-role policy update AND the IAM propagation delay before
+  # attempting to create this role. See time_sleep.iam_propagation in
+  # iam-github-oidc.tf for the rationale.
+  depends_on = [time_sleep.iam_propagation]
 }
 
 resource "aws_iam_role_policy_attachment" "upload_lambda_logs" {

@@ -533,4 +533,12 @@ resource "aws_iam_role_policy" "github_deploy_policy" {
   policy = data.aws_iam_policy_document.github_deploy_policy.json
 }
 
- 
+# IAM inline-policy changes take a few seconds to propagate before subsequent
+# AWS API calls from the same session will see the updated permissions. Any
+# resource whose creation permission was added to github_deploy_policy must
+# gate on this sleep so it is not attempted before IAM has propagated.
+resource "time_sleep" "iam_propagation" {
+  create_duration = "15s"
+
+  depends_on = [aws_iam_role_policy.github_deploy_policy]
+}
