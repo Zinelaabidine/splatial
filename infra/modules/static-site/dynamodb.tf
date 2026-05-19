@@ -3,11 +3,7 @@ resource "aws_dynamodb_table" "scenes" {
 
   name         = "${local.name_prefix}-scenes"
   billing_mode = "PAY_PER_REQUEST"
-
-  key_schema {
-    attribute_name = "scene_id"
-    key_type       = "HASH"
-  }
+  hash_key     = "scene_id"
 
   attribute {
     name = "scene_id"
