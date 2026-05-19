@@ -1,12 +1,14 @@
 resource "null_resource" "upload_lambda_deps" {
   triggers = {
-    # Re-run npm ci whenever the source files change.
+    # Re-run npm install whenever package.json or the handler changes.
     package_json = filesha256("${path.module}/src-upload/package.json")
     handler      = filesha256("${path.module}/src-upload/upload.js")
   }
 
   provisioner "local-exec" {
-    command     = "npm ci --omit=dev"
+    # npm install generates package-lock.json on first run; subsequent runs use
+    # the lockfile for reproducibility. --omit=dev keeps node_modules lean.
+    command     = "npm install --omit=dev"
     working_dir = "${path.module}/src-upload"
   }
 }
