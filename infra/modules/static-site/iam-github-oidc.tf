@@ -273,6 +273,7 @@ data "aws_iam_policy_document" "github_deploy_policy" {
       "ec2:DeleteRoute",
       "ec2:AssociateRouteTable",
       "ec2:DisassociateRouteTable",
+      "ec2:ReplaceRoute",
       "ec2:CreateTags",
       "ec2:DeleteTags",
     ]
@@ -427,14 +428,20 @@ data "aws_iam_policy_document" "github_deploy_policy" {
     resources = ["*"]
   }
 
-  # Certificate is a pre-existing data source in us-east-1 (wildcard domain).
+  # The api-gateway-domain module creates its own ACM certificate (DNS-validated).
+  # RequestCertificate/DeleteCertificate/tag actions are required for create and
+  # destroy; the describe/read actions cover plan and the validation waiter.
   statement {
-    sid    = "ACMDescribeCertificate"
+    sid    = "ACMCertificateManage"
     effect = "Allow"
     actions = [
+      "acm:RequestCertificate",
+      "acm:DeleteCertificate",
       "acm:DescribeCertificate",
       "acm:GetCertificate",
       "acm:ListTagsForCertificate",
+      "acm:AddTagsToCertificate",
+      "acm:RemoveTagsFromCertificate",
     ]
     resources = [
       "arn:aws:acm:us-east-1:886601940523:certificate/*",
