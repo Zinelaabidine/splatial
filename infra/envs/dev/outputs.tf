@@ -44,3 +44,13 @@ output "raw_scenes_bucket_arn" {
   description = "Dev raw scenes S3 bucket ARN"
   value       = module.static_site.raw_scenes_bucket_arn
 }
+
+output "scenes_table_name" {
+  description = "Dev DynamoDB ScenesTable name"
+  value       = module.static_site.scenes_table_name
+}
+
+output "scenes_table_arn" {
+  description = "Dev DynamoDB ScenesTable ARN"
+  value       = module.static_site.scenes_table_arn
+}

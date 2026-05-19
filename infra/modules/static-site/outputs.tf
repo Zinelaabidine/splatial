@@ -102,4 +102,14 @@ output "raw_scenes_bucket_arn" {
   description = "The ARN of the S3 bucket for raw scene uploads"
   value       = aws_s3_bucket.raw_scenes.arn
 }
+
+output "scenes_table_name" {
+  description = "The name of the DynamoDB ScenesTable"
+  value       = aws_dynamodb_table.scenes.name
+}
+
+output "scenes_table_arn" {
+  description = "The ARN of the DynamoDB ScenesTable"
+  value       = aws_dynamodb_table.scenes.arn
+}
  

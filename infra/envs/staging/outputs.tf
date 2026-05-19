@@ -43,3 +43,13 @@ output "raw_scenes_bucket_arn" {
   description = "Staging raw scenes S3 bucket ARN"
   value       = module.static_site.raw_scenes_bucket_arn
 }
+
+output "scenes_table_name" {
+  description = "Staging DynamoDB ScenesTable name"
+  value       = module.static_site.scenes_table_name
+}
+
+output "scenes_table_arn" {
+  description = "Staging DynamoDB ScenesTable ARN"
+  value       = module.static_site.scenes_table_arn
+}
