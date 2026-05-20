@@ -18,6 +18,10 @@ and render the result in real-time directly inside a web browser.
 
 </div>
 
+<div align="center">
+  <img src="./docs/images/pipeline.png" alt="Splatial Pipeline — From photos to photorealistic 3D in your browser" width="900"/>
+</div>
+
 ---
 
 ## ✦ Core Features
@@ -35,30 +39,6 @@ and render the result in real-time directly inside a web browser.
 ---
 
 ## ✦ Architecture at a Glance
-
-```
-┌─────────────┐     HTTPS / JWT      ┌───────────────────┐
-│  Next.js    │ ──────────────────►  │   API Gateway     │
-│  (Browser)  │                      │  Cognito Authorizer│
-└─────────────┘                      └────────┬──────────┘
-       ▲  CloudFront CDN                       │
-       │                              ┌────────▼──────────┐
-  ┌────┴─────┐                        │  Lambda Functions │
-  │  S3      │◄── Terraform Sync ─────│  (Presign/Upload/ │
-  │  (Static)│                        │   Quota Check)    │
-  └──────────┘                        └────────┬──────────┘
-                                               │ SQS Job Queue
-                                      ┌────────▼──────────┐
-                                      │  EC2 Spot Workers │
-                                      │  (G4dn / G5 GPU)  │
-                                      │  3DGS Training    │
-                                      └────────┬──────────┘
-                                               │
-                                      ┌────────▼──────────┐
-                                      │  S3 (Raw Scenes / │
-                                      │  Trained Splats)  │
-                                      └───────────────────┘
-```
 
 > For the full technical breakdown — network topology, IAM design, spot-interruption recovery, scaling rules, and file format schemas — see the **[`/docs`](./docs/architecture.md)** directory.
 
@@ -253,8 +233,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
----
+ 
 
-<div align="center">
-  Built with precision. Rendered in real-time. &nbsp;✦&nbsp; <strong>Splatial</strong>
-</div>
+ 
