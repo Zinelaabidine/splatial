@@ -1,4 +1,4 @@
-name: deploy hello world
+name: deploy splatial
 on:
   push:
     branches:
@@ -11,7 +11,7 @@ permissions:
 env:
   AWS_REGION: us-east-1
   #AWS_ROLE_ARN: arn:aws:iam::886601940523:role/github-actions-s3-cloudfront-deploy
-  SITE_BUCKET_NAME: hello-dev-openspacenexus-store
+  SITE_BUCKET_NAME: splatial-dev-openspacenexus-store
   TERRAFORM_DIR: ./infra 
 jobs:
   ci:
@@ -67,7 +67,7 @@ jobs:
       - name: Configure AWS credentials for Deployment
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::886601940523:role/hello-${{ github.ref_name == 'main' && 'prod' || github.ref_name }}-github-deploy-role
+          role-to-assume: arn:aws:iam::886601940523:role/splatial-${{ github.ref_name == 'main' && 'prod' || github.ref_name }}-github-deploy-role
           aws-region: ${{ env.AWS_REGION }}
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3

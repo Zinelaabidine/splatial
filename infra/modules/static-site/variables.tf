@@ -13,7 +13,7 @@ variable "project_name" {
 variable "domain_name" {
   description = "The domain name for the static site"
   type        = string
-  #default     = "hello.openspacenexus.store"
+  #default     = "splatial.openspacenexus.store"
 }
 
 variable "hosted_zone_name" {

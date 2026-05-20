@@ -11,7 +11,7 @@ module "static_site" {
     aws.this = aws.us_east_1
   }
 
-  project_name            = "hello"
+  project_name            = "splatial"
   environment             = "dev"
   aws_region              = "us-east-1"
   domain_name             = "splatial-dev.openspacenexus.store"
@@ -20,7 +20,7 @@ module "static_site" {
 
   github_owner = "Zinelaabidine"
 
-  name          = "hello-dev"
+  name          = "splatial-dev"
   vpc_cidr      = "10.0.0.0/16"
   azs           = ["us-east-1a", "us-east-1b"]
   public_cidrs  = ["10.0.1.0/24", "10.0.2.0/24"]
