@@ -1,7 +1,7 @@
 environment = "dev"
 
 github_owner = "Zinelaabidine"
-github_repo  = "hello-world-static-site"
+github_repo  = "splatial"
 
-domain_name      = "dev.zinelaabidine-nadir.com"
-hosted_zone_name = "zinelaabidine-nadir.com"
+domain_name      = "splatial-dev.openspacenexus.store"
+hosted_zone_name = "openspacenexus.store"

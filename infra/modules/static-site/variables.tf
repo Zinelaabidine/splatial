@@ -7,19 +7,19 @@ variable "aws_region" {
 variable "project_name" {
   description = "The name of the project"
   type        = string
-  default     = "hello-world-static-site"
+  default     = "splatial"
 }
 
 variable "domain_name" {
   description = "The domain name for the static site"
   type        = string
-  #default     = "hello.zinelaabidine-nadir.com"
+  #default     = "hello.openspacenexus.store"
 }
 
 variable "hosted_zone_name" {
   description = "The hosted zone for the domain"
   type        = string
-  #default     = "zinelaabidine-nadir.com"
+  #default     = "openspacenexus.store"
 }
 
 variable "environment" {
@@ -41,7 +41,7 @@ variable "github_owner" {
 variable "github_repo" {
   description = "GitHub repository name"
   type        = string
-  default     = "hello-world-static-site"
+  default     = "splatial"
 }
 
 variable "certificate_domain_name" {

@@ -14,12 +14,11 @@ module "static_site" {
   project_name            = "hello"
   environment             = "prod"
   aws_region              = "us-east-1"
-  domain_name             = "hello-prod.openspacenexus.store"
+  domain_name             = "splatial.openspacenexus.store"
   hosted_zone_name        = "openspacenexus.store"
   certificate_domain_name = "*.openspacenexus.store"
 
   github_owner = "Zinelaabidine"
-  github_repo  = "hello-world-static-site"
 
   name          = "hello-prod"
   vpc_cidr      = "10.2.0.0/16"
