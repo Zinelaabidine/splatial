@@ -1,11 +1,9 @@
 import type { NextConfig } from "next";
-import path from "node:path";
 
 const nextConfig: NextConfig = {
-  output: 'export',
-  turbopack: {
-    root: path.resolve(__dirname),
-  },
+  // output: 'export' is only valid for `next build` (static S3 deploy),
+  // not for `next dev`. Applying it in dev causes the server to hang.
+  ...(process.env.NODE_ENV === "production" ? { output: "export" } : {}),
 };
 
 export default nextConfig;
