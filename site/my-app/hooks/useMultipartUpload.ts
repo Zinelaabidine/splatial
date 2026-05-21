@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchAuthSession } from "aws-amplify/auth";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { authenticatedFetch } from "@/utils/apiClient";
@@ -99,6 +100,60 @@ export function useMultipartUpload(
   // in-flight fetches even after re-renders.
   const controllersRef = useRef<Map<string, AbortController>>(new Map());
 
+  // Cached JWT token — refreshed at the start of each upload so the synchronous
+  // `pagehide` handler can fire keepalive DELETEs without an async token fetch.
+  const tokenRef = useRef<string | null>(null);
+
+  // Sync mirror of `uploads` state for safe access inside event handlers
+  // that run outside React's render cycle (pagehide).
+  const uploadsRef = useRef<UploadItem[]>([]);
+  useEffect(() => {
+    uploadsRef.current = uploads;
+  }, [uploads]);
+
+  // ---------------------------------------------------------------------------
+  // Scene cleanup helper — fire-and-forget DELETE /scenes/{sceneId}.
+  // Called when the user cancels or removes an upload that already has a
+  // sceneId registered in DynamoDB (i.e. /upload/init succeeded).
+  // ---------------------------------------------------------------------------
+  const deleteScene = useCallback((sceneId: string) => {
+    void authenticatedFetch(`/scenes/${sceneId}`, { method: "DELETE" }).catch(
+      () => {
+        // Best-effort: backend TTL will clean up within 24 h if this fails.
+      },
+    );
+  }, []);
+
+  // ---------------------------------------------------------------------------
+  // pagehide — fires when the tab is closed, navigated away, or put in the
+  // bfcache. Use keepalive fetch so the request outlives the page.
+  // Regular fetch / authenticatedFetch are async; we use the cached token
+  // so this handler stays synchronous (required by the browser).
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    const handler = () => {
+      const token = tokenRef.current;
+      const base = process.env.NEXT_PUBLIC_API_GATEWAY_URL?.replace(/\/$/, "");
+      if (!token || !base) return;
+
+      for (const item of uploadsRef.current) {
+        if (item.sceneId && !TERMINAL_STAGES.has(item.stage)) {
+          void fetch(`${base}/scenes/${item.sceneId}`, {
+            method: "DELETE",
+            keepalive: true,
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+          });
+        }
+      }
+    };
+
+    window.addEventListener("pagehide", handler);
+    return () => window.removeEventListener("pagehide", handler);
+  }, []);
+
   // Tear down any in-flight uploads if the component unmounts mid-flow.
   useEffect(() => {
     const controllers = controllersRef.current;
@@ -147,6 +202,16 @@ export function useMultipartUpload(
       };
 
       try {
+        // Cache the JWT token so the synchronous pagehide handler can use it
+        // for keepalive DELETEs. Amplify returns a cached session — no round trip.
+        try {
+          const session = await fetchAuthSession();
+          const t = session.tokens?.idToken?.toString();
+          if (t) tokenRef.current = t;
+        } catch {
+          // Non-fatal: upload proceeds; pagehide fallback just won't have token.
+        }
+
         // -------------------------------------------------------------------
         // Step A — Initialize multipart upload
         // -------------------------------------------------------------------
@@ -390,15 +455,30 @@ export function useMultipartUpload(
     [enqueue],
   );
 
-  const cancel = useCallback((id: string) => {
-    controllersRef.current.get(id)?.abort();
-  }, []);
+  const cancel = useCallback(
+    (id: string) => {
+      controllersRef.current.get(id)?.abort();
+      // Clean up the DynamoDB record so it doesn't linger in PENDING_UPLOAD
+      // and eat into the quota. The AbortController above cancels the S3 PUTs;
+      // this call removes the scene row the backend already created.
+      const sceneId = uploadsRef.current.find((u) => u.id === id)?.sceneId;
+      if (sceneId) deleteScene(sceneId);
+    },
+    [deleteScene],
+  );
 
-  const remove = useCallback((id: string) => {
-    controllersRef.current.get(id)?.abort();
-    controllersRef.current.delete(id);
-    setUploads((prev) => prev.filter((u) => u.id !== id));
-  }, []);
+  const remove = useCallback(
+    (id: string) => {
+      controllersRef.current.get(id)?.abort();
+      controllersRef.current.delete(id);
+      // Delete the backend record for any stage that hasn't reached a clean
+      // terminal state yet (ready scenes stay in S3 intentionally).
+      const item = uploadsRef.current.find((u) => u.id === id);
+      if (item?.sceneId && item.stage !== "ready") deleteScene(item.sceneId);
+      setUploads((prev) => prev.filter((u) => u.id !== id));
+    },
+    [deleteScene],
+  );
 
   const clearTerminated = useCallback(() => {
     setUploads((prev) => prev.filter((u) => !TERMINAL_STAGES.has(u.stage)));

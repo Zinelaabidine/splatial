@@ -34,6 +34,14 @@ resource "aws_dynamodb_table" "scenes" {
     projection_type = "KEYS_ONLY"
   }
 
+  # TTL: Lambda sets `expires_at` (epoch seconds) on every record.
+  # PENDING_UPLOAD records expire after 24 h; PROCESSING after 7 days.
+  # DynamoDB deletes expired items within ~48 h — no Lambda cleanup needed.
+  ttl {
+    attribute_name = "expires_at"
+    enabled        = true
+  }
+
   point_in_time_recovery {
     enabled = true
   }

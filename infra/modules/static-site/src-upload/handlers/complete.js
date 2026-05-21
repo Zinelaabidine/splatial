@@ -67,12 +67,17 @@ exports.handler = async (event) => {
 
   // Transition DynamoDB record from PENDING_UPLOAD → PROCESSING.
   // The ConditionExpression guards against double-completing an upload.
-  const now = new Date().toISOString();
+  // Extend TTL to 7 days so the record survives a slow processing pipeline.
+  const nowMs = Date.now();
+  const now = new Date(nowMs).toISOString();
+  const expiresAt = Math.floor(nowMs / 1000) + 7 * 24 * 60 * 60;
+
   await dynamo.send(
     new UpdateItemCommand({
       TableName: TABLE,
       Key: { scene_id: { S: sceneId } },
-      UpdateExpression: "SET #s = :status, updated_at = :now, s3_location = :loc",
+      UpdateExpression:
+        "SET #s = :status, updated_at = :now, s3_location = :loc, expires_at = :ttl",
       ConditionExpression: "user_id = :uid AND #s = :pending",
       ExpressionAttributeNames: { "#s": "status" },
       ExpressionAttributeValues: {
@@ -81,6 +86,7 @@ exports.handler = async (event) => {
         ":loc": { S: Location ?? key },
         ":uid": { S: userId },
         ":pending": { S: "PENDING_UPLOAD" },
+        ":ttl": { N: String(expiresAt) },
       },
     })
   );

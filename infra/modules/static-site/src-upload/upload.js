@@ -4,6 +4,7 @@ const init = require("./handlers/init");
 const presign = require("./handlers/presign");
 const complete = require("./handlers/complete");
 const sceneStatus = require("./handlers/scene-status");
+const sceneDelete = require("./handlers/scene-delete");
 const response = require("./lib/response");
 
 exports.handler = async (event) => {
@@ -17,6 +18,8 @@ exports.handler = async (event) => {
         return await complete.handler(event);
       case "GET /scenes/{sceneId}":
         return await sceneStatus.handler(event);
+      case "DELETE /scenes/{sceneId}":
+        return await sceneDelete.handler(event);
       default:
         return response(404, { error: "Not found" });
     }

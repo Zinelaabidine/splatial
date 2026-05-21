@@ -1,7 +1,7 @@
 "use strict";
 
 const { S3Client, CreateMultipartUploadCommand } = require("@aws-sdk/client-s3");
-const { DynamoDBClient, QueryCommand, PutItemCommand } = require("@aws-sdk/client-dynamodb");
+const { DynamoDBClient, PutItemCommand } = require("@aws-sdk/client-dynamodb");
 const { randomUUID } = require("crypto");
 const response = require("../lib/response");
 
@@ -10,7 +10,8 @@ const dynamo = new DynamoDBClient({});
 
 const BUCKET = process.env.RAW_SCENES_BUCKET_NAME;
 const TABLE = process.env.SCENES_TABLE_NAME;
-const QUOTA_MAX_PENDING = 5;
+// TTL for PENDING_UPLOAD records (DynamoDB will auto-delete after this).
+const PENDING_TTL_S = 24 * 60 * 60; // 24 hours
 
 const ALLOWED_CONTENT_TYPES = new Set([
   "model/gltf-binary",
@@ -19,27 +20,6 @@ const ALLOWED_CONTENT_TYPES = new Set([
   "video/mp4",
   "video/quicktime",
 ]);
-
-async function countActiveUploads(userId) {
-  let count = 0;
-  for (const status of ["PENDING_UPLOAD", "PROCESSING"]) {
-    const result = await dynamo.send(
-      new QueryCommand({
-        TableName: TABLE,
-        IndexName: "user_id-status-index",
-        KeyConditionExpression: "user_id = :uid AND #s = :status",
-        ExpressionAttributeNames: { "#s": "status" },
-        ExpressionAttributeValues: {
-          ":uid": { S: userId },
-          ":status": { S: status },
-        },
-        Select: "COUNT",
-      })
-    );
-    count += result.Count ?? 0;
-  }
-  return count;
-}
 
 exports.handler = async (event) => {
   const claims = event.requestContext?.authorizer?.jwt?.claims;
@@ -62,15 +42,6 @@ exports.handler = async (event) => {
     return response(415, { error: "Unsupported content type", allowed: [...ALLOWED_CONTENT_TYPES] });
   }
 
-  const activeCount = await countActiveUploads(userId);
-  if (activeCount >= QUOTA_MAX_PENDING) {
-    return response(429, {
-      error: "Upload quota exceeded",
-      detail: `Maximum ${QUOTA_MAX_PENDING} concurrent uploads allowed`,
-      active: activeCount,
-    });
-  }
-
   const sceneId = randomUUID();
   const safeFilename = filename.replace(/[^a-zA-Z0-9._\-]/g, "_");
   const key = `uploads/${userId}/${sceneId}/${safeFilename}`;
@@ -85,7 +56,10 @@ exports.handler = async (event) => {
     })
   );
 
-  const now = new Date().toISOString();
+  const nowMs = Date.now();
+  const now = new Date(nowMs).toISOString();
+  const expiresAt = Math.floor(nowMs / 1000) + PENDING_TTL_S;
+
   await dynamo.send(
     new PutItemCommand({
       TableName: TABLE,
@@ -99,6 +73,7 @@ exports.handler = async (event) => {
         content_type: { S: contentType },
         created_at: { S: now },
         updated_at: { S: now },
+        expires_at: { N: String(expiresAt) },
       },
       ConditionExpression: "attribute_not_exists(scene_id)",
     })
