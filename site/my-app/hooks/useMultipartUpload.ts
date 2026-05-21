@@ -8,6 +8,7 @@ import type {
   CompletedPart,
   InitUploadResponse,
   PresignResponse,
+  SceneStatusResponse,
   UploadItem,
   UploadStage,
 } from "@/types/api";
@@ -17,6 +18,12 @@ const DEFAULT_PART_SIZE = 5 * 1024 * 1024;
 // Cap parallel PUTs per file so large uploads don't hammer the network stack.
 const DEFAULT_CONCURRENCY = 6;
 const FALLBACK_CONTENT_TYPE = "application/octet-stream";
+
+// Scene-status polling: start at 3 s, back off up to 30 s, give up after 30 min.
+const POLL_INITIAL_MS = 3_000;
+const POLL_MAX_MS = 30_000;
+const POLL_BACKOFF_FACTOR = 1.5;
+const POLL_TIMEOUT_MS = 30 * 60 * 1000;
 
 export interface UseMultipartUploadOptions {
   /** Bytes per part. Defaults to 5 MiB (S3 multipart minimum). */
@@ -251,33 +258,66 @@ export function useMultipartUpload(
 
         throwIfAborted();
 
-        const stage: UploadStage =
+        const initialStage: UploadStage =
           complete.status === "READY"
             ? "ready"
             : complete.status === "FAILED"
               ? "failed"
               : "processing";
 
-        const finishedAt = Date.now();
         patch(seed.id, {
-          stage,
+          stage: initialStage,
           progress: 100,
-          location: complete.location,
+          location: complete.location ?? undefined,
           sceneId: complete.sceneId,
-          finishedAt,
+          ...(initialStage !== "processing" && { finishedAt: Date.now() }),
         });
 
         onComplete?.(
           {
             ...seed,
-            stage,
+            stage: initialStage,
             progress: 100,
-            location: complete.location,
+            location: complete.location ?? undefined,
             sceneId: complete.sceneId,
-            finishedAt,
           },
           complete,
         );
+
+        // -------------------------------------------------------------------
+        // Step E — Poll for processing completion (PROCESSING → READY/FAILED)
+        // -------------------------------------------------------------------
+        if (initialStage === "processing") {
+          const pollStart = Date.now();
+          let interval = POLL_INITIAL_MS;
+
+          while (!isAborted() && Date.now() - pollStart < POLL_TIMEOUT_MS) {
+            await new Promise<void>((resolve) => setTimeout(resolve, interval));
+            interval = Math.min(interval * POLL_BACKOFF_FACTOR, POLL_MAX_MS);
+
+            if (isAborted()) break;
+
+            const statusResp = (await authenticatedFetch(
+              `/scenes/${complete.sceneId}`,
+              { signal: controller.signal },
+            )) as SceneStatusResponse;
+
+            if (
+              statusResp.status === "READY" ||
+              statusResp.status === "FAILED"
+            ) {
+              const finalStage: UploadStage =
+                statusResp.status === "READY" ? "ready" : "failed";
+              const finishedAt = Date.now();
+              patch(seed.id, {
+                stage: finalStage,
+                finishedAt,
+                ...(statusResp.location && { location: statusResp.location }),
+              });
+              break;
+            }
+          }
+        }
       } catch (err) {
         const aborted =
           isAborted() || (err instanceof Error && err.name === "AbortError");

@@ -2,10 +2,11 @@
  * API contract for the 3D scene multipart upload flow.
  *
  * Endpoints (all prefixed by NEXT_PUBLIC_API_GATEWAY_URL):
- *   POST /upload/init      -> InitUploadResponse
- *   POST /upload/presign   -> PresignResponse
+ *   POST /upload/init         -> InitUploadResponse
+ *   POST /upload/presign      -> PresignResponse
  *   PUT  <presigned S3 URL>
- *   POST /upload/complete  -> CompleteResponse
+ *   POST /upload/complete     -> CompleteResponse
+ *   GET  /scenes/{sceneId}    -> SceneStatusResponse
  */
 
 // ---------------------------------------------------------------------------
@@ -70,6 +71,15 @@ export interface CompleteResponse {
   status: SceneStatus;
   /** S3 object URL or canonical location of the assembled object. */
   location: string;
+}
+
+// ---------------------------------------------------------------------------
+// Step E: Poll scene processing status
+// ---------------------------------------------------------------------------
+export interface SceneStatusResponse {
+  sceneId: string;
+  status: SceneStatus;
+  location: string | null;
 }
 
 // ---------------------------------------------------------------------------
