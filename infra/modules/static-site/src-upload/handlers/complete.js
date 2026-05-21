@@ -65,31 +65,31 @@ exports.handler = async (event) => {
     })
   );
 
-  // Transition DynamoDB record from PENDING_UPLOAD → PROCESSING.
+  // Transition DynamoDB record from PENDING_UPLOAD → READY.
+  // The file is fully assembled in S3 at this point — no async processing
+  // pipeline exists yet, so the scene is immediately available.
   // The ConditionExpression guards against double-completing an upload.
-  // Extend TTL to 7 days so the record survives a slow processing pipeline.
+  // TTL is cleared (set far in future) so ready scenes are kept indefinitely.
   const nowMs = Date.now();
   const now = new Date(nowMs).toISOString();
-  const expiresAt = Math.floor(nowMs / 1000) + 7 * 24 * 60 * 60;
 
   await dynamo.send(
     new UpdateItemCommand({
       TableName: TABLE,
       Key: { scene_id: { S: sceneId } },
       UpdateExpression:
-        "SET #s = :status, updated_at = :now, s3_location = :loc, expires_at = :ttl",
+        "SET #s = :status, updated_at = :now, s3_location = :loc REMOVE expires_at",
       ConditionExpression: "user_id = :uid AND #s = :pending",
       ExpressionAttributeNames: { "#s": "status" },
       ExpressionAttributeValues: {
-        ":status": { S: "PROCESSING" },
+        ":status": { S: "READY" },
         ":now": { S: now },
         ":loc": { S: Location ?? key },
         ":uid": { S: userId },
         ":pending": { S: "PENDING_UPLOAD" },
-        ":ttl": { N: String(expiresAt) },
       },
     })
   );
 
-  return response(200, { sceneId, status: "PROCESSING", location: Location });
+  return response(200, { sceneId, status: "READY", location: Location });
 };
