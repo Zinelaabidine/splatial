@@ -67,7 +67,7 @@ resource "aws_s3_bucket_cors_configuration" "raw_scenes" {
   cors_rule {
     allowed_headers = ["Content-Type", "Content-MD5", "Authorization", "x-amz-date", "x-amz-content-sha256"]
     allowed_methods = ["GET", "PUT", "POST", "DELETE"]
-    allowed_origins = ["https://${var.domain_name}"]
+    allowed_origins = concat(["https://${var.domain_name}"], var.cors_extra_origins)
     expose_headers  = ["ETag"]
     max_age_seconds = 3000
   }

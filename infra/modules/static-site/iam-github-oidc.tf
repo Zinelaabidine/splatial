@@ -448,6 +448,38 @@ data "aws_iam_policy_document" "github_deploy_policy" {
     ]
   }
 
+  # ─── CloudWatch Logs ──────────────────────────────────────────────────────────
+
+  # DescribeLogGroups is a list API that AWS requires on "*".
+  statement {
+    sid    = "CloudWatchLogsDescribeGlobal"
+    effect = "Allow"
+    actions = [
+      "logs:DescribeLogGroups",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "CloudWatchLogsLambdaManage"
+    effect = "Allow"
+    actions = [
+      "logs:CreateLogGroup",
+      "logs:DeleteLogGroup",
+      "logs:PutRetentionPolicy",
+      "logs:DeleteRetentionPolicy",
+      "logs:ListTagsLogGroup",
+      "logs:ListTagsForResource",
+      "logs:TagLogGroup",
+      "logs:UntagLogGroup",
+      "logs:TagResource",
+      "logs:UntagResource",
+    ]
+    resources = [
+      "arn:aws:logs:${var.aws_region}:886601940523:log-group:/aws/lambda/${var.name}-*",
+    ]
+  }
+
   # ─── IAM ──────────────────────────────────────────────────────────────────────
 
   # ListOpenIDConnectProviders is a list API that AWS requires on "*".

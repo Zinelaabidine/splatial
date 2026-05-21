@@ -57,3 +57,9 @@ variable "azs" { type = list(string) }
 variable "public_cidrs" { type = list(string) }
 variable "private_cidrs" { type = list(string) }
 
+variable "cors_extra_origins" {
+  description = "Additional origins to allow in S3 and API Gateway CORS rules (e.g. http://localhost:3000 for local dev)."
+  type        = list(string)
+  default     = []
+}
+
