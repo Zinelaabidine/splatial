@@ -25,8 +25,7 @@ resource "aws_dynamodb_table" "scenes" {
     type = "S"
   }
 
-  # GSI used by the Lambda quota check: query all scenes for a user filtered
-  # by status (e.g. PENDING_UPLOAD, PROCESSING) to enforce upload limits.
+  # GSI for listing a user's scenes by status (e.g. PENDING_UPLOAD, READY).
   global_secondary_index {
     name            = "user_id-status-index"
     hash_key        = "user_id"

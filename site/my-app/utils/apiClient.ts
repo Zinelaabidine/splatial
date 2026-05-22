@@ -1,4 +1,5 @@
 import { fetchAuthSession } from 'aws-amplify/auth';
+import { getApiBaseUrl } from '@/lib/apiBaseUrl';
 
 /**
  * A secure fetch wrapper that automatically injects the Cognito JWT token 
@@ -17,8 +18,8 @@ export async function authenticatedFetch(endpoint: string, options: RequestInit 
       throw new Error("No active session or valid JWT token found.");
     }
 
-    // 2. Build the target URL using your API Gateway environment variable
-    const baseUrl = process.env.NEXT_PUBLIC_API_GATEWAY_URL?.replace(/\/$/, '');
+    // 2. Build the target URL (same-origin /api proxy in dev, API Gateway in prod)
+    const baseUrl = getApiBaseUrl();
     const url = `${baseUrl}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
 
     // 3. Merge headers, injecting the JWT token into the Authorization header

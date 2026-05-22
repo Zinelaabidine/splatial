@@ -1,8 +1,11 @@
 resource "null_resource" "upload_lambda_deps" {
   triggers = {
-    # Re-run npm install whenever package.json or the handler changes.
+    # Re-run npm install whenever package.json or any handler/lib source changes.
     package_json = filesha256("${path.module}/src-upload/package.json")
-    handler      = filesha256("${path.module}/src-upload/upload.js")
+    handlers = sha256(join("", [
+      for f in sort(fileset("${path.module}/src-upload", "**/*.js")) :
+      filesha256("${path.module}/src-upload/${f}")
+    ]))
   }
 
   provisioner "local-exec" {
@@ -60,6 +63,7 @@ resource "aws_iam_role_policy" "upload_lambda_data_access" {
         Effect = "Allow"
         Action = [
           "s3:PutObject",
+          "s3:DeleteObject",
           "s3:AbortMultipartUpload",
           "s3:ListMultipartUploadParts",
         ]
@@ -72,6 +76,7 @@ resource "aws_iam_role_policy" "upload_lambda_data_access" {
           "dynamodb:GetItem",
           "dynamodb:PutItem",
           "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
           "dynamodb:Query",
         ]
         Resource = [

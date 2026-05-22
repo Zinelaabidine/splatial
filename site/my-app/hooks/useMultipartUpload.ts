@@ -3,6 +3,7 @@
 import { fetchAuthSession } from "aws-amplify/auth";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { getApiBaseUrl } from "@/lib/apiBaseUrl";
 import { authenticatedFetch } from "@/utils/apiClient";
 import type {
   CompleteResponse,
@@ -133,7 +134,12 @@ export function useMultipartUpload(
   useEffect(() => {
     const handler = () => {
       const token = tokenRef.current;
-      const base = process.env.NEXT_PUBLIC_API_GATEWAY_URL?.replace(/\/$/, "");
+      let base: string;
+      try {
+        base = getApiBaseUrl();
+      } catch {
+        return;
+      }
       if (!token || !base) return;
 
       for (const item of uploadsRef.current) {

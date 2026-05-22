@@ -26,7 +26,10 @@ module "static_site" {
   public_cidrs  = ["10.0.1.0/24", "10.0.2.0/24"]
   private_cidrs = ["10.0.11.0/24", "10.0.12.0/24"]
 
-  cors_extra_origins = ["http://localhost:3000"]
+  cors_extra_origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+  ]
 
 }
 
