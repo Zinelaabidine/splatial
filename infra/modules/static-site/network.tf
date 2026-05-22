@@ -115,12 +115,36 @@ resource "aws_apigatewayv2_api" "http_api" {
 
 }
 
+resource "aws_cloudwatch_log_group" "api_gateway" {
+  provider = aws.this
+
+  name              = "/aws/apigateway/${var.name}-gateway-api"
+  retention_in_days = 14
+}
+
 resource "aws_apigatewayv2_stage" "http_api" {
   provider = aws.this
 
   api_id      = aws_apigatewayv2_api.http_api.id
   name        = "$default"
   auto_deploy = true
+
+  access_log_settings {
+    destination_arn = aws_cloudwatch_log_group.api_gateway.arn
+    format = jsonencode({
+      errorMessage   = "$context.error.message"
+      httpMethod     = "$context.httpMethod"
+      ip             = "$context.identity.sourceIp"
+      protocol       = "$context.protocol"
+      requestId      = "$context.requestId"
+      requestTime    = "$context.requestTime"
+      responseLength = "$context.responseLength"
+      routeKey       = "$context.routeKey"
+      status         = "$context.status"
+    })
+  }
+
+  depends_on = [aws_cloudwatch_log_group.api_gateway]
 }
 
 resource "aws_apigatewayv2_authorizer" "cognito" {
