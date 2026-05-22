@@ -115,12 +115,25 @@ resource "aws_apigatewayv2_api" "http_api" {
 
 }
 
+resource "aws_cloudwatch_log_group" "api_gateway" {
+  provider = aws.this
+
+  name              = "/aws/apigateway/${var.name}-gateway-api"
+  retention_in_days = 7
+}
+
 resource "aws_apigatewayv2_stage" "http_api" {
   provider = aws.this
 
   api_id      = aws_apigatewayv2_api.http_api.id
   name        = "$default"
   auto_deploy = true
+
+  access_log_settings {
+    destination_arn = aws_cloudwatch_log_group.api_gateway.arn
+  }
+
+  depends_on = [aws_cloudwatch_log_group.api_gateway]
 }
 
 resource "aws_apigatewayv2_authorizer" "cognito" {
