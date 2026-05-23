@@ -123,6 +123,30 @@ export interface UploadItem {
 }
 
 // ---------------------------------------------------------------------------
+// Scene Management MVP  (POST/GET/DELETE /api/v1/scenes)
+// ---------------------------------------------------------------------------
+export type InputType = "video" | "images";
+
+export type SceneManagementStatus = "UPLOADED" | "PROCESSING" | "READY" | "FAILED";
+
+export interface Scene {
+  sceneId: string;
+  name: string;
+  inputType: InputType;
+  status: SceneManagementStatus;
+  createdAt: string;
+}
+
+export interface CreateSceneRequest {
+  name: string;
+  inputType: InputType;
+}
+
+export interface ListScenesV1Response {
+  scenes: Scene[];
+}
+
+// ---------------------------------------------------------------------------
 // Scene listing (used by RightSidebar "Recent outputs")
 // ---------------------------------------------------------------------------
 export interface SceneSummary {

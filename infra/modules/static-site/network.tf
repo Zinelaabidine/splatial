@@ -260,3 +260,35 @@ resource "aws_apigatewayv2_route" "scene_delete" {
 
   target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
 }
+
+# ── Scene Management v1 ───────────────────────────────────────────────────────
+
+resource "aws_apigatewayv2_route" "scenes_create" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "POST /api/v1/scenes"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
+resource "aws_apigatewayv2_route" "scenes_list" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "GET /api/v1/scenes"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
+resource "aws_apigatewayv2_route" "scenes_delete_v1" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "DELETE /api/v1/scenes/{sceneId}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}

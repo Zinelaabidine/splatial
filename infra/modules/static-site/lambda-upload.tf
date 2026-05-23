@@ -78,6 +78,7 @@ resource "aws_iam_role_policy" "upload_lambda_data_access" {
           "dynamodb:UpdateItem",
           "dynamodb:DeleteItem",
           "dynamodb:Query",
+          "dynamodb:Scan",
         ]
         Resource = [
           aws_dynamodb_table.scenes.arn,
