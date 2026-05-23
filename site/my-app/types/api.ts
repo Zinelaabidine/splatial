@@ -127,7 +127,7 @@ export interface UploadItem {
 // ---------------------------------------------------------------------------
 // Scene Management MVP  (POST/GET/DELETE /api/v1/scenes)
 // ---------------------------------------------------------------------------
-export type InputType = "video" | "images";
+export type InputType = "video" | "images" | "ply";
 
 export type SceneManagementStatus = "PENDING_UPLOAD" | "UPLOADED" | "QUEUED" | "PROCESSING" | "READY" | "FAILED" | "CANCELLED";
 
@@ -137,6 +137,8 @@ export interface Scene {
   inputType: InputType;
   status: SceneManagementStatus;
   createdAt: string;
+  /** S3 key in the splat-scenes bucket — present when the scene is READY. */
+  plyKey?: string;
 }
 
 export interface CreateSceneRequest {
@@ -146,6 +148,34 @@ export interface CreateSceneRequest {
 
 export interface ListScenesV1Response {
   scenes: Scene[];
+}
+
+// ---------------------------------------------------------------------------
+// Seed a READY scene for a manually-uploaded PLY file
+// ---------------------------------------------------------------------------
+export interface SeedSceneRequest {
+  name: string;
+}
+
+export interface SeedSceneResponse {
+  sceneId: string;
+  name: string;
+  status: "READY";
+  /** S3 bucket name to upload the PLY file to. */
+  plyBucket: string;
+  /** S3 key to use for the PLY file: splat-scenes/<userId>/<sceneId>/scene.ply */
+  plyKey: string;
+  createdAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// View URL for the Gaussian Splat viewer
+// ---------------------------------------------------------------------------
+export interface ViewUrlResponse {
+  sceneId: string;
+  /** Presigned S3 GET URL, valid for 1 hour. */
+  url: string;
+  expiresIn: number;
 }
 
 // ---------------------------------------------------------------------------

@@ -52,13 +52,19 @@ resource "aws_iam_role_policy" "worker_policy" {
         ]
       },
       {
-        Sid    = "S3SceneAccess"
+        Sid    = "S3RawSceneRead"
         Effect = "Allow"
         Action = [
           "s3:GetObject",
           "s3:PutObject",
         ]
         Resource = "${aws_s3_bucket.raw_scenes.arn}/*"
+      },
+      {
+        Sid    = "S3SplatScenesWrite"
+        Effect = "Allow"
+        Action = ["s3:PutObject"]
+        Resource = "${aws_s3_bucket.splat_scenes.arn}/*"
       },
       {
         Sid    = "DynamoDBJobStatus"

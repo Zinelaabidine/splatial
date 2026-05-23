@@ -98,6 +98,11 @@ output "raw_scenes_bucket_name" {
   value       = aws_s3_bucket.raw_scenes.bucket
 }
 
+output "splat_scenes_bucket_name" {
+  description = "The name of the S3 bucket for completed Gaussian Splat PLY files"
+  value       = aws_s3_bucket.splat_scenes.bucket
+}
+
 output "raw_scenes_bucket_arn" {
   description = "The ARN of the S3 bucket for raw scene uploads"
   value       = aws_s3_bucket.raw_scenes.arn

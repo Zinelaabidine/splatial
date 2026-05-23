@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Play, Plus, Trash2, X, UploadCloud, XCircle } from "lucide-react";
+import { Play, Plus, Trash2, X, UploadCloud, XCircle, Eye } from "lucide-react";
 
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,7 @@ const CONCURRENCY = 4;
 const ACCEPT_BY_TYPE: Record<InputType, string> = {
   video:  ".mp4,.mov,video/mp4,video/quicktime",
   images: ".jpg,.jpeg,.png,.webp,.tiff,.zip,image/jpeg,image/png,image/webp,image/tiff,application/zip,application/x-zip-compressed",
+  ply:    ".ply,application/octet-stream",
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -30,6 +31,7 @@ const ACCEPT_BY_TYPE: Record<InputType, string> = {
 const INPUT_TYPE_LABELS: Record<string, string> = {
   video:  "MP4 Video",
   images: "Image Folder",
+  ply:    "PLY (Trained)",
 };
 
 const STATUS_STYLES: Record<string, { label: string; className: string }> = {
@@ -336,6 +338,16 @@ export default function ScenesDashboard() {
                     <td className="px-4 py-3.5"><StatusBadge status={scene.status} /></td>
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-1.5">
+                        {scene.status === "READY" && (
+                          <a
+                            href={`/scenes/${scene.sceneId}/view`}
+                            className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-emerald-600 transition-colors hover:bg-emerald-50"
+                            aria-label={`View scene ${scene.name}`}
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                            View
+                          </a>
+                        )}
                         {["UPLOADED", "READY", "FAILED"].includes(scene.status) && (
                           <button
                             type="button"

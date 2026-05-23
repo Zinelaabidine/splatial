@@ -41,6 +41,7 @@ exports.handler = async (event) => {
     inputType: item.input_type?.S ?? "",
     status:    item.status?.S     ?? "",
     createdAt: item.created_at?.S ?? "",
+    ...(item.ply_key ? { plyKey: item.ply_key.S } : {}),
   }));
 
   // Sort newest-first by createdAt (ISO strings sort lexicographically).

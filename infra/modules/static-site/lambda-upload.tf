@@ -91,6 +91,15 @@ resource "aws_iam_role_policy" "upload_lambda_data_access" {
         Action   = ["sqs:SendMessage"]
         Resource = aws_sqs_queue.processing_queue.arn
       },
+      {
+        Sid    = "S3SplatScenesReadWrite"
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+        ]
+        Resource = "${aws_s3_bucket.splat_scenes.arn}/*"
+      },
     ]
   })
 }
@@ -108,11 +117,12 @@ resource "aws_lambda_function" "upload_lambda" {
 
   environment {
     variables = {
-      RAW_SCENES_BUCKET_NAME = aws_s3_bucket.raw_scenes.bucket
-      SCENES_TABLE_NAME      = aws_dynamodb_table.scenes.name
-      SQS_QUEUE_URL          = aws_sqs_queue.processing_queue.url
-      API_BASE_URL           = "https://api-${var.environment}.openspacenexus.store"
-      NODE_ENV               = "production"
+      RAW_SCENES_BUCKET_NAME   = aws_s3_bucket.raw_scenes.bucket
+      SPLAT_SCENES_BUCKET_NAME = aws_s3_bucket.splat_scenes.bucket
+      SCENES_TABLE_NAME        = aws_dynamodb_table.scenes.name
+      SQS_QUEUE_URL            = aws_sqs_queue.processing_queue.url
+      API_BASE_URL             = "https://api-${var.environment}.openspacenexus.store"
+      NODE_ENV                 = "production"
     }
   }
 }

@@ -7,6 +7,8 @@ const sceneStatus = require("./handlers/scene-status");
 const sceneDelete = require("./handlers/scene-delete");
 const sceneCreate = require("./handlers/scene-create");
 const scenesList  = require("./handlers/scenes-list");
+const sceneSeed   = require("./handlers/scene-seed");
+const sceneViewUrl = require("./handlers/scene-view-url");
 const submitJob        = require("./handlers/submit-job");
 const cancelJob        = require("./handlers/cancel-job");
 const attemptPatch     = require("./handlers/attempt-patch");
@@ -49,6 +51,10 @@ exports.handler = async (event) => {
         return await scenesList.handler(event);
       case "DELETE /api/v1/scenes/{sceneId}":
         return await sceneDelete.handler(event);
+      case "POST /api/v1/scenes/seed":
+        return await sceneSeed.handler(event);
+      case "GET /api/v1/scenes/{sceneId}/view-url":
+        return await sceneViewUrl.handler(event);
 
       default:
         return response(404, { error: "Not found" });
