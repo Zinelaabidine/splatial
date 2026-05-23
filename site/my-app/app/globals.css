@@ -251,3 +251,137 @@ body {
     @apply font-sans;
   }
 }
+/* ─── Legacy Gaussian Splat Viewer ──────────────────────────────────────────
+   All rules are scoped to .splat-viewer-container so they cannot leak.      */
+.splat-viewer-container {
+  position: absolute;
+  inset: 0;
+  background: black;
+  color: white;
+  text-shadow: 0 0 3px black;
+  font-family: sans-serif;
+  overflow: hidden;
+}
+.splat-viewer-container * { box-sizing: border-box; }
+.splat-viewer-container a { color: inherit; }
+.splat-viewer-container #info {
+  z-index: 100;
+  position: absolute;
+  top: 10px;
+  left: 15px;
+}
+.splat-viewer-container h3 { margin: 5px 0; }
+.splat-viewer-container p  { margin: 5px 0; font-size: small; }
+.splat-viewer-container details { font-size: small; }
+.splat-viewer-container .cube-wrapper { transform-style: preserve-3d; }
+.splat-viewer-container .cube {
+  transform-style: preserve-3d;
+  transform: rotateX(45deg) rotateZ(45deg);
+  animation: splatRotation 2s infinite;
+}
+.splat-viewer-container .cube-faces {
+  transform-style: preserve-3d;
+  height: 80px;
+  width: 80px;
+  position: relative;
+  transform-origin: 0 0;
+  transform: translateX(0) translateY(0) translateZ(-40px);
+}
+.splat-viewer-container .cube-face {
+  position: absolute;
+  inset: 0;
+  background: #0017ff;
+  border: solid 1px #ffffff;
+}
+.splat-viewer-container .cube-face.top   { transform: translateZ(80px); }
+.splat-viewer-container .cube-face.front { transform-origin: 0 50%;  transform: rotateY(-90deg); }
+.splat-viewer-container .cube-face.back  { transform-origin: 0 50%;  transform: rotateY(-90deg) translateZ(-80px); }
+.splat-viewer-container .cube-face.right { transform-origin: 50% 0;  transform: rotateX(-90deg) translateY(-80px); }
+.splat-viewer-container .cube-face.left  { transform-origin: 50% 0;  transform: rotateX(-90deg) translateY(-80px) translateZ(80px); }
+@keyframes splatRotation {
+  0%   { transform: rotateX(45deg) rotateY(0) rotateZ(45deg);  animation-timing-function: cubic-bezier(0.17,0.84,0.44,1); }
+  50%  { transform: rotateX(45deg) rotateY(0) rotateZ(225deg); animation-timing-function: cubic-bezier(0.76,0.05,0.86,0.06); }
+  100% { transform: rotateX(45deg) rotateY(0) rotateZ(405deg); animation-timing-function: cubic-bezier(0.17,0.84,0.44,1); }
+}
+.splat-viewer-container .scene,
+.splat-viewer-container #message {
+  position: absolute;
+  display: flex;
+  inset: 0;
+  z-index: 2;
+  align-items: center;
+  justify-content: center;
+}
+.splat-viewer-container #message {
+  font-weight: bold;
+  font-size: large;
+  color: red;
+  pointer-events: none;
+}
+.splat-viewer-container #progress {
+  position: absolute;
+  top: 0;
+  height: 5px;
+  background: blue;
+  z-index: 99;
+  transition: width 0.1s ease-in-out;
+}
+.splat-viewer-container #quality {
+  position: absolute;
+  bottom: 10px;
+  z-index: 999;
+  right: 10px;
+}
+.splat-viewer-container #caminfo {
+  position: absolute;
+  top: 10px;
+  z-index: 999;
+  right: 10px;
+}
+.splat-viewer-container #canvas {
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+.splat-viewer-container #instructions {
+  background: rgba(0,0,0,0.6);
+  white-space: pre-wrap;
+  padding: 10px;
+  border-radius: 10px;
+  font-size: x-small;
+}
+.splat-viewer-container .download-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.splat-viewer-container .download-box {
+  background: rgba(0,0,0,0.7);
+  color: #fff;
+  padding: 18px 22px;
+  border-radius: 10px;
+  min-width: 280px;
+  text-align: center;
+  pointer-events: auto;
+}
+.splat-viewer-container .download-percentage { font-weight: 600; margin-bottom: 8px; }
+.splat-viewer-container .download-bar {
+  height: 10px;
+  background: rgba(255,255,255,0.12);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.splat-viewer-container .download-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg,#3b82f6,#06b6d4);
+  transition: width 120ms linear;
+}
