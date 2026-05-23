@@ -727,6 +727,7 @@ let defaultViewMatrix = [
     0.03, 6.55, 1,
 ];
 let viewMatrix = defaultViewMatrix;
+let _overrideMatrix = null; // set by setViewMatrix() for trajectory playback
 async function main(splatUrl) {
     let carousel = true;
     try {
@@ -1354,6 +1355,9 @@ async function main(splatUrl) {
             jumpDelta = Math.max(0, jumpDelta - 0.05);
         }
 
+        // External camera override (set by trajectory playback; null = no override)
+        if (_overrideMatrix !== null) viewMatrix = _overrideMatrix;
+
         let inv2 = invert4(viewMatrix);
         inv2 = translate4(inv2, 0, -jumpDelta, 0);
         inv2 = rotate4(inv2, -0.1 * jumpDelta, 1, 0, 0);
@@ -1519,4 +1523,21 @@ export async function startViewer(splatUrl) {
 
 export function stopViewer() {
     viewerStarted = false;
+}
+
+// ─── Camera trajectory API ───────────────────────────────────────────────────
+
+/** Returns a snapshot of the current view matrix (16-element column-major array). */
+export function readViewMatrix() {
+    return viewMatrix ? viewMatrix.slice() : null;
+}
+
+/** Overrides the view matrix every frame for trajectory playback. Pass null to release. */
+export function setViewMatrix(m) {
+    _overrideMatrix = m ? [...m] : null;
+}
+
+/** Releases any external view matrix override, returning camera control to the user. */
+export function clearViewMatrix() {
+    _overrideMatrix = null;
 }

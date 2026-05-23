@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { startViewer, stopViewer } from "./viewer";
+import TrajectoryControls from "./TrajectoryControls";
 
 interface LegacySplatViewerProps {
   /** Absolute, pre-signed URL pointing to a .splat or .ply file. */
@@ -77,6 +78,8 @@ export default function LegacySplatViewer({ splatUrl }: LegacySplatViewerProps) 
       <div id="caminfo">
         <span id="camid" />
       </div>
+
+      <TrajectoryControls />
     </div>
   );
 }
