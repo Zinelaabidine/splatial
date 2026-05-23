@@ -63,3 +63,15 @@ variable "cors_extra_origins" {
   default     = []
 }
 
+variable "worker_instance_type" {
+  description = "EC2 instance type for GPU Spot workers."
+  type        = string
+  default     = "g4dn.xlarge"
+}
+
+variable "worker_asg_max_size" {
+  description = "Maximum number of GPU worker instances in the ASG."
+  type        = number
+  default     = 5
+}
+

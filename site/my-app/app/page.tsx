@@ -17,7 +17,7 @@ export default function Page() {
 }
 
 function Home() {
-  const { uploads, enqueueMany, cancel, remove, clearTerminated } =
+  const { uploads, enqueueMany, cancel, remove, clearTerminated, submitJob } =
     useMultipartUpload({
       onComplete: (item) => {
         // eslint-disable-next-line no-console
@@ -44,6 +44,7 @@ function Home() {
           onCancel={cancel}
           onRemove={remove}
           onClearTerminated={clearTerminated}
+          onSubmit={submitJob}
         />
       }
     >

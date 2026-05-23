@@ -36,7 +36,12 @@ export async function authenticatedFetch(endpoint: string, options: RequestInit 
     });
 
     if (!response.ok) {
-      throw new Error(`HTTP Error: ${response.status} - ${response.statusText}`);
+      let message = `${response.status} - ${response.statusText}`;
+      try {
+        const body = await response.json();
+        if (body?.error) message = body.error;
+      } catch { /* non-JSON body, keep default */ }
+      throw new Error(message);
     }
 
     return await response.json();

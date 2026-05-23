@@ -62,6 +62,7 @@ export interface CompleteRequest {
 }
 
 export type SceneStatus =
+  | "UPLOADED"
   | "PROCESSING"
   | "READY"
   | "FAILED";
@@ -91,6 +92,7 @@ export type UploadStage =
   | "presigning"
   | "uploading"
   | "completing"
+  | "uploaded"
   | "processing"
   | "ready"
   | "failed"
@@ -127,7 +129,7 @@ export interface UploadItem {
 // ---------------------------------------------------------------------------
 export type InputType = "video" | "images";
 
-export type SceneManagementStatus = "UPLOADED" | "PROCESSING" | "READY" | "FAILED";
+export type SceneManagementStatus = "UPLOADED" | "QUEUED" | "PROCESSING" | "READY" | "FAILED" | "CANCELLED";
 
 export interface Scene {
   sceneId: string;

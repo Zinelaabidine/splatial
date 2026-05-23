@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Plus, Trash2, X, UploadCloud } from "lucide-react";
+import { Play, Plus, Trash2, X, UploadCloud, XCircle } from "lucide-react";
 
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
@@ -35,9 +35,11 @@ const INPUT_TYPE_LABELS: Record<string, string> = {
 const STATUS_STYLES: Record<string, { label: string; className: string }> = {
   PENDING_UPLOAD: { label: "Pending",    className: "bg-slate-100 text-slate-500" },
   UPLOADED:       { label: "Uploaded",   className: "bg-green-100 text-green-700" },
+  QUEUED:         { label: "Queued",     className: "bg-indigo-100 text-indigo-700" },
   PROCESSING:     { label: "Processing", className: "bg-yellow-100 text-yellow-700" },
   READY:          { label: "Ready",      className: "bg-blue-100 text-blue-700" },
   FAILED:         { label: "Failed",     className: "bg-red-100 text-red-700" },
+  CANCELLED:      { label: "Cancelled",  className: "bg-slate-100 text-slate-500" },
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -90,7 +92,10 @@ export default function ScenesDashboard() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [uploadStage, setUploadStage] = useState<UploadStage>("idle");
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId]   = useState<string | null>(null);
+  const [submittingId, setSubmittingId] = useState<string | null>(null);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [actionError, setActionError]  = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -209,6 +214,47 @@ export default function ScenesDashboard() {
     }
   };
 
+  // ── Submit ──────────────────────────────────────────────────────────────────
+
+  const handleSubmit = async (sceneId: string) => {
+    if (submittingId) return;
+    setSubmittingId(sceneId);
+    setActionError(null);
+    try {
+      await authenticatedFetch("/jobs/submit", {
+        method: "POST",
+        body: JSON.stringify({ sceneId }),
+      });
+      setScenes((prev) =>
+        prev.map((s) => (s.sceneId === sceneId ? { ...s, status: "QUEUED" } : s))
+      );
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Submit failed";
+      setActionError(msg);
+      await fetchScenes();
+    } finally {
+      setSubmittingId(null);
+    }
+  };
+
+  // ── Cancel ──────────────────────────────────────────────────────────────────
+
+  const handleCancel = async (sceneId: string) => {
+    if (cancellingId) return;
+    setCancellingId(sceneId);
+    try {
+      await authenticatedFetch(`/jobs/${sceneId}/cancel`, { method: "POST" });
+      setScenes((prev) =>
+        prev.map((s) => (s.sceneId === sceneId ? { ...s, status: "CANCELLED" } : s))
+      );
+    } catch (err) {
+      console.error("[scenes] cancel failed", err);
+      await fetchScenes();
+    } finally {
+      setCancellingId(null);
+    }
+  };
+
   // ── Delete ──────────────────────────────────────────────────────────────────
 
   const handleDelete = async (sceneId: string) => {
@@ -245,6 +291,16 @@ export default function ScenesDashboard() {
           </Button>
         </div>
 
+        {/* Action error banner */}
+        {actionError && (
+          <div className="mb-4 flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700">
+            <span>{actionError}</span>
+            <button type="button" onClick={() => setActionError(null)} className="ml-3 text-red-400 hover:text-red-600">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+
         {/* Table / empty states */}
         {loading ? (
           <div className="py-20 text-center text-sm text-slate-400">Loading scenes…</div>
@@ -279,16 +335,42 @@ export default function ScenesDashboard() {
                     <td className="px-4 py-3.5 text-sm text-slate-500">{formatDate(scene.createdAt)}</td>
                     <td className="px-4 py-3.5"><StatusBadge status={scene.status} /></td>
                     <td className="px-4 py-3.5">
-                      <button
-                        type="button"
-                        disabled={deletingId === scene.sceneId}
-                        onClick={() => handleDelete(scene.sceneId)}
-                        className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 disabled:pointer-events-none disabled:opacity-40"
-                        aria-label={`Delete scene ${scene.name}`}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                        Delete
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        {["UPLOADED", "READY", "FAILED"].includes(scene.status) && (
+                          <button
+                            type="button"
+                            disabled={submittingId === scene.sceneId}
+                            onClick={() => handleSubmit(scene.sceneId)}
+                            className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-indigo-600 transition-colors hover:bg-indigo-50 disabled:pointer-events-none disabled:opacity-40"
+                            aria-label={`Submit scene ${scene.name} for processing`}
+                          >
+                            <Play className="h-3.5 w-3.5" />
+                            {submittingId === scene.sceneId ? "Submitting…" : "Submit"}
+                          </button>
+                        )}
+                        {["QUEUED", "PROCESSING"].includes(scene.status) && (
+                          <button
+                            type="button"
+                            disabled={cancellingId === scene.sceneId}
+                            onClick={() => handleCancel(scene.sceneId)}
+                            className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-amber-600 transition-colors hover:bg-amber-50 disabled:pointer-events-none disabled:opacity-40"
+                            aria-label={`Cancel scene ${scene.name}`}
+                          >
+                            <XCircle className="h-3.5 w-3.5" />
+                            {cancellingId === scene.sceneId ? "Cancelling…" : "Cancel"}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          disabled={deletingId === scene.sceneId}
+                          onClick={() => handleDelete(scene.sceneId)}
+                          className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 disabled:pointer-events-none disabled:opacity-40"
+                          aria-label={`Delete scene ${scene.name}`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Delete
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

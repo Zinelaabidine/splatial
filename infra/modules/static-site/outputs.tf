@@ -112,4 +112,28 @@ output "scenes_table_arn" {
   description = "The ARN of the DynamoDB ScenesTable"
   value       = aws_dynamodb_table.scenes.arn
 }
- 
+
+output "sqs_processing_queue_url" {
+  description = "URL of the SQS job processing queue"
+  value       = aws_sqs_queue.processing_queue.url
+}
+
+output "sqs_processing_queue_arn" {
+  description = "ARN of the SQS job processing queue"
+  value       = aws_sqs_queue.processing_queue.arn
+}
+
+output "sqs_dlq_url" {
+  description = "URL of the SQS Dead Letter Queue"
+  value       = aws_sqs_queue.processing_dlq.url
+}
+
+output "worker_asg_name" {
+  description = "Name of the GPU worker Auto Scaling Group"
+  value       = aws_autoscaling_group.worker.name
+}
+
+output "worker_launch_template_id" {
+  description = "ID of the GPU worker EC2 Launch Template"
+  value       = aws_launch_template.worker.id
+}

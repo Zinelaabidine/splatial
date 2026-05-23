@@ -49,9 +49,12 @@ export interface UseMultipartUploadResult {
   remove: (id: string) => void;
   /** Drop every upload whose stage is `ready` / `failed` / `canceled`. */
   clearTerminated: () => void;
+  /** Queue an uploaded scene for 3DGS processing. */
+  submitJob: (id: string) => Promise<void>;
 }
 
 const TERMINAL_STAGES: ReadonlySet<UploadStage> = new Set([
+  "uploaded",
   "ready",
   "failed",
   "canceled",
@@ -190,6 +193,36 @@ export function useMultipartUpload(
   // ---------------------------------------------------------------------------
   // Pipeline
   // ---------------------------------------------------------------------------
+  const pollScene = useCallback(
+    async (id: string, sceneId: string, controller: AbortController): Promise<void> => {
+      const isAborted = () => controller.signal.aborted;
+      const pollStart = Date.now();
+      let interval = POLL_INITIAL_MS;
+
+      while (!isAborted() && Date.now() - pollStart < POLL_TIMEOUT_MS) {
+        await new Promise<void>((resolve) => setTimeout(resolve, interval));
+        interval = Math.min(interval * POLL_BACKOFF_FACTOR, POLL_MAX_MS);
+
+        if (isAborted()) break;
+
+        const statusResp = (await authenticatedFetch(
+          `/scenes/${sceneId}`,
+          { signal: controller.signal },
+        )) as SceneStatusResponse;
+
+        if (statusResp.status === "READY" || statusResp.status === "FAILED") {
+          patch(id, {
+            stage: statusResp.status === "READY" ? "ready" : "failed",
+            finishedAt: Date.now(),
+            ...(statusResp.location && { location: statusResp.location }),
+          });
+          break;
+        }
+      }
+    },
+    [patch],
+  );
+
   const runUpload = useCallback(
     async (seed: UploadItem, file: File): Promise<void> => {
       const {
@@ -334,7 +367,9 @@ export function useMultipartUpload(
             ? "ready"
             : complete.status === "FAILED"
               ? "failed"
-              : "processing";
+              : complete.status === "UPLOADED"
+                ? "uploaded"
+                : "processing";
 
         patch(seed.id, {
           stage: initialStage,
@@ -359,35 +394,7 @@ export function useMultipartUpload(
         // Step E — Poll for processing completion (PROCESSING → READY/FAILED)
         // -------------------------------------------------------------------
         if (initialStage === "processing") {
-          const pollStart = Date.now();
-          let interval = POLL_INITIAL_MS;
-
-          while (!isAborted() && Date.now() - pollStart < POLL_TIMEOUT_MS) {
-            await new Promise<void>((resolve) => setTimeout(resolve, interval));
-            interval = Math.min(interval * POLL_BACKOFF_FACTOR, POLL_MAX_MS);
-
-            if (isAborted()) break;
-
-            const statusResp = (await authenticatedFetch(
-              `/scenes/${complete.sceneId}`,
-              { signal: controller.signal },
-            )) as SceneStatusResponse;
-
-            if (
-              statusResp.status === "READY" ||
-              statusResp.status === "FAILED"
-            ) {
-              const finalStage: UploadStage =
-                statusResp.status === "READY" ? "ready" : "failed";
-              const finishedAt = Date.now();
-              patch(seed.id, {
-                stage: finalStage,
-                finishedAt,
-                ...(statusResp.location && { location: statusResp.location }),
-              });
-              break;
-            }
-          }
+          await pollScene(seed.id, complete.sceneId, controller);
         }
       } catch (err) {
         const aborted =
@@ -412,7 +419,7 @@ export function useMultipartUpload(
         controllersRef.current.delete(seed.id);
       }
     },
-    [patch],
+    [patch, pollScene],
   );
 
   // ---------------------------------------------------------------------------
@@ -480,15 +487,50 @@ export function useMultipartUpload(
       // Delete the backend record for any stage that hasn't reached a clean
       // terminal state yet (ready scenes stay in S3 intentionally).
       const item = uploadsRef.current.find((u) => u.id === id);
-      if (item?.sceneId && item.stage !== "ready") deleteScene(item.sceneId);
+      if (item?.sceneId && item.stage !== "ready" && item.stage !== "uploaded") deleteScene(item.sceneId);
       setUploads((prev) => prev.filter((u) => u.id !== id));
     },
     [deleteScene],
+  );
+
+  const submitJob = useCallback(
+    async (id: string): Promise<void> => {
+      const item = uploadsRef.current.find((u) => u.id === id);
+      if (!item?.sceneId) return;
+
+      const controller = new AbortController();
+      controllersRef.current.set(id, controller);
+
+      patch(id, { stage: "processing", error: undefined });
+
+      try {
+        await authenticatedFetch("/jobs/submit", {
+          method: "POST",
+          body: JSON.stringify({ sceneId: item.sceneId }),
+          signal: controller.signal,
+        });
+
+        await pollScene(id, item.sceneId, controller);
+      } catch (err) {
+        const aborted =
+          controller.signal.aborted ||
+          (err instanceof Error && err.name === "AbortError");
+        if (!aborted) {
+          patch(id, {
+            stage: "uploaded",
+            error: err instanceof Error ? err.message : "Submit failed",
+          });
+        }
+      } finally {
+        controllersRef.current.delete(id);
+      }
+    },
+    [patch, pollScene],
   );
 
   const clearTerminated = useCallback(() => {
     setUploads((prev) => prev.filter((u) => !TERMINAL_STAGES.has(u.stage)));
   }, []);
 
-  return { uploads, enqueue, enqueueMany, cancel, remove, clearTerminated };
+  return { uploads, enqueue, enqueueMany, cancel, remove, clearTerminated, submitJob };
 }

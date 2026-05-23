@@ -105,7 +105,7 @@ resource "aws_apigatewayv2_api" "http_api" {
 
   cors_configuration {
     allow_headers = ["content-type", "authorization"]
-    allow_methods = ["GET", "POST", "OPTIONS", "DELETE", "PUT"]
+    allow_methods = ["GET", "POST", "PATCH", "OPTIONS", "DELETE", "PUT"]
     allow_origins = distinct(concat(
       ["https://${var.domain_name}"],
       var.cors_extra_origins,
@@ -289,6 +289,44 @@ resource "aws_apigatewayv2_route" "scenes_delete_v1" {
 
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
+# ── Job Management ────────────────────────────────────────────────────────────
+
+resource "aws_apigatewayv2_route" "job_submit" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "POST /jobs/submit"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
+resource "aws_apigatewayv2_route" "job_cancel" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "POST /jobs/{sceneId}/cancel"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
+# ── Worker Callback (no JWT — auth via per-job worker token) ─────────────────
+
+resource "aws_apigatewayv2_route" "attempt_patch" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "PATCH /api/attempts/{attemptId}"
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
+resource "aws_apigatewayv2_route" "attempt_heartbeat" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "POST /api/attempts/{attemptId}/heartbeat"
 
   target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
 }

@@ -104,6 +104,8 @@ resource "aws_lambda_function" "upload_lambda" {
     variables = {
       RAW_SCENES_BUCKET_NAME = aws_s3_bucket.raw_scenes.bucket
       SCENES_TABLE_NAME      = aws_dynamodb_table.scenes.name
+      SQS_QUEUE_URL          = aws_sqs_queue.processing_queue.url
+      API_BASE_URL           = "https://api-${var.environment}.openspacenexus.store"
       NODE_ENV               = "production"
     }
   }

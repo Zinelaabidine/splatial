@@ -531,6 +531,8 @@ data "aws_iam_policy_document" "github_deploy_policy" {
       aws_iam_role.lambda_exec.arn,
       # Constructed ARN for the upload Lambda execution role (does not exist yet).
       "arn:aws:iam::886601940523:role/${var.name}-upload-lambda-exec-role",
+      # Constructed ARN for the GPU worker instance role (does not exist yet).
+      "arn:aws:iam::886601940523:role/${local.name_prefix}-splat-worker-instance-role",
     ]
   }
 
@@ -573,4 +575,181 @@ resource "time_sleep" "iam_propagation" {
   create_duration = "15s"
 
   depends_on = [aws_iam_role_policy.github_deploy_policy]
+}
+
+# ── Compute pipeline permissions (separate policy to stay under 10 240-byte limit) ──
+
+data "aws_iam_policy_document" "github_deploy_compute_policy" {
+
+  # ─── SQS ───────────────────────────────────────────────────────────────────
+
+  statement {
+    sid       = "SQSListGlobal"
+    effect    = "Allow"
+    actions   = ["sqs:ListQueues"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "SQSQueuesManage"
+    effect = "Allow"
+    actions = [
+      "sqs:CreateQueue",
+      "sqs:DeleteQueue",
+      "sqs:GetQueueAttributes",
+      "sqs:SetQueueAttributes",
+      "sqs:GetQueueUrl",
+      "sqs:ListQueueTags",
+      "sqs:TagQueue",
+      "sqs:UntagQueue",
+    ]
+    resources = [
+      "arn:aws:sqs:${var.aws_region}:886601940523:${local.name_prefix}-splat-processing-queue",
+      "arn:aws:sqs:${var.aws_region}:886601940523:${local.name_prefix}-splat-processing-dlq",
+    ]
+  }
+
+  # ─── EC2 Compute (Launch Templates + Security Groups) ──────────────────────
+
+  statement {
+    sid    = "EC2ComputeDescribeGlobal"
+    effect = "Allow"
+    actions = [
+      "ec2:DescribeLaunchTemplates",
+      "ec2:DescribeLaunchTemplateVersions",
+      "ec2:DescribeImages",
+      "ec2:DescribeInstanceTypes",
+      "ec2:DescribeSpotInstanceRequests",
+      "ec2:DescribeKeyPairs",
+      "ec2:DescribeAccountAttributes",
+      "ec2:DescribeSecurityGroupRules",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "EC2ComputeManage"
+    effect = "Allow"
+    actions = [
+      "ec2:CreateLaunchTemplate",
+      "ec2:ModifyLaunchTemplate",
+      "ec2:DeleteLaunchTemplate",
+      "ec2:CreateLaunchTemplateVersion",
+      "ec2:DeleteLaunchTemplateVersions",
+      "ec2:CreateSecurityGroup",
+      "ec2:DeleteSecurityGroup",
+      "ec2:AuthorizeSecurityGroupEgress",
+      "ec2:RevokeSecurityGroupEgress",
+      "ec2:ModifySecurityGroupRules",
+    ]
+    resources = ["*"]
+  }
+
+  # ─── Auto Scaling ──────────────────────────────────────────────────────────
+
+  statement {
+    sid    = "AutoScalingDescribeGlobal"
+    effect = "Allow"
+    actions = [
+      "autoscaling:DescribeAutoScalingGroups",
+      "autoscaling:DescribeScalingActivities",
+      "autoscaling:DescribePolicies",
+      "autoscaling:DescribeAutoScalingInstances",
+      "autoscaling:DescribeTerminationPolicyTypes",
+      "autoscaling:DescribeInstanceRefreshes",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "AutoScalingWorkerManage"
+    effect = "Allow"
+    actions = [
+      "autoscaling:CreateAutoScalingGroup",
+      "autoscaling:UpdateAutoScalingGroup",
+      "autoscaling:DeleteAutoScalingGroup",
+      "autoscaling:PutScalingPolicy",
+      "autoscaling:DeletePolicy",
+      "autoscaling:CreateOrUpdateTags",
+      "autoscaling:DeleteTags",
+      "autoscaling:SetDesiredCapacity",
+      "autoscaling:TerminateInstanceInAutoScalingGroup",
+      "autoscaling:StartInstanceRefresh",
+      "autoscaling:CancelInstanceRefresh",
+    ]
+    resources = [
+      "arn:aws:autoscaling:${var.aws_region}:886601940523:autoScalingGroup:*:autoScalingGroupName/${local.name_prefix}-splat-worker-asg",
+    ]
+  }
+
+  # ─── IAM — Worker Instance Profile ─────────────────────────────────────────
+
+  statement {
+    sid    = "IAMInstanceProfileManage"
+    effect = "Allow"
+    actions = [
+      "iam:CreateInstanceProfile",
+      "iam:DeleteInstanceProfile",
+      "iam:GetInstanceProfile",
+      "iam:AddRoleToInstanceProfile",
+      "iam:RemoveRoleFromInstanceProfile",
+      "iam:ListInstanceProfilesForRole",
+      "iam:TagInstanceProfile",
+      "iam:UntagInstanceProfile",
+    ]
+    resources = [
+      "arn:aws:iam::886601940523:instance-profile/${local.name_prefix}-splat-worker-instance-profile",
+    ]
+  }
+
+  statement {
+    sid     = "IAMPassRoleToEC2"
+    effect  = "Allow"
+    actions = ["iam:PassRole"]
+    resources = [
+      "arn:aws:iam::886601940523:role/${local.name_prefix}-splat-worker-instance-role",
+    ]
+    condition {
+      test     = "StringEquals"
+      variable = "iam:PassedToService"
+      values   = ["ec2.amazonaws.com"]
+    }
+  }
+
+  statement {
+    sid    = "IAMManagedPoliciesRead"
+    effect = "Allow"
+    actions = [
+      "iam:GetPolicy",
+      "iam:GetPolicyVersion",
+      "iam:ListPolicyVersions",
+    ]
+    resources = [
+      "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore",
+      "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy",
+    ]
+  }
+
+  # ─── KMS (AWS-managed SQS key) ─────────────────────────────────────────────
+
+  statement {
+    sid       = "KMSSQSDescribe"
+    effect    = "Allow"
+    actions   = ["kms:DescribeKey", "kms:ListAliases"]
+    resources = ["*"]
+  }
+}
+
+# Managed policy — does not count toward the 10 240-byte inline policy quota.
+resource "aws_iam_policy" "github_deploy_compute_policy" {
+  provider = aws.this
+
+  name        = "${local.name_prefix}-github-deploy-compute-policy"
+  description = "Compute pipeline permissions (SQS, EC2, ASG, IAM worker) for GitHub deploy role"
+  policy      = data.aws_iam_policy_document.github_deploy_compute_policy.json
+}
+
+resource "aws_iam_role_policy_attachment" "github_deploy_compute" {
+  role       = aws_iam_role.github_oidc_deploy_role.name
+  policy_arn = aws_iam_policy.github_deploy_compute_policy.arn
 }

@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Image as ImageIcon,
   Loader2,
+  Play,
   Trash2,
   X,
   XCircle,
@@ -21,6 +22,7 @@ interface RightSidebarProps {
   onCancel: (id: string) => void;
   onRemove: (id: string) => void;
   onClearTerminated: () => void;
+  onSubmit: (id: string) => void;
 }
 
 const ACTIVE_STAGES: ReadonlySet<UploadStage> = new Set([
@@ -38,6 +40,7 @@ const STAGE_LABEL: Record<UploadStage, string> = {
   presigning: "Signing parts",
   uploading: "Uploading",
   completing: "Finalizing",
+  uploaded: "Uploaded",
   processing: "Generating",
   ready: "Ready",
   failed: "Failed",
@@ -76,6 +79,7 @@ export default function RightSidebar({
   onCancel,
   onRemove,
   onClearTerminated,
+  onSubmit,
 }: RightSidebarProps) {
   const { active, terminated } = useMemo(() => {
     const a: UploadItem[] = [];
@@ -144,7 +148,7 @@ export default function RightSidebar({
         ) : (
           <ul className="grid grid-cols-2 gap-2">
             {terminated.map((u) => (
-              <RecentTile key={u.id} item={u} onRemove={onRemove} />
+              <RecentTile key={u.id} item={u} onRemove={onRemove} onSubmit={onSubmit} />
             ))}
           </ul>
         )}
@@ -243,12 +247,15 @@ function ActiveRow({
 function RecentTile({
   item,
   onRemove,
+  onSubmit,
 }: {
   item: UploadItem;
   onRemove: (id: string) => void;
+  onSubmit: (id: string) => void;
 }) {
   const ok = item.stage === "ready";
   const canceled = item.stage === "canceled";
+  const uploaded = item.stage === "uploaded";
 
   return (
     <li className="group relative overflow-hidden rounded-xl border border-slate-100 bg-white transition-colors hover:border-slate-200">
@@ -266,6 +273,8 @@ function RecentTile({
               <CheckCircle2 className="h-6 w-6 text-emerald-500" />
             ) : canceled ? (
               <XCircle className="h-6 w-6 text-slate-400" />
+            ) : uploaded ? (
+              <Play className="h-6 w-6 text-indigo-400" />
             ) : (
               <AlertCircle className="h-6 w-6 text-rose-500" />
             )}
@@ -285,7 +294,8 @@ function RecentTile({
           className={cn(
             "absolute bottom-1.5 left-1.5 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider",
             ok && "bg-emerald-50 text-emerald-700",
-            !ok && !canceled && "bg-rose-50 text-rose-700",
+            uploaded && "bg-indigo-50 text-indigo-700",
+            !ok && !canceled && !uploaded && "bg-rose-50 text-rose-700",
             canceled && "bg-slate-100 text-slate-500",
           )}
         >
@@ -307,6 +317,16 @@ function RecentTile({
           >
             {item.error}
           </p>
+        ) : null}
+        {uploaded ? (
+          <button
+            type="button"
+            onClick={() => onSubmit(item.id)}
+            className="mt-1.5 flex w-full items-center justify-center gap-1 rounded-md bg-indigo-600 px-2 py-1 text-[10px] font-semibold text-white hover:bg-indigo-700 active:bg-indigo-800"
+          >
+            <Play className="h-2.5 w-2.5" />
+            Submit
+          </button>
         ) : null}
       </div>
     </li>
