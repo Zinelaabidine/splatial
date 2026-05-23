@@ -79,6 +79,46 @@ The checklist must be **tailored to the change**, not generic. Examples by domai
 
 ---
 
+## Explicit Workflow Commands
+
+These two phrases are hard triggers. When you see them, execute the procedure below exactly — no other output.
+
+### Trigger: "Update Context"
+
+1. Analyze the active diff or recently described code changes.
+2. Determine whether the changes affect any of the following in `CONTEXT.md`:
+   - System overview or core purpose (Section 1)
+   - Tech stack, library versions, or environmental constraints (Section 2)
+   - Folder architecture or component mapping (Section 3)
+   - Data flow or design patterns (Section 4)
+   - Milestone status — moving items from "In Progress" to "Completed", or adding new next steps (Section 5)
+3. **If yes:** output only the minimal targeted edits to `CONTEXT.md`. Do not rewrite sections that were not affected. Do not log minor logic changes (e.g., a renamed variable, a formatting fix).
+4. **If no:** respond with one line: `CONTEXT.md is current. No architectural changes detected.`
+
+### Trigger: "Log changes"
+
+1. Analyze the current active diff or the changes described in the conversation.
+2. Generate a Git commit message using **exactly** this structure:
+
+```
+**Title:** <type>(<scope>): <subject>
+
+**What changed:**
+- <file or module>: <specific logic or resource altered>
+- <file or module>: <specific logic or resource altered>
+
+**Why it changed (Reasoning):**
+- <architectural or logical reason for this specific change>
+- <second reason if applicable>
+```
+
+- `<type>` must follow Conventional Commits: `feat`, `fix`, `refactor`, `chore`, `docs`, `test`.
+- `<scope>` must reflect the domain: `infra`, `backend`, `frontend`, `upload`, `auth`, `splat-stream`, etc.
+- `<subject>` ≤ 50 characters, imperative mood, no trailing period.
+- Bullet points must be specific (file names, resource names, function names) — no vague summaries.
+
+---
+
 ## Documentation
 
 - Document the **why**, not the **what**. Assume the reader is a Senior AWS/DevOps engineer or 3D graphics developer.
