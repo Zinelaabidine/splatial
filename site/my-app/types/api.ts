@@ -129,7 +129,7 @@ export interface UploadItem {
 // ---------------------------------------------------------------------------
 export type InputType = "video" | "images";
 
-export type SceneManagementStatus = "UPLOADED" | "QUEUED" | "PROCESSING" | "READY" | "FAILED" | "CANCELLED";
+export type SceneManagementStatus = "PENDING_UPLOAD" | "UPLOADED" | "QUEUED" | "PROCESSING" | "READY" | "FAILED" | "CANCELLED";
 
 export interface Scene {
   sceneId: string;

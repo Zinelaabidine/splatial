@@ -128,10 +128,10 @@ output "sqs_dlq_url" {
   value       = aws_sqs_queue.processing_dlq.url
 }
 
-output "worker_asg_name" {
-  description = "Name of the GPU worker Auto Scaling Group"
-  value       = aws_autoscaling_group.worker.name
-}
+# output "worker_asg_name" {
+#   description = "Name of the GPU worker Auto Scaling Group"
+#   value       = aws_autoscaling_group.worker.name
+# }
 
 output "worker_launch_template_id" {
   description = "ID of the GPU worker EC2 Launch Template"

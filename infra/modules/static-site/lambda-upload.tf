@@ -85,6 +85,12 @@ resource "aws_iam_role_policy" "upload_lambda_data_access" {
           "${aws_dynamodb_table.scenes.arn}/index/*",
         ]
       },
+      {
+        Sid      = "SQSJobSubmit"
+        Effect   = "Allow"
+        Action   = ["sqs:SendMessage"]
+        Resource = aws_sqs_queue.processing_queue.arn
+      },
     ]
   })
 }

@@ -102,79 +102,80 @@ resource "aws_launch_template" "worker" {
 }
 
 # ── Auto Scaling Group ────────────────────────────────────────────────────────
+# DISABLED: ASG and target tracking policy are commented out for manual testing.
+# Re-enable when automated scale-out is needed.
 
-resource "aws_autoscaling_group" "worker" {
-  provider = aws.this
-
-  name = "${local.name_prefix}-splat-worker-asg"
-
-  min_size         = 0
-  max_size         = var.worker_asg_max_size
-  desired_capacity = 0
-
-  vpc_zone_identifier = [for s in aws_subnet.private : s.id]
-
-  launch_template {
-    id      = aws_launch_template.worker.id
-    version = "$Latest"
-  }
-
-  instance_refresh {
-    strategy = "Rolling"
-  }
-
-  tag {
-    key                 = "Name"
-    value               = "${local.name_prefix}-splat-worker"
-    propagate_at_launch = true
-  }
-
-  tag {
-    key                 = "Environment"
-    value               = var.environment
-    propagate_at_launch = true
-  }
-
-  # Terraform should not reset desired_capacity — the ASG target tracking policy owns it
-  lifecycle {
-    ignore_changes = [desired_capacity]
-  }
-}
+# resource "aws_autoscaling_group" "worker" {
+#   provider = aws.this
+#
+#   name = "${local.name_prefix}-splat-worker-asg"
+#
+#   min_size         = 0
+#   max_size         = var.worker_asg_max_size
+#   desired_capacity = 0
+#
+#   vpc_zone_identifier = [for s in aws_subnet.private : s.id]
+#
+#   launch_template {
+#     id      = aws_launch_template.worker.id
+#     version = "$Latest"
+#   }
+#
+#   instance_refresh {
+#     strategy = "Rolling"
+#   }
+#
+#   tag {
+#     key                 = "Name"
+#     value               = "${local.name_prefix}-splat-worker"
+#     propagate_at_launch = true
+#   }
+#
+#   tag {
+#     key                 = "Environment"
+#     value               = var.environment
+#     propagate_at_launch = true
+#   }
+#
+#   lifecycle {
+#     ignore_changes = [desired_capacity]
+#   }
+# }
 
 # ── Target Tracking Scaling Policy ───────────────────────────────────────────
+# DISABLED: commented out alongside the ASG.
 
-resource "aws_autoscaling_policy" "sqs_target_tracking" {
-  provider = aws.this
-
-  name                   = "${local.name_prefix}-sqs-target-tracking"
-  autoscaling_group_name = aws_autoscaling_group.worker.name
-  policy_type            = "TargetTrackingScaling"
-
-  target_tracking_configuration {
-    customized_metric_specification {
-      metrics {
-        id    = "queue_depth"
-        label = "SQS visible messages"
-
-        metric_stat {
-          metric {
-            namespace   = "AWS/SQS"
-            metric_name = "ApproximateNumberOfMessagesVisible"
-
-            dimensions {
-              name  = "QueueName"
-              value = aws_sqs_queue.processing_queue.name
-            }
-          }
-          stat = "Sum"
-        }
-
-        return_data = true
-      }
-    }
-
-    # 1 = one worker per queued job
-    target_value     = 1
-    disable_scale_in = false
-  }
-}
+# resource "aws_autoscaling_policy" "sqs_target_tracking" {
+#   provider = aws.this
+#
+#   name                   = "${local.name_prefix}-sqs-target-tracking"
+#   autoscaling_group_name = aws_autoscaling_group.worker.name
+#   policy_type            = "TargetTrackingScaling"
+#
+#   target_tracking_configuration {
+#     customized_metric_specification {
+#       metrics {
+#         id    = "queue_depth"
+#         label = "SQS visible messages"
+#
+#         metric_stat {
+#           metric {
+#             namespace   = "AWS/SQS"
+#             metric_name = "ApproximateNumberOfMessagesVisible"
+#
+#             dimensions {
+#               name  = "QueueName"
+#               value = aws_sqs_queue.processing_queue.name
+#             }
+#           }
+#           stat = "Sum"
+#         }
+#
+#         return_data = true
+#       }
+#     }
+#
+#     target_value     = 1
+#     disable_scale_in = false
+#   }
+# }
