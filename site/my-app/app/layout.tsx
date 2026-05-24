@@ -32,7 +32,7 @@ export default function RootLayout({
 }>) {
   return (
 <html lang="en">
-      <body className={inter.className}>
+      <body className={`${geistSans.variable} ${geistMono.variable} ${inter.className}`}>
         <AmplifyProvider>
           {children}
         </AmplifyProvider>

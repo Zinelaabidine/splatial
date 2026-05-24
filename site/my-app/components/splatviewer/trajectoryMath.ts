@@ -121,7 +121,7 @@ function lerpVec3(a: Vec3, b: Vec3, t: number): Vec3 {
 
 /** Spherical linear interpolation of two unit quaternions (shortest arc). */
 function slerp(q1: Quat, q2: Quat, t: number): Quat {
-  let [w1, x1, y1, z1] = q1;
+  const [w1, x1, y1, z1] = q1;
   let [w2, x2, y2, z2] = q2;
 
   let dot = w1 * w2 + x1 * x2 + y1 * y2 + z1 * z2;

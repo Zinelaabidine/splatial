@@ -488,7 +488,7 @@ function createWorker(self) {
             .slice(0, header_end_index)
             .split("\n")
             .filter((k) => k.startsWith("property "))) {
-            const [p, type, name] = prop.split(" ");
+            const [, type, name] = prop.split(" ");
             const arrayType = TYPE_MAP[type] || "getInt8";
             types[name] = arrayType;
             offsets[name] = row_offset;
@@ -733,7 +733,7 @@ async function main(splatUrl) {
     try {
         viewMatrix = JSON.parse(decodeURIComponent(location.hash.slice(1)));
         carousel = false;
-    } catch (err) {}
+    } catch {}
 
     // splatUrl is passed directly — no global window coupling or backend fallback
     const url = splatUrl;
@@ -921,7 +921,7 @@ async function main(splatUrl) {
             gl.activeTexture(gl.TEXTURE0);
             gl.bindTexture(gl.TEXTURE_2D, texture);
         } else if (e.data.depthIndex) {
-            const { depthIndex, viewProj } = e.data;
+            const { depthIndex } = e.data;
             gl.bindBuffer(gl.ARRAY_BUFFER, indexBuffer);
             gl.bufferData(gl.ARRAY_BUFFER, depthIndex, gl.DYNAMIC_DRAW);
             vertexCount = e.data.vertexCount;
@@ -1184,7 +1184,7 @@ async function main(splatUrl) {
             `Gamepad connected at index ${gp.index}: ${gp.id}. It has ${gp.buttons.length} buttons and ${gp.axes.length} axes.`,
         );
     });
-    window.addEventListener("gamepaddisconnected", (e) => {
+    window.addEventListener("gamepaddisconnected", () => {
         console.log("Gamepad disconnected");
     });
 
@@ -1438,11 +1438,11 @@ async function main(splatUrl) {
         }
     };
 
-    window.addEventListener("hashchange", (e) => {
+    window.addEventListener("hashchange", () => {
         try {
             viewMatrix = JSON.parse(decodeURIComponent(location.hash.slice(1)));
             carousel = false;
-        } catch (err) {}
+        } catch {}
     });
 
     const preventDefault = (e) => {
@@ -1476,7 +1476,7 @@ async function main(splatUrl) {
                 downloadFill.style.width = percentBytes + "%";
                 if (downloadPercent) downloadPercent.innerText = `Downloading… ${percentBytes}%`;
             }
-        } catch (e) {}
+        } catch {}
 
         if (vertexCount > lastVertexCount) {
             if (!isPly(splatData)) {
@@ -1499,7 +1499,7 @@ async function main(splatUrl) {
             });
         }
         // Hide overlay when finished
-        try { if (downloadOverlay) downloadOverlay.style.display = "none"; } catch(e) {}
+        try { if (downloadOverlay) downloadOverlay.style.display = "none"; } catch {}
     }
 }
 
