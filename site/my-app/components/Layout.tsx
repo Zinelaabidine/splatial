@@ -159,7 +159,7 @@ export default function Layout({
           <button
             type="button"
             onClick={signOut}
-            className="flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
+            className="hidden flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
           >
             <svg
               viewBox="0 0 24 24"

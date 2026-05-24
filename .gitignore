@@ -38,3 +38,4 @@ out/
 # Old application code (to be removed after migration)
 # ----------------------------------------------------------------------
 oldApp/
+.DS_Store

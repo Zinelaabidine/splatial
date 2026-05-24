@@ -1,12 +1,12 @@
 "use client";
 
 import AuthGate from "@/components/AuthGate";
-import ScenesDashboard from "@/components/ScenesDashboard";
+import DashboardApp from "@/components/dashboard/DashboardApp";
 
 export default function ScenesPage() {
   return (
     <AuthGate>
-      <ScenesDashboard />
+      <DashboardApp />
     </AuthGate>
   );
 }
