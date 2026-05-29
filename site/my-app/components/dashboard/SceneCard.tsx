@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
   CheckCircle2,
@@ -7,7 +8,9 @@ import {
   Loader2,
   MoreHorizontal,
   Pencil,
+  Send,
   Share2,
+  Trash2,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -17,6 +20,8 @@ import type { MockScene } from "@/types/dashboard";
 type SceneCardProps = {
   scene: MockScene;
   onViewScene?: (scene: MockScene) => void;
+  onSubmitScene?: (scene: MockScene) => void;
+  onDeleteScene?: (scene: MockScene) => void;
 };
 
 function CompleteThumbnail({ hue = 260 }: { hue?: number }) {
@@ -93,6 +98,14 @@ function PreprocessingThumbnail() {
   );
 }
 
+function UploadedThumbnail() {
+  return (
+    <div className="flex h-full w-full items-center justify-center rounded-lg bg-emerald-50 border border-dashed border-emerald-200">
+      <CheckCircle2 className="h-10 w-10 text-emerald-400" strokeWidth={1.25} />
+    </div>
+  );
+}
+
 function StatusIndicator({ scene }: { scene: MockScene }) {
   switch (scene.state) {
     case "complete":
@@ -134,6 +147,13 @@ function StatusIndicator({ scene }: { scene: MockScene }) {
           Preprocessing
         </span>
       );
+    case "uploaded":
+      return (
+        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600">
+          <CheckCircle2 className="h-3.5 w-3.5" />
+          Uploaded
+        </span>
+      );
     case "failed":
       return (
         <span className="inline-flex items-center gap-1.5 text-xs font-medium text-red-500">
@@ -147,9 +167,11 @@ function StatusIndicator({ scene }: { scene: MockScene }) {
 function PrimaryAction({
   scene,
   onViewScene,
+  onSubmitScene,
 }: {
   scene: MockScene;
   onViewScene?: (scene: MockScene) => void;
+  onSubmitScene?: (scene: MockScene) => void;
 }) {
   switch (scene.state) {
     case "complete":
@@ -160,6 +182,17 @@ function PrimaryAction({
           onClick={() => onViewScene?.(scene)}
         >
           View Scene
+        </Button>
+      );
+    case "uploaded":
+      return (
+        <Button
+          size="sm"
+          className="bg-emerald-600 text-white hover:bg-emerald-700"
+          onClick={() => onSubmitScene?.(scene)}
+        >
+          <Send className="mr-1.5 h-3.5 w-3.5" />
+          Submit
         </Button>
       );
     case "draft":
@@ -189,8 +222,21 @@ function PrimaryAction({
   }
 }
 
-export default function SceneCard({ scene, onViewScene }: SceneCardProps) {
-  const shareDisabled = scene.state === "processing" || scene.state === "failed";
+export default function SceneCard({ scene, onViewScene, onSubmitScene, onDeleteScene }: SceneCardProps) {
+  const shareDisabled = scene.state === "processing" || scene.state === "uploaded" || scene.state === "failed";
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [menuOpen]);
 
   return (
     <article className="flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm transition-shadow hover:shadow-md">
@@ -202,6 +248,7 @@ export default function SceneCard({ scene, onViewScene }: SceneCardProps) {
             <ProcessingThumbnail hue={scene.thumbnailHue} />
           )}
           {scene.state === "preprocessing" && <PreprocessingThumbnail />}
+          {scene.state === "uploaded" && <UploadedThumbnail />}
           {scene.state === "failed" && <PreprocessingThumbnail />}
         </div>
 
@@ -214,7 +261,7 @@ export default function SceneCard({ scene, onViewScene }: SceneCardProps) {
           </div>
 
           <div className="mt-auto flex flex-wrap items-center gap-1.5">
-            <PrimaryAction scene={scene} onViewScene={onViewScene} />
+            <PrimaryAction scene={scene} onViewScene={onViewScene} onSubmitScene={onSubmitScene} />
             <Button
               variant="outline"
               size="sm"
@@ -224,9 +271,32 @@ export default function SceneCard({ scene, onViewScene }: SceneCardProps) {
               <Share2 className="h-3.5 w-3.5" />
               Share
             </Button>
-            <Button variant="ghost" size="icon-sm" aria-label="More actions">
-              <MoreHorizontal className="h-4 w-4 text-gray-500" />
-            </Button>
+            <div ref={menuRef} className="relative">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="More actions"
+                aria-expanded={menuOpen}
+                onClick={() => setMenuOpen((o) => !o)}
+              >
+                <MoreHorizontal className="h-4 w-4 text-gray-500" />
+              </Button>
+              {menuOpen && (
+                <div className="absolute right-0 top-full z-20 mt-1 min-w-[140px] rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onDeleteScene?.(scene);
+                    }}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 transition-colors hover:bg-red-50"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Delete
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

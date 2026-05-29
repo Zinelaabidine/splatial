@@ -27,7 +27,8 @@ const ALLOWED_CONTENT_TYPES = new Set([
   "application/x-zip-compressed",
 ]);
 
-const ALLOWED_INPUT_TYPES = new Set(["video", "images"]);
+const ZIP_CONTENT_TYPES   = new Set(["application/zip", "application/x-zip-compressed"]);
+const ALLOWED_INPUT_TYPES = new Set(["video", "images", "zip"]);
 
 exports.handler = async (event) => {
   const claims = event.requestContext?.authorizer?.jwt?.claims;
@@ -49,13 +50,18 @@ exports.handler = async (event) => {
   if (!contentType || !ALLOWED_CONTENT_TYPES.has(contentType)) {
     return response(415, { error: "Unsupported content type", allowed: [...ALLOWED_CONTENT_TYPES] });
   }
-  if (inputType !== undefined && !ALLOWED_INPUT_TYPES.has(inputType)) {
-    return response(400, { error: "inputType must be 'video' or 'images'" });
+  // Automatically resolve zip from content type regardless of the inputType hint
+  const resolvedInputType = ZIP_CONTENT_TYPES.has(contentType)
+    ? "zip"
+    : (inputType ?? undefined);
+
+  if (resolvedInputType !== undefined && !ALLOWED_INPUT_TYPES.has(resolvedInputType)) {
+    return response(400, { error: "inputType must be 'video', 'images', or 'zip'" });
   }
 
   const sceneId = randomUUID();
   const safeFilename = filename.replace(/[^a-zA-Z0-9._\-]/g, "_");
-  const key = `uploads/${userId}/${sceneId}/${safeFilename}`;
+  const key = `users/${userId}/${sceneId}-${safeFilename}`;
 
   const { UploadId } = await s3.send(
     new CreateMultipartUploadCommand({
@@ -89,8 +95,8 @@ exports.handler = async (event) => {
         ...(name && typeof name === "string" && name.trim()
           ? { name: { S: name.trim() } }
           : {}),
-        ...(inputType && ALLOWED_INPUT_TYPES.has(inputType)
-          ? { input_type: { S: inputType } }
+        ...(resolvedInputType && ALLOWED_INPUT_TYPES.has(resolvedInputType)
+          ? { input_type: { S: resolvedInputType } }
           : {}),
       },
       ConditionExpression: "attribute_not_exists(scene_id)",

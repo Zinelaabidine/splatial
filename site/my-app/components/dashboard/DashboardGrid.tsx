@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, RefreshCw } from "lucide-react";
 
@@ -45,7 +46,9 @@ function apiSceneToCard(scene: Scene): MockScene {
           ? "failed"
           : scene.status === "CANCELLED"
             ? "draft"
-            : "preprocessing"; // PENDING_UPLOAD | UPLOADED | QUEUED
+            : scene.status === "UPLOADED"
+              ? "uploaded"
+              : "preprocessing"; // PENDING_UPLOAD | QUEUED
 
   return {
     id: scene.sceneId,
@@ -76,21 +79,32 @@ export default function DashboardGrid() {
   const [scenes, setScenes] = useState<MockScene[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<MockScene | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [sortBy, setSortBy] = useState<SortOption>("newest");
   const [sortOpen, setSortOpen] = useState(false);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortCtrlRef = useRef<AbortController | null>(null);
 
   const fetchScenes = useCallback(async (silent = false) => {
+    // Cancel any previous in-flight request
+    abortCtrlRef.current?.abort();
+    const ctrl = new AbortController();
+    abortCtrlRef.current = ctrl;
+
     if (!silent) setLoading(true);
     setError(null);
     try {
-      const data: ListScenesV1Response = await authenticatedFetch("/api/v1/scenes");
+      const data: ListScenesV1Response = await authenticatedFetch("/api/v1/scenes", { signal: ctrl.signal });
       setScenes((data.scenes ?? []).map(apiSceneToCard));
     } catch (err) {
+      if (ctrl.signal.aborted) return; // Navigated away — silently discard
       console.error("[DashboardGrid] fetch failed", err);
       setError("Failed to load scenes. Please try again.");
     } finally {
-      if (!silent) setLoading(false);
+      if (!ctrl.signal.aborted) {
+        if (!silent) setLoading(false);
+      }
     }
   }, []);
 
@@ -98,6 +112,7 @@ export default function DashboardGrid() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchScenes();
+    return () => abortCtrlRef.current?.abort();
   }, [fetchScenes]);
 
   // Auto-poll while any scene is in-flight
@@ -123,6 +138,52 @@ export default function DashboardGrid() {
     [router],
   );
 
+  const handleDeleteScene = useCallback((scene: MockScene) => {
+    setDeleteTarget(scene);
+  }, []);
+
+  const confirmDelete = useCallback(async () => {
+    if (!deleteTarget?.sceneId) return;
+    setDeleting(true);
+    try {
+      await authenticatedFetch(`/api/v1/scenes/${deleteTarget.sceneId}`, { method: "DELETE" });
+      setScenes((prev) => prev.filter((s) => s.id !== deleteTarget.id));
+      setDeleteTarget(null);
+    } catch (err) {
+      console.error("[DashboardGrid] delete failed", err);
+    } finally {
+      setDeleting(false);
+    }
+  }, [deleteTarget]);
+
+  const handleSubmitScene = useCallback(
+    async (scene: MockScene) => {
+      if (!scene.sceneId) return;
+      // Optimistically flip to preprocessing for instant feedback
+      setScenes((prev) =>
+        prev.map((s) =>
+          s.id === scene.id ? { ...s, state: "preprocessing" as const } : s,
+        ),
+      );
+      try {
+        await authenticatedFetch("/jobs/submit", {
+          method: "POST",
+          body: JSON.stringify({ sceneId: scene.sceneId }),
+        });
+        fetchScenes(true);
+      } catch (err) {
+        console.error("[DashboardGrid] submit failed", err);
+        // Revert on error
+        setScenes((prev) =>
+          prev.map((s) =>
+            s.id === scene.id ? { ...s, state: "uploaded" as const } : s,
+          ),
+        );
+      }
+    },
+    [fetchScenes],
+  );
+
   const sorted = useMemo(() => {
     const copy = [...scenes];
     switch (sortBy) {
@@ -138,6 +199,7 @@ export default function DashboardGrid() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
+    <>
     <div className="mx-auto w-full max-w-7xl px-6 py-8">
       <header className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -208,10 +270,56 @@ export default function DashboardGrid() {
       ) : (
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
           {sorted.map((scene) => (
-            <SceneCard key={scene.id} scene={scene} onViewScene={handleViewScene} />
+            <SceneCard key={scene.id} scene={scene} onViewScene={handleViewScene} onSubmitScene={handleSubmitScene} onDeleteScene={handleDeleteScene} />
           ))}
         </div>
       )}
     </div>
+
+    {/* Delete confirmation modal */}
+    {deleteTarget && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+        onClick={() => !deleting && setDeleteTarget(null)}
+      >
+        <div
+          className="w-full max-w-sm rounded-xl border border-gray-200 bg-white p-6 shadow-xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="mb-4 flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-100">
+              <AlertTriangle className="h-5 w-5 text-red-600" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-gray-900">Delete scene</h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Are you sure you want to delete{" "}
+                <span className="font-medium text-gray-700">&ldquo;{deleteTarget.title}&rdquo;</span>? This will
+                permanently remove the scene and its uploaded files. This action cannot be undone.
+              </p>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              disabled={deleting}
+              onClick={() => setDeleteTarget(null)}
+              className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={deleting}
+              onClick={confirmDelete}
+              className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-60"
+            >
+              {deleting ? "Deleting…" : "Delete"}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+  </>
   );
 }

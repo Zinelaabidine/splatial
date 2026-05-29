@@ -46,7 +46,13 @@ export async function authenticatedFetch(endpoint: string, options: RequestInit 
 
     return await response.json();
   } catch (error) {
-    console.error("Authenticated API call failed:", error);
+    // Don't log intentional aborts (e.g., navigation away from page)
+    const isAbort =
+      (error instanceof DOMException && error.name === "AbortError") ||
+      Boolean(options?.signal?.aborted);
+    if (!isAbort) {
+      console.error("Authenticated API call failed:", error);
+    }
     throw error;
   }
 }

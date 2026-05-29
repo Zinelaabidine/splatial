@@ -80,7 +80,7 @@ def auto_configure_aws_environment():
             sqs_client = boto3.client("sqs", region_name=region)
             
             try:
-                q_resp = sqs_client.get_queue_url(QueueName=os.getenv("QUEUE_NAME", "splat-processing-queue.fifo"))
+                q_resp = sqs_client.get_queue_url(QueueName=os.getenv("QUEUE_NAME", "splatial-dev-splat-processing-queue.fifo"))
                 queue_url = q_resp["QueueUrl"]
                 os.environ["SQS_QUEUE_URL"] = queue_url
                 print(f"Discovered Queue URL: {queue_url}")
@@ -88,7 +88,7 @@ def auto_configure_aws_environment():
                 print(f"Error finding main queue: {e}")
 
             try:
-                dlq_resp = sqs_client.get_queue_url(QueueName=os.getenv("DLQ_NAME", "splat-processing-dlq.fifo"))
+                dlq_resp = sqs_client.get_queue_url(QueueName=os.getenv("DLQ_NAME", "splatial-dev-splat-processing-dlq.fifo"))
                 os.environ["DLQURL"] = dlq_resp["QueueUrl"]
                 # print(f"Discovered DLQ URL: {dlq_resp['QueueUrl']}")
             except Exception:

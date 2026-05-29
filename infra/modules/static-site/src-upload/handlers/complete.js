@@ -45,7 +45,7 @@ exports.handler = async (event) => {
     return response(400, { error: "parts must be a non-empty array of { partNumber, eTag }" });
   }
 
-  if (!key.startsWith(`uploads/${userId}/`)) {
+  if (!key.startsWith(`users/${userId}/`)) {
     return response(403, { error: "Forbidden: key does not belong to this user" });
   }
 

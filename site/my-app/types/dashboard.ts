@@ -1,4 +1,4 @@
-export type SceneCardState = "complete" | "draft" | "processing" | "preprocessing" | "failed";
+export type SceneCardState = "complete" | "draft" | "processing" | "preprocessing" | "uploaded" | "failed";
 
 export type SortOption = "newest" | "oldest" | "name";
 

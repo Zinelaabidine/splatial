@@ -35,7 +35,7 @@ exports.handler = async (event) => {
   const { Item } = await dynamo.send(
     new GetItemCommand({ TableName: TABLE, Key: { scene_id: { S: attemptId } } })
   );
-  if (!Item) return response(404, { error: "Scene not found" });
+  if (!Item) return response(404, { error: "Attempt not found" });
   if (Item.worker_token?.S !== workerToken) return response(403, { error: "Invalid worker token" });
 
   let body;
@@ -81,10 +81,12 @@ exports.handler = async (event) => {
     exprParts.push("failure_reason = :reason");
     exprValues[":reason"] = { S: reason };
   }
-  if (status && STATUS_MAP[status]) {
-    exprParts.push("#s = :sceneStatus");
+
+  const mappedStatus = status && STATUS_MAP[status];
+  if (mappedStatus) {
+    exprParts.push("#s = :attemptStatus");
     exprNames["#s"] = "status";
-    exprValues[":sceneStatus"] = { S: STATUS_MAP[status] };
+    exprValues[":attemptStatus"] = { S: mappedStatus };
     if (status === "SUCCEEDED" && outputBucket && outputPrefix) {
       exprParts.push("output_bucket = :obucket, output_prefix = :oprefix");
       exprValues[":obucket"] = { S: outputBucket };
@@ -92,6 +94,7 @@ exports.handler = async (event) => {
     }
   }
 
+  // Update the attempt record
   await dynamo.send(
     new UpdateItemCommand({
       TableName: TABLE,
@@ -101,6 +104,44 @@ exports.handler = async (event) => {
       ExpressionAttributeValues: exprValues,
     })
   );
+
+  // Cascade status and progress to the parent scene when present.
+  // Attempt records created by the new submit-job handler carry parent_scene_id.
+  const parentSceneId = Item.parent_scene_id?.S;
+  if (parentSceneId) {
+    const parentParts  = ["updated_at = :now"];
+    const parentNames  = {};
+    const parentValues = { ":now": { S: now } };
+
+    if (progressPhase) {
+      parentParts.push("progress_phase = :phase");
+      parentValues[":phase"] = { S: progressPhase };
+    }
+    if (typeof progressPercent === "number") {
+      parentParts.push("progress_percent = :pct");
+      parentValues[":pct"] = { N: String(progressPercent) };
+    }
+    if (mappedStatus) {
+      parentParts.push("#s = :sceneStatus");
+      parentNames["#s"] = "status";
+      parentValues[":sceneStatus"] = { S: mappedStatus };
+      if (status === "SUCCEEDED" && outputBucket && outputPrefix) {
+        parentParts.push("output_bucket = :obucket, output_prefix = :oprefix");
+        parentValues[":obucket"] = { S: outputBucket };
+        parentValues[":oprefix"] = { S: outputPrefix };
+      }
+    }
+
+    await dynamo.send(
+      new UpdateItemCommand({
+        TableName: TABLE,
+        Key: { scene_id: { S: parentSceneId } },
+        UpdateExpression: "SET " + parentParts.join(", "),
+        ...(Object.keys(parentNames).length > 0 ? { ExpressionAttributeNames: parentNames } : {}),
+        ExpressionAttributeValues: parentValues,
+      })
+    );
+  }
 
   return response(200, { attemptId, updated: true });
 };

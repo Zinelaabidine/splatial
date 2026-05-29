@@ -28,6 +28,7 @@ const nextConfig: NextConfig = {
     // into using the wrong workspace root. Pin it explicitly to this package.
     root: path.resolve(__dirname),
   },
+  devIndicators: false,
 };
 
 export default nextConfig;
