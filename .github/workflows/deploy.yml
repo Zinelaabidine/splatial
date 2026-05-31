@@ -69,6 +69,8 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::886601940523:role/splatial-${{ github.ref_name == 'main' && 'prod' || github.ref_name }}-github-deploy-role
           aws-region: ${{ env.AWS_REGION }}
+      - name: Show AWS identity
+        run: aws sts get-caller-identity
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
