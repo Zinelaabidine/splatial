@@ -132,7 +132,7 @@ export default function DashboardGrid() {
   const handleViewScene = useCallback(
     (scene: MockScene) => {
       if (scene.sceneId) {
-        router.push(`/scenes/${scene.sceneId}/view`);
+        router.push(`/scenes/view?id=${scene.sceneId}`);
       }
     },
     [router],

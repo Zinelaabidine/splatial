@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { useSearchParams } from "next/navigation";
 import TopNavBar from "@/components/dashboard/TopNavBar";
 
 const ViewerShell = dynamic(() => import("@/components/ViewerShell"), {
@@ -12,7 +13,10 @@ const ViewerShell = dynamic(() => import("@/components/ViewerShell"), {
   ),
 });
 
-export default function ViewerPageClient({ sceneId }: { sceneId: string }) {
+export default function ViewerPageClient() {
+  const searchParams = useSearchParams();
+  const sceneId = searchParams.get("id") ?? "";
+
   return (
     <div className="flex h-screen flex-col bg-gray-50 text-gray-900">
       <TopNavBar mode="viewer" />

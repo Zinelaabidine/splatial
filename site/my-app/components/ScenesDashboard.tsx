@@ -340,7 +340,7 @@ export default function ScenesDashboard() {
                       <div className="flex items-center gap-1.5">
                         {scene.status === "READY" && (
                           <a
-                            href={`/scenes/${scene.sceneId}/view`}
+                            href={`/scenes/view?id=${scene.sceneId}`}
                             className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-emerald-600 transition-colors hover:bg-emerald-50"
                             aria-label={`View scene ${scene.name}`}
                           >
