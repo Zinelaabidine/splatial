@@ -144,6 +144,46 @@ data "aws_iam_policy_document" "github_deploy_policy" {
   }
 
   statement {
+    sid    = "S3SplatScenesBucketManage"
+    effect = "Allow"
+    actions = [
+      "s3:CreateBucket",
+      "s3:DeleteBucket",
+      "s3:ListBucket",
+      "s3:GetBucketLocation",
+      "s3:GetBucketVersioning",
+      "s3:PutBucketVersioning",
+      "s3:GetBucketPublicAccessBlock",
+      "s3:PutBucketPublicAccessBlock",
+      "s3:GetBucketOwnershipControls",
+      "s3:PutBucketOwnershipControls",
+      "s3:GetEncryptionConfiguration",
+      "s3:PutEncryptionConfiguration",
+      "s3:GetBucketPolicy",
+      "s3:PutBucketPolicy",
+      "s3:DeleteBucketPolicy",
+      "s3:GetBucketTagging",
+      "s3:PutBucketTagging",
+      "s3:GetBucketAcl",
+      "s3:GetBucketCORS",
+      "s3:PutBucketCORS",
+      "s3:GetBucketWebsite",
+      "s3:GetBucketLogging",
+      "s3:GetBucketRequestPayment",
+      "s3:GetBucketObjectLockConfiguration",
+      "s3:GetLifecycleConfiguration",
+      "s3:PutLifecycleConfiguration",
+      "s3:GetReplicationConfiguration",
+      "s3:GetAccelerateConfiguration",
+      "s3:GetIntelligentTieringConfiguration",
+    ]
+    resources = [
+      # Constructed ARN — bucket may not exist yet on first apply.
+      "arn:aws:s3:::${local.name_prefix}-splat-scenes",
+    ]
+  }
+
+  statement {
     sid    = "S3RawScenesBucketManage"
     effect = "Allow"
     actions = [
@@ -477,6 +517,7 @@ data "aws_iam_policy_document" "github_deploy_policy" {
     ]
     resources = [
       "arn:aws:logs:${var.aws_region}:886601940523:log-group:/aws/lambda/${var.name}-*",
+      "arn:aws:logs:${var.aws_region}:886601940523:log-group:/aws/apigateway/${var.name}-*",
     ]
   }
 
@@ -727,6 +768,8 @@ data "aws_iam_policy_document" "github_deploy_compute_policy" {
     resources = [
       "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore",
       "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy",
+      # Terraform needs to read this customer-managed policy to manage it.
+      "arn:aws:iam::886601940523:policy/${local.name_prefix}-github-deploy-compute-policy",
     ]
   }
 
