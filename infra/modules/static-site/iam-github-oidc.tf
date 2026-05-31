@@ -183,6 +183,7 @@ data "aws_iam_policy_document" "github_deploy_policy" {
       "s3:GetBucketRequestPayment",
       "s3:GetBucketObjectLockConfiguration",
       "s3:GetLifecycleConfiguration",
+      "s3:PutLifecycleConfiguration",
       "s3:GetReplicationConfiguration",
       "s3:GetAccelerateConfiguration",
       "s3:PutAccelerateConfiguration",
@@ -784,6 +785,24 @@ data "aws_iam_policy_document" "github_deploy_cdn_policy" {
       "arn:aws:logs:${var.aws_region}:886601940523:log-group:/aws/lambda/${var.name}-*",
       "arn:aws:logs:${var.aws_region}:886601940523:log-group:/aws/apigateway/${var.name}-*",
     ]
+  }
+
+  # Required by API Gateway v2 to enable access logging on a stage.
+  # CreateLogDelivery / UpdateLogDelivery are service-linked actions that AWS
+  # evaluates against "*" — resource-level scoping is not supported.
+  statement {
+    sid    = "APIGatewayLogDelivery"
+    effect = "Allow"
+    actions = [
+      "logs:CreateLogDelivery",
+      "logs:UpdateLogDelivery",
+      "logs:DeleteLogDelivery",
+      "logs:GetLogDelivery",
+      "logs:ListLogDeliveries",
+      "logs:PutResourcePolicy",
+      "logs:DescribeResourcePolicies",
+    ]
+    resources = ["*"]
   }
 }
 
