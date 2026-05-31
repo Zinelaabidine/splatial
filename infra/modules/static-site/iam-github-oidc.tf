@@ -604,8 +604,22 @@ data "aws_iam_policy_document" "github_deploy_compute_policy" {
     resources = [
       "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore",
       "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy",
-      # Terraform needs to read this customer-managed policy to manage it.
+      # Terraform needs to read these customer-managed policies to manage them.
       "arn:aws:iam::886601940523:policy/${local.name_prefix}-github-deploy-compute-policy",
+      "arn:aws:iam::886601940523:policy/${local.name_prefix}-github-deploy-cdn-policy",
+    ]
+  }
+
+  statement {
+    sid    = "IAMManagedPoliciesWrite"
+    effect = "Allow"
+    actions = [
+      "iam:CreatePolicyVersion",
+      "iam:DeletePolicyVersion",
+    ]
+    resources = [
+      "arn:aws:iam::886601940523:policy/${local.name_prefix}-github-deploy-compute-policy",
+      "arn:aws:iam::886601940523:policy/${local.name_prefix}-github-deploy-cdn-policy",
     ]
   }
 
