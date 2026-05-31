@@ -1,0 +1,128 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# bootstrap.yml — GitHub Actions OIDC Provider + IAM Role bootstrap
+#
+# WHY SEPARATE FROM deploy.yml:
+#   The deploy workflow authenticates to AWS by assuming
+#   splatial-<env>-github-deploy-role via GitHub OIDC.  That role, and the OIDC
+#   provider that backs it, are defined in infra/bootstrap.
+#
+#   A workflow must not manage its own trust chain:
+#     - A broken trust policy cannot be fixed by the same job that broke it.
+#     - A compromised workflow could silently widen trust to arbitrary principals.
+#
+#   This workflow is therefore:
+#     - Manual-trigger only (workflow_dispatch)        — no accidental runs
+#     - Protected by a required-reviewer environment   — human approval gate
+#     - Authenticated with STATIC credentials          — not OIDC (see below)
+#
+# AUTHENTICATION:
+#   This workflow uses OIDC via splatial-bootstrap-ci-role — no static keys.
+#   The trust policy on that role is scoped to exactly this workflow file on main,
+#   so no other workflow in this repo can assume it.
+#
+#   PREREQUISITE (one-time only):
+#     The GitHub OIDC provider must exist in AWS before the first run.
+#     If it does not yet exist, create it once manually:
+#
+#       aws iam create-open-id-connect-provider \
+#         --url https://token.actions.githubusercontent.com \
+#         --client-id-list sts.amazonaws.com \
+#         --thumbprint-list \
+#           6938fd4d98bab03faadb97b34396831e3780aea1 \
+#           1c58a3a8518e8759bf075b76b750d4f2df264fcd
+#
+#     Then import it into bootstrap state:
+#       terraform import aws_iam_openid_connect_provider.github \
+#         arn:aws:iam::886601940523:oidc-provider/token.actions.githubusercontent.com
+#
+#     And create + import the bootstrap CI role:
+#       aws iam create-role --role-name splatial-bootstrap-ci-role \
+#         --assume-role-policy-document '{"Version":"2012-10-17","Statement":[]}'
+#       terraform import aws_iam_role.bootstrap_ci splatial-bootstrap-ci-role
+#       terraform apply   # fills in the real trust policy and inline policy
+#
+#   After that first local apply, all future runs use OIDC — no secrets needed.
+#
+# FILES TO REVIEW MANUALLY BEFORE EVERY APPLY:
+#   - infra/bootstrap/main.tf       (OIDC thumbprints, trust conditions)
+#   - infra/bootstrap/variables.tf  (local_dev_iam_users list)
+#   - infra/bootstrap/backend.tf    (state bucket must exist before first run)
+# ──────────────────────────────────────────────────────────────────────────────
+name: bootstrap
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Run terraform apply (leave unchecked for plan-only dry run)"
+        type: boolean
+        default: false
+        required: false
+
+permissions:
+  contents: read
+  id-token: write   # required for OIDC authentication to AWS
+
+env:
+  AWS_REGION: us-east-1
+  TF_DIR: infra/bootstrap
+  TF_VERSION: "1.10.0"
+
+jobs:
+  bootstrap:
+    name: Terraform Bootstrap
+    runs-on: ubuntu-latest
+    # Pin to a protected GitHub environment so required reviewers must approve
+    # before Terraform touches the OIDC trust chain.
+    # Create an "infra-bootstrap" environment in Settings → Environments and
+    # add at least one required reviewer there.
+    environment: infra-bootstrap
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── AWS Authentication ──────────────────────────────────────────────────
+      # Uses OIDC — no static keys stored anywhere.
+      # splatial-bootstrap-ci-role trusts tokens with job_workflow_ref pointing
+      # at exactly this file on main, so no other workflow can assume it.
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::886601940523:role/splatial-bootstrap-ci-role
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify AWS Identity
+        run: aws sts get-caller-identity
+
+      # ── Terraform ──────────────────────────────────────────────────────────
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Terraform Format Check
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform fmt -check -recursive
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform init
+
+      - name: Terraform Validate
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform validate
+
+      - name: Terraform Plan
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform plan -out=tfplan
+
+      # Apply only when the checkbox is checked in the manual trigger UI.
+      # The plan output above is always visible regardless.
+      - name: Terraform Apply
+        if: ${{ inputs.apply == true }}
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          echo "Applying bootstrap changes — this modifies the OIDC trust chain."
+          terraform apply tfplan

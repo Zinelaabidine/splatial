@@ -79,10 +79,10 @@ jobs:
         working-directory: ${{ steps.set-env.outputs.tf_dir }}
         run: |
           terraform init
-          # Bootstrap: update the IAM inline policy first so subsequent refresh
-          # calls have the permissions they need (avoids a circular dependency
-          # where the plan refresh fails before the new perms can be applied).
-          terraform apply -target=module.static_site.aws_iam_role_policy.github_deploy_policy -auto-approve
+          # The deploy role and its trust policy are managed in infra/bootstrap
+          # (bootstrap.yml workflow).  This workflow only attaches application-
+          # specific IAM policies to the pre-existing role; it never modifies
+          # the trust chain that allows it to run in the first place.
           terraform apply -auto-approve
       - name: Read Terraform outputs
         id: tf

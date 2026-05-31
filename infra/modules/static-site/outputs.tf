@@ -54,7 +54,7 @@ output "site_url" {
 
 output "github_oidc_deploy_role_arn" {
   description = "The ARN of the IAM role used by GitHub Actions to deploy the static site"
-  value       = aws_iam_role.github_oidc_deploy_role.arn
+  value       = data.aws_iam_role.github_oidc_deploy_role.arn
 }
 
 output "vpc_id" {

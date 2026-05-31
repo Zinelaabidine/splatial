@@ -1,48 +1,19 @@
-data "aws_iam_openid_connect_provider" "github" {
+# The GitHub Actions OIDC provider and the deploy-role trust policy are managed
+# in infra/bootstrap (bootstrap.yml workflow, manual trigger only).
+#
+# WHY: A workflow must not manage its own trust chain — doing so creates a
+# circular dependency where a broken trust policy cannot be repaired by the
+# same workflow that broke it.  Bootstrap resources are intentionally separated
+# into a workflow that uses different credentials (static key, not OIDC) and
+# requires a protected environment with human approval.
+#
+# This data source looks up the role that bootstrap already created.
+# Applying infra/envs/<env> will NOT modify the trust policy — only
+# infra/bootstrap can change it.
+data "aws_iam_role" "github_oidc_deploy_role" {
   provider = aws.this
 
-  url = "https://token.actions.githubusercontent.com"
-}
-
-data "aws_iam_policy_document" "github_oidc_assume_role_policy" {
-  statement {
-    sid    = "AllowGitHubActionsAssumeRole"
-    effect = "Allow"
-
-    principals {
-      type = "Federated"
-      identifiers = [
-        data.aws_iam_openid_connect_provider.github.arn
-      ]
-    }
-
-    actions = [
-      "sts:AssumeRoleWithWebIdentity"
-    ]
-
-    condition {
-      test     = "StringEquals"
-      variable = "token.actions.githubusercontent.com:aud"
-      values = [
-        "sts.amazonaws.com"
-      ]
-    }
-
-    condition {
-      test     = "StringEquals"
-      variable = "token.actions.githubusercontent.com:sub"
-      values = [
-        "repo:${local.github_repo_full}:environment:${var.environment}"
-      ]
-    }
-  }
-}
-
-resource "aws_iam_role" "github_oidc_deploy_role" {
-  provider = aws.this
-
-  name               = "${local.name_prefix}-github-deploy-role"
-  assume_role_policy = data.aws_iam_policy_document.github_oidc_assume_role_policy.json
+  name = "${local.name_prefix}-github-deploy-role"
 }
 
 data "aws_iam_policy_document" "github_deploy_policy" {
@@ -469,7 +440,7 @@ resource "aws_iam_role_policy" "github_deploy_policy" {
   provider = aws.this
 
   name   = "${local.name_prefix}-github-deploy-policy"
-  role   = aws_iam_role.github_oidc_deploy_role.id
+  role   = data.aws_iam_role.github_oidc_deploy_role.id
   policy = data.aws_iam_policy_document.github_deploy_policy.json
 }
 
@@ -658,7 +629,7 @@ resource "aws_iam_policy" "github_deploy_compute_policy" {
 }
 
 resource "aws_iam_role_policy_attachment" "github_deploy_compute" {
-  role       = aws_iam_role.github_oidc_deploy_role.name
+  role       = data.aws_iam_role.github_oidc_deploy_role.name
   policy_arn = aws_iam_policy.github_deploy_compute_policy.arn
 }
 
@@ -812,6 +783,6 @@ resource "aws_iam_policy" "github_deploy_cdn_policy" {
 }
 
 resource "aws_iam_role_policy_attachment" "github_deploy_cdn" {
-  role       = aws_iam_role.github_oidc_deploy_role.name
+  role       = data.aws_iam_role.github_oidc_deploy_role.name
   policy_arn = aws_iam_policy.github_deploy_cdn_policy.arn
 }

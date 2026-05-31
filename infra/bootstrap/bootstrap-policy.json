@@ -1,0 +1,84 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "OIDCProvider",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateOpenIDConnectProvider",
+        "iam:GetOpenIDConnectProvider",
+        "iam:UpdateOpenIDConnectProvider",
+        "iam:DeleteOpenIDConnectProvider",
+        "iam:ListOpenIDConnectProviders",
+        "iam:AddClientIDToOpenIDConnectProvider",
+        "iam:RemoveClientIDFromOpenIDConnectProvider",
+        "iam:UpdateOpenIDConnectProviderThumbprint",
+        "iam:TagOpenIDConnectProvider",
+        "iam:UntagOpenIDConnectProvider",
+        "iam:ListOpenIDConnectProviderTags"
+      ],
+      "Resource": "arn:aws:iam::886601940523:oidc-provider/token.actions.githubusercontent.com"
+    },
+    {
+      "Sid": "DeployRoles",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:GetRole",
+        "iam:UpdateRole",
+        "iam:DeleteRole",
+        "iam:UpdateAssumeRolePolicy",
+        "iam:ListRoleTags",
+        "iam:TagRole",
+        "iam:UntagRole",
+        "iam:ListAttachedRolePolicies",
+        "iam:ListRolePolicies",
+        "iam:GetRolePolicy"
+      ],
+      "Resource": [
+        "arn:aws:iam::886601940523:role/splatial-dev-github-deploy-role",
+        "arn:aws:iam::886601940523:role/splatial-staging-github-deploy-role",
+        "arn:aws:iam::886601940523:role/splatial-prod-github-deploy-role",
+        "arn:aws:iam::886601940523:role/splatial-local-dev-role"
+      ]
+    },
+    {
+      "Sid": "TerraformState",
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListBucket",
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject"
+      ],
+      "Resource": [
+        "arn:aws:s3:::openspacenexus-terraform-state",
+        "arn:aws:s3:::openspacenexus-terraform-state/*"
+      ]
+    },
+    {
+      "Sid": "S3BucketBootstrap",
+      "Effect": "Allow",
+      "Action": [
+        "s3:CreateBucket",
+        "s3:GetBucketVersioning",
+        "s3:PutBucketVersioning",
+        "s3:GetEncryptionConfiguration",
+        "s3:PutEncryptionConfiguration",
+        "s3:GetBucketPublicAccessBlock",
+        "s3:PutBucketPublicAccessBlock",
+        "s3:GetBucketTagging",
+        "s3:PutBucketTagging",
+        "s3:GetBucketLocation",
+        "s3:ListAllMyBuckets"
+      ],
+      "Resource": "arn:aws:s3:::openspacenexus-terraform-state"
+    },
+    {
+      "Sid": "STSIdentity",
+      "Effect": "Allow",
+      "Action": "sts:GetCallerIdentity",
+      "Resource": "*"
+    }
+  ]
+}
