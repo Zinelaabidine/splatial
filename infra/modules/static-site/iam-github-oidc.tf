@@ -386,141 +386,6 @@ data "aws_iam_policy_document" "github_deploy_policy" {
     ]
   }
 
-  # ─── CloudFront ───────────────────────────────────────────────────────────────
-
-  # OAC IDs are opaque at plan time; AWS does not support resource-level ARN
-  # scoping for these OAC-specific actions.
-  statement {
-    sid    = "CloudFrontOACManage"
-    effect = "Allow"
-    actions = [
-      "cloudfront:CreateOriginAccessControl",
-      "cloudfront:GetOriginAccessControl",
-      "cloudfront:GetOriginAccessControlConfig",
-      "cloudfront:UpdateOriginAccessControl",
-      "cloudfront:DeleteOriginAccessControl",
-      "cloudfront:ListOriginAccessControls",
-    ]
-    resources = ["*"]
-  }
-
-  statement {
-    sid    = "CloudFrontDistributionManage"
-    effect = "Allow"
-    actions = [
-      "cloudfront:CreateDistribution",
-      "cloudfront:GetDistribution",
-      "cloudfront:GetDistributionConfig",
-      "cloudfront:UpdateDistribution",
-      "cloudfront:DeleteDistribution",
-      "cloudfront:ListDistributions",
-      "cloudfront:CreateInvalidation",
-      "cloudfront:GetInvalidation",
-      "cloudfront:ListInvalidations",
-      "cloudfront:TagResource",
-      "cloudfront:UntagResource",
-      "cloudfront:ListTagsForResource",
-    ]
-    # Scoped to this account; CloudFront distribution IDs are assigned by AWS
-    # and are not known until after the first apply, so a specific ARN reference
-    # cannot be used for CreateDistribution.
-    resources = [
-      "arn:aws:cloudfront::886601940523:distribution/*",
-    ]
-  }
-
-  # ─── Route 53 ─────────────────────────────────────────────────────────────────
-
-  statement {
-    sid    = "Route53ListGlobal"
-    effect = "Allow"
-    actions = [
-      "route53:ListHostedZones",
-      "route53:ListHostedZonesByName",
-    ]
-    resources = ["*"]
-  }
-
-  statement {
-    sid    = "Route53ZoneManage"
-    effect = "Allow"
-    actions = [
-      "route53:GetHostedZone",
-      "route53:ChangeResourceRecordSets",
-      "route53:ListResourceRecordSets",
-      "route53:GetChange",
-      "route53:ListTagsForResource",
-    ]
-    resources = [
-      "arn:aws:route53:::hostedzone/*",
-      "arn:aws:route53:::change/*",
-    ]
-  }
-
-  # ─── ACM ──────────────────────────────────────────────────────────────────────
-
-  statement {
-    sid    = "ACMListGlobal"
-    effect = "Allow"
-    actions = [
-      "acm:ListCertificates",
-    ]
-    resources = ["*"]
-  }
-
-  # The api-gateway-domain module creates its own ACM certificate (DNS-validated).
-  # RequestCertificate/DeleteCertificate/tag actions are required for create and
-  # destroy; the describe/read actions cover plan and the validation waiter.
-  statement {
-    sid    = "ACMCertificateManage"
-    effect = "Allow"
-    actions = [
-      "acm:RequestCertificate",
-      "acm:DeleteCertificate",
-      "acm:DescribeCertificate",
-      "acm:GetCertificate",
-      "acm:ListTagsForCertificate",
-      "acm:AddTagsToCertificate",
-      "acm:RemoveTagsFromCertificate",
-    ]
-    resources = [
-      "arn:aws:acm:us-east-1:886601940523:certificate/*",
-    ]
-  }
-
-  # ─── CloudWatch Logs ──────────────────────────────────────────────────────────
-
-  # DescribeLogGroups is a list API that AWS requires on "*".
-  statement {
-    sid    = "CloudWatchLogsDescribeGlobal"
-    effect = "Allow"
-    actions = [
-      "logs:DescribeLogGroups",
-    ]
-    resources = ["*"]
-  }
-
-  statement {
-    sid    = "CloudWatchLogsLambdaManage"
-    effect = "Allow"
-    actions = [
-      "logs:CreateLogGroup",
-      "logs:DeleteLogGroup",
-      "logs:PutRetentionPolicy",
-      "logs:DeleteRetentionPolicy",
-      "logs:ListTagsLogGroup",
-      "logs:ListTagsForResource",
-      "logs:TagLogGroup",
-      "logs:UntagLogGroup",
-      "logs:TagResource",
-      "logs:UntagResource",
-    ]
-    resources = [
-      "arn:aws:logs:${var.aws_region}:886601940523:log-group:/aws/lambda/${var.name}-*",
-      "arn:aws:logs:${var.aws_region}:886601940523:log-group:/aws/apigateway/${var.name}-*",
-    ]
-  }
-
   # ─── IAM ──────────────────────────────────────────────────────────────────────
 
   # ListOpenIDConnectProviders is a list API that AWS requires on "*".
@@ -795,4 +660,158 @@ resource "aws_iam_policy" "github_deploy_compute_policy" {
 resource "aws_iam_role_policy_attachment" "github_deploy_compute" {
   role       = aws_iam_role.github_oidc_deploy_role.name
   policy_arn = aws_iam_policy.github_deploy_compute_policy.arn
+}
+
+# ── CDN / DNS / TLS / Logs permissions (separate policy to stay under 10 240-byte limit) ──
+
+data "aws_iam_policy_document" "github_deploy_cdn_policy" {
+
+  # ─── CloudFront ────────────────────────────────────────────────────────────
+
+  # OAC IDs are opaque at plan time; AWS does not support resource-level ARN
+  # scoping for these OAC-specific actions.
+  statement {
+    sid    = "CloudFrontOACManage"
+    effect = "Allow"
+    actions = [
+      "cloudfront:CreateOriginAccessControl",
+      "cloudfront:GetOriginAccessControl",
+      "cloudfront:GetOriginAccessControlConfig",
+      "cloudfront:UpdateOriginAccessControl",
+      "cloudfront:DeleteOriginAccessControl",
+      "cloudfront:ListOriginAccessControls",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "CloudFrontDistributionManage"
+    effect = "Allow"
+    actions = [
+      "cloudfront:CreateDistribution",
+      "cloudfront:GetDistribution",
+      "cloudfront:GetDistributionConfig",
+      "cloudfront:UpdateDistribution",
+      "cloudfront:DeleteDistribution",
+      "cloudfront:ListDistributions",
+      "cloudfront:CreateInvalidation",
+      "cloudfront:GetInvalidation",
+      "cloudfront:ListInvalidations",
+      "cloudfront:TagResource",
+      "cloudfront:UntagResource",
+      "cloudfront:ListTagsForResource",
+    ]
+    # Scoped to this account; CloudFront distribution IDs are assigned by AWS
+    # and are not known until after the first apply, so a specific ARN reference
+    # cannot be used for CreateDistribution.
+    resources = [
+      "arn:aws:cloudfront::886601940523:distribution/*",
+    ]
+  }
+
+  # ─── Route 53 ──────────────────────────────────────────────────────────────
+
+  statement {
+    sid    = "Route53ListGlobal"
+    effect = "Allow"
+    actions = [
+      "route53:ListHostedZones",
+      "route53:ListHostedZonesByName",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "Route53ZoneManage"
+    effect = "Allow"
+    actions = [
+      "route53:GetHostedZone",
+      "route53:ChangeResourceRecordSets",
+      "route53:ListResourceRecordSets",
+      "route53:GetChange",
+      "route53:ListTagsForResource",
+    ]
+    resources = [
+      "arn:aws:route53:::hostedzone/*",
+      "arn:aws:route53:::change/*",
+    ]
+  }
+
+  # ─── ACM ───────────────────────────────────────────────────────────────────
+
+  statement {
+    sid    = "ACMListGlobal"
+    effect = "Allow"
+    actions = [
+      "acm:ListCertificates",
+    ]
+    resources = ["*"]
+  }
+
+  # The api-gateway-domain module creates its own ACM certificate (DNS-validated).
+  # RequestCertificate/DeleteCertificate/tag actions are required for create and
+  # destroy; the describe/read actions cover plan and the validation waiter.
+  statement {
+    sid    = "ACMCertificateManage"
+    effect = "Allow"
+    actions = [
+      "acm:RequestCertificate",
+      "acm:DeleteCertificate",
+      "acm:DescribeCertificate",
+      "acm:GetCertificate",
+      "acm:ListTagsForCertificate",
+      "acm:AddTagsToCertificate",
+      "acm:RemoveTagsFromCertificate",
+    ]
+    resources = [
+      "arn:aws:acm:us-east-1:886601940523:certificate/*",
+    ]
+  }
+
+  # ─── CloudWatch Logs ───────────────────────────────────────────────────────
+
+  # DescribeLogGroups is a list API that AWS requires on "*".
+  statement {
+    sid    = "CloudWatchLogsDescribeGlobal"
+    effect = "Allow"
+    actions = [
+      "logs:DescribeLogGroups",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "CloudWatchLogsLambdaManage"
+    effect = "Allow"
+    actions = [
+      "logs:CreateLogGroup",
+      "logs:DeleteLogGroup",
+      "logs:PutRetentionPolicy",
+      "logs:DeleteRetentionPolicy",
+      "logs:ListTagsLogGroup",
+      "logs:ListTagsForResource",
+      "logs:TagLogGroup",
+      "logs:UntagLogGroup",
+      "logs:TagResource",
+      "logs:UntagResource",
+    ]
+    resources = [
+      "arn:aws:logs:${var.aws_region}:886601940523:log-group:/aws/lambda/${var.name}-*",
+      "arn:aws:logs:${var.aws_region}:886601940523:log-group:/aws/apigateway/${var.name}-*",
+    ]
+  }
+}
+
+# Managed policy — does not count toward the 10 240-byte inline policy quota.
+resource "aws_iam_policy" "github_deploy_cdn_policy" {
+  provider = aws.this
+
+  name        = "${local.name_prefix}-github-deploy-cdn-policy"
+  description = "CloudFront, Route53, ACM, and CloudWatch Logs permissions for GitHub deploy role"
+  policy      = data.aws_iam_policy_document.github_deploy_cdn_policy.json
+}
+
+resource "aws_iam_role_policy_attachment" "github_deploy_cdn" {
+  role       = aws_iam_role.github_oidc_deploy_role.name
+  policy_arn = aws_iam_policy.github_deploy_cdn_policy.arn
 }
