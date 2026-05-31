@@ -61,9 +61,9 @@ resource "aws_iam_role_policy" "worker_policy" {
         Resource = "${aws_s3_bucket.raw_scenes.arn}/*"
       },
       {
-        Sid    = "S3SplatScenesWrite"
-        Effect = "Allow"
-        Action = ["s3:PutObject"]
+        Sid      = "S3SplatScenesWrite"
+        Effect   = "Allow"
+        Action   = ["s3:PutObject"]
         Resource = "${aws_s3_bucket.splat_scenes.arn}/*"
       },
       {
