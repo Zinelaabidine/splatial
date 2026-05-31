@@ -105,11 +105,11 @@ resource "aws_apigatewayv2_api" "http_api" {
 
   cors_configuration {
     allow_headers = ["content-type", "authorization"]
-    allow_methods = ["GET", "POST", "OPTIONS", "DELETE", "PUT"]
-    allow_origins = [
-      "https://${var.domain_name}",
-      "http://localhost:3000",
-    ]
+    allow_methods = ["GET", "POST", "PATCH", "OPTIONS", "DELETE", "PUT"]
+    allow_origins = distinct(concat(
+      ["https://${var.domain_name}"],
+      var.cors_extra_origins,
+    ))
     max_age = 300
   }
 
@@ -119,7 +119,7 @@ resource "aws_cloudwatch_log_group" "api_gateway" {
   provider = aws.this
 
   name              = "/aws/apigateway/${var.name}-gateway-api"
-  retention_in_days = 7
+  retention_in_days = 14
 }
 
 resource "aws_apigatewayv2_stage" "http_api" {
@@ -132,15 +132,15 @@ resource "aws_apigatewayv2_stage" "http_api" {
   access_log_settings {
     destination_arn = aws_cloudwatch_log_group.api_gateway.arn
     format = jsonencode({
-      requestId      = "$context.requestId"
-      ip             = "$context.identity.sourceIp"
-      requestTime    = "$context.requestTime"
+      errorMessage   = "$context.error.message"
       httpMethod     = "$context.httpMethod"
+      ip             = "$context.identity.sourceIp"
+      protocol       = "$context.protocol"
+      requestId      = "$context.requestId"
+      requestTime    = "$context.requestTime"
+      responseLength = "$context.responseLength"
       routeKey       = "$context.routeKey"
       status         = "$context.status"
-      protocol       = "$context.protocol"
-      responseLength = "$context.responseLength"
-      errorMessage   = "$context.error.message"
     })
   }
 
@@ -237,6 +237,116 @@ resource "aws_apigatewayv2_route" "upload_complete" {
 
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
+resource "aws_apigatewayv2_route" "scene_status" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "GET /scenes/{sceneId}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
+resource "aws_apigatewayv2_route" "scene_delete" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "DELETE /scenes/{sceneId}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
+# ── Scene Management v1 ───────────────────────────────────────────────────────
+
+resource "aws_apigatewayv2_route" "scenes_create" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "POST /api/v1/scenes"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
+resource "aws_apigatewayv2_route" "scenes_list" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "GET /api/v1/scenes"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
+resource "aws_apigatewayv2_route" "scenes_delete_v1" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "DELETE /api/v1/scenes/{sceneId}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
+resource "aws_apigatewayv2_route" "scenes_seed" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "POST /api/v1/scenes/seed"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
+resource "aws_apigatewayv2_route" "scenes_view_url" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "GET /api/v1/scenes/{sceneId}/view-url"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
+# ── Job Management ────────────────────────────────────────────────────────────
+
+resource "aws_apigatewayv2_route" "job_submit" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "POST /jobs/submit"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
+resource "aws_apigatewayv2_route" "job_cancel" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "POST /jobs/{sceneId}/cancel"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
+# ── Worker Callback (no JWT — auth via per-job worker token) ─────────────────
+
+resource "aws_apigatewayv2_route" "attempt_patch" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "PATCH /api/attempts/{attemptId}"
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
+resource "aws_apigatewayv2_route" "attempt_heartbeat" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "POST /api/attempts/{attemptId}/heartbeat"
 
   target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
 }

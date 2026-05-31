@@ -35,3 +35,10 @@ out/
 .DS_Store
 **/.DS_Store
 .vscode/
+# ----------------------------------------------------------------------
+# Old application code (to be removed after migration)
+# ----------------------------------------------------------------------
+oldApp/
+.DS_Store
+.DS_Store
+.DS_Store

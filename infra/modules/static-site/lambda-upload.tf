@@ -1,8 +1,11 @@
 resource "null_resource" "upload_lambda_deps" {
   triggers = {
-    # Re-run npm install whenever package.json or the handler changes.
+    # Re-run npm install whenever package.json or any handler/lib source changes.
     package_json = filesha256("${path.module}/src-upload/package.json")
-    handler      = filesha256("${path.module}/src-upload/upload.js")
+    handlers = sha256(join("", [
+      for f in sort(fileset("${path.module}/src-upload", "**/*.js")) :
+      filesha256("${path.module}/src-upload/${f}")
+    ]))
   }
 
   provisioner "local-exec" {
@@ -60,6 +63,7 @@ resource "aws_iam_role_policy" "upload_lambda_data_access" {
         Effect = "Allow"
         Action = [
           "s3:PutObject",
+          "s3:DeleteObject",
           "s3:AbortMultipartUpload",
           "s3:ListMultipartUploadParts",
         ]
@@ -72,12 +76,29 @@ resource "aws_iam_role_policy" "upload_lambda_data_access" {
           "dynamodb:GetItem",
           "dynamodb:PutItem",
           "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
           "dynamodb:Query",
+          "dynamodb:Scan",
         ]
         Resource = [
           aws_dynamodb_table.scenes.arn,
           "${aws_dynamodb_table.scenes.arn}/index/*",
         ]
+      },
+      {
+        Sid      = "SQSJobSubmit"
+        Effect   = "Allow"
+        Action   = ["sqs:SendMessage"]
+        Resource = aws_sqs_queue.processing_queue.arn
+      },
+      {
+        Sid    = "S3SplatScenesReadWrite"
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+        ]
+        Resource = "${aws_s3_bucket.splat_scenes.arn}/*"
       },
     ]
   })
@@ -96,9 +117,12 @@ resource "aws_lambda_function" "upload_lambda" {
 
   environment {
     variables = {
-      RAW_SCENES_BUCKET_NAME = aws_s3_bucket.raw_scenes.bucket
-      SCENES_TABLE_NAME      = aws_dynamodb_table.scenes.name
-      NODE_ENV               = "production"
+      RAW_SCENES_BUCKET_NAME   = aws_s3_bucket.raw_scenes.bucket
+      SPLAT_SCENES_BUCKET_NAME = aws_s3_bucket.splat_scenes.bucket
+      SCENES_TABLE_NAME        = aws_dynamodb_table.scenes.name
+      SQS_QUEUE_URL            = aws_sqs_queue.processing_queue.url
+      API_BASE_URL             = "https://api-${var.environment}.openspacenexus.store"
+      NODE_ENV                 = "production"
     }
   }
 }

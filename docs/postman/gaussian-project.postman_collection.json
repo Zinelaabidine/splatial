@@ -1,0 +1,680 @@
+{
+  "info": {
+    "_postman_id": "c3d4e5f6-a7b8-9012-cdef-123456789abc",
+    "name": "Gaussian Project — New APIs",
+    "description": "Add-only import for the Gaussian Project collection.\n\nMerge folders into your existing **Gaussian Project** collection — do not replace it.\n\n**User Management (Cognito)** — direct Cognito IdP calls (not API Gateway). Complements existing Auth → Login / Refresh Token.\n\n**Upload & Scenes** — API Gateway routes (JWT via `idToken`).\n\nNote: `GET /scenes` (list all scenes) is defined in frontend types but not deployed yet. Use **Scene Fetch** (`GET /scenes/{sceneId}`) for now.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{idToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "User Management (Cognito)",
+      "description": "AWS Cognito Identity Provider API — user lifecycle outside API Gateway. Uses `clientId`, `cognitoRegion`, `username`, `password` from your existing environment. Several operations require `accessToken` from Auth → Login.",
+      "item": [
+        {
+          "name": "Sign Up",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Sign up accepted (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "if (json.UserSub) {",
+                  "    pm.environment.set('userSub', json.UserSub);",
+                  "    console.log('Saved userSub — confirm email then run Confirm Sign Up');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/x-amz-json-1.1" },
+              { "key": "X-Amz-Target", "value": "AWSCognitoIdentityProviderService.SignUp" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ClientId\": \"{{clientId}}\",\n  \"Username\": \"{{username}}\",\n  \"Password\": \"{{password}}\",\n  \"UserAttributes\": [\n    { \"Name\": \"email\", \"Value\": \"{{username}}\" }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "https://cognito-idp.{{cognitoRegion}}.amazonaws.com/",
+              "protocol": "https",
+              "host": ["cognito-idp", "{{cognitoRegion}}", "amazonaws", "com"],
+              "path": [""]
+            },
+            "description": "Register a new user. Cognito sends a confirmation code to email. Test script saves `userSub`."
+          },
+          "response": []
+        },
+        {
+          "name": "Confirm Sign Up",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Confirm sign up succeeded (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/x-amz-json-1.1" },
+              { "key": "X-Amz-Target", "value": "AWSCognitoIdentityProviderService.ConfirmSignUp" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ClientId\": \"{{clientId}}\",\n  \"Username\": \"{{username}}\",\n  \"ConfirmationCode\": \"{{confirmationCode}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "https://cognito-idp.{{cognitoRegion}}.amazonaws.com/",
+              "protocol": "https",
+              "host": ["cognito-idp", "{{cognitoRegion}}", "amazonaws", "com"],
+              "path": [""]
+            },
+            "description": "Confirm email after Sign Up. Set `confirmationCode` from the verification email."
+          },
+          "response": []
+        },
+        {
+          "name": "Get User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Get user succeeded (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "if (json.Username) {",
+                  "    pm.environment.set('userSub', json.Username);",
+                  "}",
+                  "const email = (json.UserAttributes || []).find(a => a.Name === 'email');",
+                  "if (email) {",
+                  "    console.log('User email:', email.Value);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/x-amz-json-1.1" },
+              { "key": "X-Amz-Target", "value": "AWSCognitoIdentityProviderService.GetUser" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"AccessToken\": \"{{accessToken}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "https://cognito-idp.{{cognitoRegion}}.amazonaws.com/",
+              "protocol": "https",
+              "host": ["cognito-idp", "{{cognitoRegion}}", "amazonaws", "com"],
+              "path": [""]
+            },
+            "description": "Fetch the authenticated user's profile from Cognito. Requires `accessToken` from Auth → Login (not `idToken`)."
+          },
+          "response": []
+        },
+        {
+          "name": "Forgot Password",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Forgot password initiated (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/x-amz-json-1.1" },
+              { "key": "X-Amz-Target", "value": "AWSCognitoIdentityProviderService.ForgotPassword" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ClientId\": \"{{clientId}}\",\n  \"Username\": \"{{username}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "https://cognito-idp.{{cognitoRegion}}.amazonaws.com/",
+              "protocol": "https",
+              "host": ["cognito-idp", "{{cognitoRegion}}", "amazonaws", "com"],
+              "path": [""]
+            },
+            "description": "Send a password-reset confirmation code to the user's email."
+          },
+          "response": []
+        },
+        {
+          "name": "Confirm Forgot Password",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Password reset succeeded (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "console.log('Password updated — run Auth → Login with new password');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/x-amz-json-1.1" },
+              { "key": "X-Amz-Target", "value": "AWSCognitoIdentityProviderService.ConfirmForgotPassword" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ClientId\": \"{{clientId}}\",\n  \"Username\": \"{{username}}\",\n  \"ConfirmationCode\": \"{{confirmationCode}}\",\n  \"Password\": \"{{newPassword}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "https://cognito-idp.{{cognitoRegion}}.amazonaws.com/",
+              "protocol": "https",
+              "host": ["cognito-idp", "{{cognitoRegion}}", "amazonaws", "com"],
+              "path": [""]
+            },
+            "description": "Complete password reset using `confirmationCode` from email and `newPassword`."
+          },
+          "response": []
+        },
+        {
+          "name": "Change Password",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Change password succeeded (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/x-amz-json-1.1" },
+              { "key": "X-Amz-Target", "value": "AWSCognitoIdentityProviderService.ChangePassword" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"AccessToken\": \"{{accessToken}}\",\n  \"PreviousPassword\": \"{{password}}\",\n  \"ProposedPassword\": \"{{newPassword}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "https://cognito-idp.{{cognitoRegion}}.amazonaws.com/",
+              "protocol": "https",
+              "host": ["cognito-idp", "{{cognitoRegion}}", "amazonaws", "com"],
+              "path": [""]
+            },
+            "description": "Change password while logged in. Requires `accessToken` from Auth → Login."
+          },
+          "response": []
+        },
+        {
+          "name": "Update User Attributes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Update attributes succeeded (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/x-amz-json-1.1" },
+              { "key": "X-Amz-Target", "value": "AWSCognitoIdentityProviderService.UpdateUserAttributes" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"AccessToken\": \"{{accessToken}}\",\n  \"UserAttributes\": [\n    { \"Name\": \"{{attributeName}}\", \"Value\": \"{{attributeValue}}\" }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "https://cognito-idp.{{cognitoRegion}}.amazonaws.com/",
+              "protocol": "https",
+              "host": ["cognito-idp", "{{cognitoRegion}}", "amazonaws", "com"],
+              "path": [""]
+            },
+            "description": "Update a Cognito user attribute. Requires `accessToken`. Set `attributeName` and `attributeValue` in environment."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Upload & Scenes",
+      "description": "Multipart upload flow and scene management. Requires `idToken` from existing Auth → Login request.",
+      "item": [
+        {
+          "name": "Upload Init",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Init succeeded (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "",
+                  "pm.test('Response has upload fields', function () {",
+                  "    pm.expect(json.uploadId).to.be.a('string').and.not.empty;",
+                  "    pm.expect(json.key).to.be.a('string').and.not.empty;",
+                  "    pm.expect(json.sceneId).to.be.a('string').and.not.empty;",
+                  "});",
+                  "",
+                  "pm.environment.set('uploadId', json.uploadId);",
+                  "pm.environment.set('key', json.key);",
+                  "pm.environment.set('sceneId', json.sceneId);",
+                  "console.log('Saved uploadId, key, sceneId');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"filename\": \"test-scene.glb\",\n  \"contentType\": \"model/gltf-binary\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/upload/init",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "upload",
+                "init"
+              ]
+            },
+            "description": "POST /upload/init — starts a multipart upload and registers a scene in DynamoDB.\n\nTest script saves `uploadId`, `key`, and `sceneId` to the environment."
+          },
+          "response": []
+        },
+        {
+          "name": "Upload Presign",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Presign succeeded (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "",
+                  "pm.test('Parts returned', function () {",
+                  "    pm.expect(json.parts).to.be.an('array').that.is.not.empty;",
+                  "});",
+                  "",
+                  "pm.environment.set('presignParts', JSON.stringify(json.parts));",
+                  "console.log('Saved presignParts (' + json.parts.length + ' URLs)');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"uploadId\": \"{{uploadId}}\",\n  \"key\": \"{{key}}\",\n  \"partCount\": {{partCount}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/upload/presign",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "upload",
+                "presign"
+              ]
+            },
+            "description": "POST /upload/presign — returns presigned S3 URLs for each upload part.\n\nUses `uploadId` and `key` from Upload Init. Test script saves `presignParts`.\n\nAfter this request, PUT your file bytes to each presigned URL and copy the ETags into `uploadParts` before calling Upload Complete."
+          },
+          "response": []
+        },
+        {
+          "name": "Upload Complete",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Complete succeeded (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "",
+                  "pm.test('Scene is ready', function () {",
+                  "    pm.expect(json.sceneId).to.eql(pm.environment.get('sceneId'));",
+                  "    pm.expect(json.status).to.eql('READY');",
+                  "});",
+                  "",
+                  "if (json.location) {",
+                  "    pm.environment.set('sceneLocation', json.location);",
+                  "    console.log('Saved sceneLocation');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"uploadId\": \"{{uploadId}}\",\n  \"key\": \"{{key}}\",\n  \"sceneId\": \"{{sceneId}}\",\n  \"parts\": {{uploadParts}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/upload/complete",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "upload",
+                "complete"
+              ]
+            },
+            "description": "POST /upload/complete — assembles multipart upload in S3 and marks the scene READY.\n\nRequires `uploadParts` env var: JSON array of `{ \"partNumber\": 1, \"eTag\": \"\\\"abc123\\\"\" }` from S3 PUT responses."
+          },
+          "response": []
+        },
+        {
+          "name": "Scene Fetch",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status check succeeded (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "",
+                  "pm.test('Scene id matches', function () {",
+                  "    pm.expect(json.sceneId).to.eql(pm.environment.get('sceneId'));",
+                  "});",
+                  "",
+                  "if (json.location) {",
+                  "    pm.environment.set('sceneLocation', json.location);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/scenes/{{sceneId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "scenes",
+                "{{sceneId}}"
+              ]
+            },
+            "description": "GET /scenes/{sceneId} — returns processing status and S3 location for a scene owned by the caller.\n\nUses `sceneId` from Upload Init."
+          },
+          "response": []
+        },
+        {
+          "name": "Scene Delete",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Delete succeeded (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Scene deleted', function () {",
+                  "    pm.expect(pm.response.json().deleted).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/scenes/{{sceneId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "scenes",
+                "{{sceneId}}"
+              ]
+            },
+            "description": "DELETE /scenes/{sceneId} — removes the DynamoDB record and S3 object for a scene owned by the caller.\n\nUses `sceneId` from Upload Init."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Scene Management v1",
+      "description": "POST /api/v1/scenes, GET /api/v1/scenes, DELETE /api/v1/scenes/{sceneId}.\n\nRun in order: Create → List → Delete. Requires `idToken` from Auth → Login.",
+      "item": [
+        {
+          "name": "Scene Create",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Scene created (201)', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "",
+                  "pm.test('Response has scene fields', function () {",
+                  "    pm.expect(json.sceneId).to.be.a('string').and.not.empty;",
+                  "    pm.expect(json.name).to.be.a('string').and.not.empty;",
+                  "    pm.expect(json.inputType).to.be.oneOf(['video', 'images']);",
+                  "    pm.expect(json.status).to.eql('UPLOADED');",
+                  "    pm.expect(json.createdAt).to.be.a('string').and.not.empty;",
+                  "});",
+                  "",
+                  "pm.environment.set('v1SceneId', json.sceneId);",
+                  "console.log('Saved v1SceneId:', json.sceneId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"My Test Scene\",\n  \"inputType\": \"video\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/scenes",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "scenes"]
+            },
+            "description": "POST /api/v1/scenes — creates a draft scene with status UPLOADED.\n\nBody: `name` (string, required), `inputType` ('video' | 'images', required).\nTest script saves `v1SceneId` to the environment."
+          },
+          "response": []
+        },
+        {
+          "name": "Scenes List",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('List succeeded (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "",
+                  "pm.test('Response has scenes array', function () {",
+                  "    pm.expect(json.scenes).to.be.an('array');",
+                  "});",
+                  "",
+                  "console.log('Scenes count:', json.scenes.length);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/scenes",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "scenes"]
+            },
+            "description": "GET /api/v1/scenes — returns all named scenes owned by the caller, sorted newest-first."
+          },
+          "response": []
+        },
+        {
+          "name": "Scene Delete v1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Delete succeeded (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Scene deleted', function () {",
+                  "    pm.expect(pm.response.json().deleted).to.be.true;",
+                  "});",
+                  "",
+                  "pm.environment.unset('v1SceneId');",
+                  "console.log('v1SceneId cleared from environment');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/scenes/{{v1SceneId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "scenes", "{{v1SceneId}}"]
+            },
+            "description": "DELETE /api/v1/scenes/{sceneId} — removes the scene record and S3 object.\n\nUses `v1SceneId` saved by Scene Create. Test script clears `v1SceneId` afterwards."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

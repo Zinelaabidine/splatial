@@ -8,7 +8,7 @@ const s3 = new S3Client({});
 const dynamo = new DynamoDBClient({});
 
 const BUCKET = process.env.RAW_SCENES_BUCKET_NAME;
-const TABLE = process.env.SCENES_TABLE_NAME;
+const TABLE  = process.env.SCENES_TABLE_NAME;
 
 /**
  * POST /upload/complete
@@ -21,8 +21,8 @@ const TABLE = process.env.SCENES_TABLE_NAME;
  *     "parts":    [{ "partNumber": 1, "eTag": "\"abc123\"" }, ...]
  *   }
  *
- * Success response (200):
- *   { "sceneId": "...", "status": "PROCESSING", "location": "https://..." }
+ * Success response (202):
+ *   { "sceneId": "...", "status": "UPLOADED", "location": "https://..." }
  */
 exports.handler = async (event) => {
   const claims = event.requestContext?.authorizer?.jwt?.claims;
@@ -45,12 +45,10 @@ exports.handler = async (event) => {
     return response(400, { error: "parts must be a non-empty array of { partNumber, eTag }" });
   }
 
-  // Verify key ownership before assembling
-  if (!key.startsWith(`uploads/${userId}/`)) {
+  if (!key.startsWith(`users/${userId}/`)) {
     return response(403, { error: "Forbidden: key does not belong to this user" });
   }
 
-  // Assemble all parts into the final S3 object
   const { Location } = await s3.send(
     new CompleteMultipartUploadCommand({
       Bucket: BUCKET,
@@ -65,25 +63,25 @@ exports.handler = async (event) => {
     })
   );
 
-  // Transition DynamoDB record from PENDING_UPLOAD → PROCESSING.
-  // The ConditionExpression guards against double-completing an upload.
   const now = new Date().toISOString();
+
   await dynamo.send(
     new UpdateItemCommand({
       TableName: TABLE,
       Key: { scene_id: { S: sceneId } },
-      UpdateExpression: "SET #s = :status, updated_at = :now, s3_location = :loc",
+      UpdateExpression:
+        "SET #s = :status, updated_at = :now, s3_location = :loc REMOVE expires_at",
       ConditionExpression: "user_id = :uid AND #s = :pending",
       ExpressionAttributeNames: { "#s": "status" },
       ExpressionAttributeValues: {
-        ":status": { S: "PROCESSING" },
-        ":now": { S: now },
-        ":loc": { S: Location ?? key },
-        ":uid": { S: userId },
+        ":status":  { S: "UPLOADED" },
+        ":now":     { S: now },
+        ":loc":     { S: Location ?? key },
+        ":uid":     { S: userId },
         ":pending": { S: "PENDING_UPLOAD" },
       },
     })
   );
 
-  return response(200, { sceneId, status: "PROCESSING", location: Location });
+  return response(202, { sceneId, status: "UPLOADED", location: Location });
 };

@@ -43,8 +43,8 @@ exports.handler = async (event) => {
     return response(400, { error: `partCount must be an integer between 1 and ${MAX_PARTS}` });
   }
 
-  // Verify the key belongs to this user (key format: uploads/<userId>/...)
-  if (!key.startsWith(`uploads/${userId}/`)) {
+  // Verify the key belongs to this user (key format: users/<userId>/...)
+  if (!key.startsWith(`users/${userId}/`)) {
     return response(403, { error: "Forbidden: key does not belong to this user" });
   }
 
