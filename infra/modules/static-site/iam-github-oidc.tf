@@ -670,6 +670,24 @@ data "aws_iam_policy_document" "github_deploy_cdn_policy" {
     resources = ["*"]
   }
 
+  # Function names are assigned at apply time; AWS does not support
+  # resource-level ARN scoping for CreateFunction.
+  statement {
+    sid    = "CloudFrontFunctionManage"
+    effect = "Allow"
+    actions = [
+      "cloudfront:CreateFunction",
+      "cloudfront:UpdateFunction",
+      "cloudfront:DeleteFunction",
+      "cloudfront:DescribeFunction",
+      "cloudfront:GetFunction",
+      "cloudfront:PublishFunction",
+      "cloudfront:ListFunctions",
+      "cloudfront:TestFunction",
+    ]
+    resources = ["*"]
+  }
+
   statement {
     sid    = "CloudFrontDistributionManage"
     effect = "Allow"
