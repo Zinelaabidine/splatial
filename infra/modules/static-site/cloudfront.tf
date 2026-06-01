@@ -32,6 +32,8 @@ resource "aws_cloudfront_function" "nextjs_url_rewrite" {
       return request;
     }
   EOF
+
+  depends_on = [time_sleep.cdn_iam_propagation]
 }
 
 resource "aws_cloudfront_distribution" "site" {

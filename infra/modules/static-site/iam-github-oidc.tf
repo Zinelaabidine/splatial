@@ -670,8 +670,15 @@ data "aws_iam_policy_document" "github_deploy_cdn_policy" {
     resources = ["*"]
   }
 
-  # Function names are assigned at apply time; AWS does not support
-  # resource-level ARN scoping for CreateFunction.
+  # Function names are assigned at apply time; scope writes to this project's
+  # functions while ListFunctions remains account-global.
+  statement {
+    sid       = "CloudFrontFunctionList"
+    effect    = "Allow"
+    actions   = ["cloudfront:ListFunctions"]
+    resources = ["*"]
+  }
+
   statement {
     sid    = "CloudFrontFunctionManage"
     effect = "Allow"
@@ -682,10 +689,11 @@ data "aws_iam_policy_document" "github_deploy_cdn_policy" {
       "cloudfront:DescribeFunction",
       "cloudfront:GetFunction",
       "cloudfront:PublishFunction",
-      "cloudfront:ListFunctions",
       "cloudfront:TestFunction",
     ]
-    resources = ["*"]
+    resources = [
+      "arn:aws:cloudfront::886601940523:function/${local.name_prefix}-*",
+    ]
   }
 
   statement {
@@ -836,4 +844,16 @@ resource "aws_iam_policy" "github_deploy_cdn_policy" {
 resource "aws_iam_role_policy_attachment" "github_deploy_cdn" {
   role       = data.aws_iam_role.github_oidc_deploy_role.name
   policy_arn = aws_iam_policy.github_deploy_cdn_policy.arn
+}
+
+# Managed CDN policy updates must propagate before CloudFront Function APIs
+# are called in the same apply (otherwise CreateFunction returns AccessDenied).
+resource "time_sleep" "cdn_iam_propagation" {
+  create_duration = "15s"
+
+  triggers = {
+    cdn_policy_sha = sha256(aws_iam_policy.github_deploy_cdn_policy.policy)
+  }
+
+  depends_on = [aws_iam_role_policy_attachment.github_deploy_cdn]
 }
