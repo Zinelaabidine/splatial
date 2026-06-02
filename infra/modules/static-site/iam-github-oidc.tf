@@ -615,8 +615,11 @@ data "aws_iam_policy_document" "github_deploy_compute_policy" {
     sid    = "IAMManagedPoliciesWrite"
     effect = "Allow"
     actions = [
+      "iam:CreatePolicy",
+      "iam:DeletePolicy",
       "iam:CreatePolicyVersion",
       "iam:DeletePolicyVersion",
+      "iam:SetDefaultPolicyVersion",
     ]
     resources = [
       "arn:aws:iam::886601940523:policy/${local.name_prefix}-github-deploy-compute-policy",
@@ -668,6 +671,41 @@ data "aws_iam_policy_document" "github_deploy_cdn_policy" {
       "cloudfront:ListOriginAccessControls",
     ]
     resources = ["*"]
+  }
+
+  # Function names are assigned at apply time; ListFunctions is account-global.
+  statement {
+    sid       = "CloudFrontFunctionList"
+    effect    = "Allow"
+    actions   = ["cloudfront:ListFunctions"]
+    resources = ["*"]
+  }
+
+  # CreateFunction is evaluated before the function exists; AWS does not honor
+  # name-prefix resource constraints for this action (returns AccessDenied).
+  statement {
+    sid    = "CloudFrontFunctionCreate"
+    effect = "Allow"
+    actions = [
+      "cloudfront:CreateFunction",
+      "cloudfront:PublishFunction",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "CloudFrontFunctionManage"
+    effect = "Allow"
+    actions = [
+      "cloudfront:UpdateFunction",
+      "cloudfront:DeleteFunction",
+      "cloudfront:DescribeFunction",
+      "cloudfront:GetFunction",
+      "cloudfront:TestFunction",
+    ]
+    resources = [
+      "arn:aws:cloudfront::886601940523:function/${local.name_prefix}-*",
+    ]
   }
 
   statement {
@@ -818,4 +856,19 @@ resource "aws_iam_policy" "github_deploy_cdn_policy" {
 resource "aws_iam_role_policy_attachment" "github_deploy_cdn" {
   role       = data.aws_iam_role.github_oidc_deploy_role.name
   policy_arn = aws_iam_policy.github_deploy_cdn_policy.arn
+}
+
+# Managed CDN policy updates must propagate before CloudFront Function APIs
+# are called in the same apply (otherwise CreateFunction returns AccessDenied).
+resource "time_sleep" "cdn_iam_propagation" {
+  create_duration = "45s"
+
+  triggers = {
+    cdn_policy_sha = sha256(aws_iam_policy.github_deploy_cdn_policy.policy)
+  }
+
+  depends_on = [
+    aws_iam_policy.github_deploy_cdn_policy,
+    aws_iam_role_policy_attachment.github_deploy_cdn,
+  ]
 }
