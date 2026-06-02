@@ -1,8 +1,9 @@
 "use strict";
 
-const init        = require("./handlers/init");
-const presign     = require("./handlers/presign");
-const complete    = require("./handlers/complete");
+const init              = require("./handlers/init");
+const presign           = require("./handlers/presign");
+const complete          = require("./handlers/complete");
+const uploadFromGdrive  = require("./handlers/upload-from-gdrive");
 const sceneStatus = require("./handlers/scene-status");
 const sceneDelete = require("./handlers/scene-delete");
 const sceneCreate = require("./handlers/scene-create");
@@ -25,6 +26,8 @@ exports.handler = async (event) => {
         return await presign.handler(event);
       case "POST /upload/complete":
         return await complete.handler(event);
+      case "POST /upload/from-gdrive":
+        return await uploadFromGdrive.handler(event);
 
       // ── Job management ───────────────────────────────────────────────────
       case "POST /jobs/submit":

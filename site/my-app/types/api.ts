@@ -179,6 +179,22 @@ export interface ViewUrlResponse {
 }
 
 // ---------------------------------------------------------------------------
+// Google Drive import
+// ---------------------------------------------------------------------------
+export interface GdriveImportRequest {
+  /** Public Google Drive share link for a ZIP file. */
+  gdrive_url: string;
+  /** Optional display name for the scene. Defaults to the Drive file ID. */
+  name?: string;
+}
+
+export interface GdriveImportResponse {
+  sceneId: string;
+  /** Always "PENDING_UPLOAD" — poll GET /scenes/{sceneId} for progress. */
+  status: "PENDING_UPLOAD";
+}
+
+// ---------------------------------------------------------------------------
 // Scene listing (used by RightSidebar "Recent outputs")
 // ---------------------------------------------------------------------------
 export interface SceneSummary {

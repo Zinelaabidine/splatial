@@ -241,6 +241,16 @@ resource "aws_apigatewayv2_route" "upload_complete" {
   target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
 }
 
+resource "aws_apigatewayv2_route" "upload_from_gdrive" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "POST /upload/from-gdrive"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
 resource "aws_apigatewayv2_route" "scene_status" {
   api_id    = aws_apigatewayv2_api.http_api.id
   route_key = "GET /scenes/{sceneId}"
