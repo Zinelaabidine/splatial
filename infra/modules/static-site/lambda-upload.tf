@@ -220,10 +220,10 @@ resource "aws_lambda_function" "gdrive_import_lambda" {
   function_name = "${var.name}-gdrive-import-lambda"
   role          = aws_iam_role.gdrive_import_lambda_exec.arn
   # Entry point is handlers/gdrive-import.js inside the shared upload zip.
-  handler       = "handlers/gdrive-import.handler"
-  runtime       = "nodejs20.x"
-  timeout       = 900  # 15 minutes — covers downloading up to 500 MB
-  memory_size   = 512  # headroom for the streaming multipart upload buffers
+  handler     = "handlers/gdrive-import.handler"
+  runtime     = "nodejs20.x"
+  timeout     = 900 # 15 minutes — covers downloading up to 500 MB
+  memory_size = 512 # headroom for the streaming multipart upload buffers
 
   filename         = data.archive_file.upload_zip.output_path
   source_code_hash = data.archive_file.upload_zip.output_base64sha256
