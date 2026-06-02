@@ -126,6 +126,10 @@ resource "aws_lambda_function" "upload_lambda" {
       NODE_ENV                    = "production"
     }
   }
+
+  # Exec role already existing in state doesn't satisfy the IAM propagation
+  # gate — depend directly so lambda:CreateFunction is always available.
+  depends_on = [time_sleep.iam_propagation]
 }
 
 resource "aws_lambda_permission" "apigw_upload_lambda" {
@@ -235,5 +239,9 @@ resource "aws_lambda_function" "gdrive_import_lambda" {
       NODE_ENV               = "production"
     }
   }
+
+  # Exec role already existing in state doesn't satisfy the IAM propagation
+  # gate — depend directly so lambda:CreateFunction is always available.
+  depends_on = [time_sleep.iam_propagation]
 }
 
