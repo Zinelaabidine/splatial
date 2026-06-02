@@ -455,8 +455,18 @@ resource "aws_iam_role_policy" "github_deploy_policy" {
 # AWS API calls from the same session will see the updated permissions. Any
 # resource whose creation permission was added to github_deploy_policy must
 # gate on this sleep so it is not attempted before IAM has propagated.
+#
+# The `triggers` map causes this resource to be replaced (destroy + recreate,
+# sleeping 15 s on create) whenever the policy document changes — not only on
+# first creation. Without triggers, the sleep is a no-op on subsequent applies
+# and a race condition occurs between the PutRolePolicy API call returning and
+# IAM finishing propagation.
 resource "time_sleep" "iam_propagation" {
   create_duration = "15s"
+
+  triggers = {
+    policy_hash = sha256(data.aws_iam_policy_document.github_deploy_policy.json)
+  }
 
   depends_on = [aws_iam_role_policy.github_deploy_policy]
 }
