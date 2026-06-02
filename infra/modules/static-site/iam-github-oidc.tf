@@ -355,6 +355,8 @@ data "aws_iam_policy_document" "github_deploy_policy" {
       aws_lambda_function.myfunc.arn,
       # Constructed ARN for the upload Lambda (does not exist yet on first apply).
       "arn:aws:lambda:${var.aws_region}:886601940523:function:${var.name}-upload-lambda",
+      # Constructed ARN for the Google Drive import Lambda.
+      "arn:aws:lambda:${var.aws_region}:886601940523:function:${var.name}-gdrive-import-lambda",
     ]
   }
 
@@ -409,6 +411,8 @@ data "aws_iam_policy_document" "github_deploy_policy" {
       aws_iam_role.lambda_exec.arn,
       # Constructed ARN for the upload Lambda execution role (does not exist yet).
       "arn:aws:iam::886601940523:role/${var.name}-upload-lambda-exec-role",
+      # Constructed ARN for the Google Drive import Lambda execution role.
+      "arn:aws:iam::886601940523:role/${var.name}-gdrive-import-lambda-exec-role",
       # Constructed ARN for the GPU worker instance role (does not exist yet).
       "arn:aws:iam::886601940523:role/${local.name_prefix}-splat-worker-instance-role",
     ]
@@ -426,6 +430,8 @@ data "aws_iam_policy_document" "github_deploy_policy" {
       aws_iam_role.lambda_exec.arn,
       # Constructed ARN for the upload Lambda execution role (does not exist yet).
       "arn:aws:iam::886601940523:role/${var.name}-upload-lambda-exec-role",
+      # Constructed ARN for the Google Drive import Lambda execution role.
+      "arn:aws:iam::886601940523:role/${var.name}-gdrive-import-lambda-exec-role",
     ]
     condition {
       test     = "StringEquals"
