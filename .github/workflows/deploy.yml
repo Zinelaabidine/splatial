@@ -5,6 +5,10 @@ on:
       - dev
       - staging
       - main
+    paths-ignore:
+      - "README.md"
+      - "**/*.md"
+      - "docs/**"
 permissions:
   contents: read
   id-token: write
