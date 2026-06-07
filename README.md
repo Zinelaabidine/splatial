@@ -2,237 +2,320 @@
 
 # ✦ Splatial
 
-### From photos to photorealistic 3D — in minutes, in your browser.
+**Cloud-native 3D Gaussian Splatting platform — ingest, train, and serve photorealistic scenes at scale.**
 
-A high-performance, cloud-native **3D Gaussian Splatting** pipeline.  
-Upload a photo or video collection, train a radiance field on GPU-backed spot workers,  
-and render the result in real-time directly inside a web browser.
+[![Deploy](https://github.com/zinelaabidinenadir/splatial/actions/workflows/deploy.yml/badge.svg)](https://github.com/zinelaabidinenadir/splatial/actions/workflows/deploy.yml)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](#-license)
+[![IaC](https://img.shields.io/badge/IaC-Terraform-7B42BC?logo=terraform&logoColor=white)](https://www.terraform.io/)
+[![AWS](https://img.shields.io/badge/Cloud-AWS-FF9900?logo=amazonaws&logoColor=white)](https://aws.amazon.com/)
+[![CI/CD](https://img.shields.io/badge/CI%2FCD-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)](https://github.com/features/actions)
+[![Frontend](https://img.shields.io/badge/Frontend-Next.js%2016-000000?logo=next.js&logoColor=white)](https://nextjs.org/)
 
-<br/>
-
-![Deploy](https://github.com/zinelaabidinenadir/splatial/actions/workflows/deploy.yml/badge.svg)
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![IaC](https://img.shields.io/badge/IaC-Terraform-7B42BC?logo=terraform)
-![Runtime](https://img.shields.io/badge/runtime-AWS%20Serverless-FF9900?logo=amazonaws)
-![Frontend](https://img.shields.io/badge/frontend-Next.js%2024-black?logo=next.js)
+*Asynchronous media pipeline · Infrastructure as Code · Spot-first GPU compute · Zero-standing credentials*
 
 </div>
 
-<div align="center">
-  <img src="./docs/images/pipeline.png" alt="Splatial Pipeline — From photos to photorealistic 3D in your browser" width="900"/>
-</div>
+---
+
+## 📋 Executive Overview
+
+**Splatial** is a production-oriented, cloud-native platform for processing, storing, and serving **3D Gaussian Splats** — a next-generation radiance-field format for real-time, photorealistic 3D rendering in the browser.
+
+The system is built around three architectural commitments that define every design decision:
+
+| Principle | What it means in practice |
+|---|---|
+| **Automation first** | The full AWS stack — VPC, S3, CloudFront, API Gateway, Lambda, DynamoDB, SQS, Cognito, EC2 — is declared in Terraform and deployed through GitHub Actions with OIDC authentication. No manual console provisioning. |
+| **Asynchronous by design** | The API tier never blocks on GPU training. Uploads complete in seconds; heavy compute runs on decoupled EC2 Spot workers fed by SQS. Lambda orchestrates metadata and state only. |
+| **Cost efficiency at scale** | Scale-to-zero GPU workers, S3 Gateway Endpoints to eliminate NAT egress, Spot instances with S3 checkpointing and SQS re-queuing on interruption, and direct browser-to-S3 multipart uploads that bypass Lambda payload limits entirely. |
+
+Splatial demonstrates end-to-end **Cloud and DevOps engineering**: multi-environment IaC, least-privilege IAM, event-driven orchestration, CI/CD pipelines, and operational patterns for long-running, interruptible GPU workloads.
+
+> For the full as-built reference — network topology, IAM boundaries, DynamoDB schema, worker lifecycle, and remediation plan — see [`docs/ARCHITECTURE_REFERENCE.md`](./docs/ARCHITECTURE_REFERENCE.md).
 
 ---
 
-## ✦ Core Features
+## 🏗️ Architecture Deep-Dive
 
-- **⚡ CUDA-Accelerated Training on Spot Instances** — EC2 G4dn / G5 GPU workers train your scenes in minutes at a fraction of on-demand cost. Spot interruptions are handled gracefully via S3 checkpointing and SQS re-queuing — no work is ever lost.
+Splatial follows a **decoupled, event-driven pipeline**. The synchronous path (auth → presign → upload) completes in milliseconds; the asynchronous path (train → checkpoint → distribute) runs independently on GPU workers.
 
-- **🌐 Real-Time Browser Rendering** — Completed splats are delivered over CloudFront and rendered in real-time in the web viewer. No plugin, no download, no compromise.
+### End-to-End Flow
 
-- **🔐 Secure, Quota-Aware API** — Every request is JWT-validated through a native AWS Cognito Authorizer on API Gateway. Per-user scene quotas are enforced at the Lambda layer via DynamoDB, supporting Free and Pro tiers out of the box.
+```mermaid
+flowchart LR
+    subgraph Client["Browser (Next.js)"]
+        A[Upload UI]
+        V[Splat Viewer]
+    end
 
-- **☁️ Fully Serverless, Multi-Environment Infrastructure** — The entire cloud stack — VPC, S3, CloudFront, API Gateway, Lambda, DynamoDB, SQS, ACM, Route 53 — is defined as Terraform modules with `dev`, `staging`, and `prod` workspaces. One `git push` deploys everything.
+    subgraph Edge["Edge & Auth"]
+        CF[CloudFront]
+        COG[Cognito JWT]
+    end
 
-- **🔄 Zero-Touch CI/CD Pipeline** — GitHub Actions runs lint, Terraform format checks, `terraform apply`, Next.js builds, S3 sync, and CloudFront invalidation automatically on every push to a tracked branch.
+    subgraph API["Serverless API Tier"]
+        AGW[API Gateway HTTP API]
+        L[Lambda Upload Handler]
+    end
+
+    subgraph Data["Data Plane"]
+        S3R[(S3 Raw Scenes)]
+        DDB[(DynamoDB Scenes)]
+        SQS[[SQS Processing Queue]]
+    end
+
+    subgraph Compute["GPU Compute (Spot)"]
+        ASG[EC2 ASG G4dn Spot]
+        W[worker.py]
+        S3O[(S3 Output / .splat)]
+    end
+
+    A -->|JWT| COG
+    A -->|POST /upload/*| AGW --> L
+    L -->|presigned URLs| A
+    A -->|multipart PUT| S3R
+    L -->|metadata| DDB
+    L -->|SendMessage| SQS
+    SQS -->|poll| W
+    ASG --> W
+    W -->|download| S3R
+    W -->|upload artifacts| S3O
+    W -->|status update| DDB
+    V -->|GET .splat| CF --> S3O
+```
+
+### Stage-by-Stage Breakdown
+
+#### 1 · Ingestion — Direct-to-S3 Multipart Upload
+
+Authenticated users upload large capture assets (video, image sets, ZIP datasets) from the browser. Lambda never receives binary data:
+
+1. `POST /upload/init` — creates a multipart upload in S3 and a `PENDING_UPLOAD` record in DynamoDB.
+2. `POST /upload/presign` — returns short-lived presigned URLs for each 5 MiB part.
+3. Browser PUTs parts directly to S3 in parallel (6 concurrent streams).
+4. `POST /upload/complete` — assembles the multipart upload and transitions the scene to a processing state.
+
+All S3 keys are namespaced: `uploads/<userId>/<sceneId>/<filename>`.
+
+#### 2 · Orchestration — Lambda + DynamoDB + SQS
+
+After upload completion, Lambda dispatches a job message to SQS containing the scene ID, S3 key, and user context. DynamoDB tracks the full job lifecycle:
+
+`UPLOADING → VALIDATING → QUEUED → INITIALIZING → PROCESSING_SFM → PROCESSING_TRAINING → COMPLETED | FAILED | INTERRUPTED | CANCELED`
+
+The API returns `202`-style responses immediately; clients poll status via `GET /scenes/{sceneId}` or list scenes via `GET /api/v1/scenes`.
+
+#### 3 · Processing — EC2 Spot GPU Workers
+
+A custom AMI (`worker.py` + dependencies) boots on **G4dn Spot instances** inside private subnets. Each worker:
+
+- Polls SQS for a single job (one message per instance).
+- Downloads raw assets from S3, runs Structure-from-Motion (COLMAP) and 3D Gaussian Splatting training.
+- Checkpoints progress to S3 on **Spot interruption** (2-minute warning) and re-queues the job.
+- Uploads `.splat` / `.spz` output and updates DynamoDB to `COMPLETED`.
+- Terminates itself and decrements ASG desired capacity (scale-to-zero at rest).
+
+#### 4 · Distribution — CloudFront + In-Browser Rendering
+
+Processed splats are served over CloudFront with Origin Access Control (OAC) and environment-scoped CORS. The Next.js viewer renders splats in real time via WebGL/WebGPU — no plugin or native install required.
+
+### Security & IAM Model
+
+- **Cognito JWT authorizer** on API Gateway validates every request before Lambda invocation.
+- **GitHub OIDC** deploy role — no long-lived AWS access keys in CI.
+- **IMDSv2 required** on worker instances; outbound-only security groups; management via SSM.
+- **Least-privilege IAM** — discrete policy statements per service with resource-scoped ARNs.
 
 ---
 
-## ✦ Architecture at a Glance
+## 🛠️ Technology Stack
 
-> For the full technical breakdown — network topology, IAM design, spot-interruption recovery, scaling rules, and file format schemas — see the **[`/docs`](./docs/architecture.md)** directory.
+### ☁️ Cloud & Infrastructure as Code
+
+| Technology | Role |
+|---|---|
+| **Terraform** `>= 1.10` | Full AWS stack: modules for `dev`, `staging`, `prod` with remote S3 state + DynamoDB locking |
+| **AWS VPC** | Multi-AZ public/private subnets, NAT gateways, S3 Gateway Endpoint |
+| **Amazon S3** | Static site hosting, raw upload bucket (Transfer Acceleration), processed output |
+| **Amazon CloudFront** | CDN with OAC (sigv4), TLS 1.2+, custom error pages |
+| **API Gateway HTTP API** | RESTful routes with Cognito authorizer, custom domain + ACM |
+| **AWS Lambda** | Node.js 18 upload orchestration (CommonJS, AWS SDK v3) |
+| **Amazon DynamoDB** | Scene records, GSI for user queries, TTL, point-in-time recovery |
+| **Amazon SQS** | Processing queue + DLQ for async job dispatch |
+| **Amazon Cognito** | User pool, JWT sessions, email/SSRP auth |
+| **EC2 Spot (G4dn)** | GPU training workers with custom AMI, launch template, ASG |
+| **Route 53 + ACM** | DNS and TLS for `splatial-<env>.openspacenexus.store` |
+| **GitHub Actions** | Lint, Terraform fmt, `terraform apply`, Next.js build, S3 sync, CloudFront invalidation |
+
+### ⚙️ Backend & Processing
+
+| Technology | Role |
+|---|---|
+| **Node.js 18 (Lambda)** | Multipart upload orchestration, scene CRUD, job dispatch |
+| **Python 3 (worker.py)** | SQS consumer, S3 I/O, COLMAP + 3DGS training, Spot interruption handling |
+| **Docker** | Worker AMI bake pipeline and reproducible GPU training environments *(roadmap)* |
+| **COLMAP / 3DGS** | Structure-from-Motion pose estimation and Gaussian Splatting optimization |
+| **Amazon SSM** | Worker instance management without inbound SSH |
+
+### 🎮 Spatial / 3D
+
+| Technology | Role |
+|---|---|
+| **Next.js 16 + React 19 + TypeScript** | App Router frontend, Amplify auth, dashboard, upload UX |
+| **WebGL / WebGPU Splat Viewer** | Real-time `.splat` / `.spz` rendering in-browser (`GaussianViewer`, `@mkkellogg/gaussian-splats-3d`) |
+| **Three.js** | 3D scene graph, camera trajectories, MP4 export |
+| **Modern C++** | High-performance depth sorting, binary splat parsing, and compute kernels *(roadmap)* |
+| **Unreal Engine 5** | Scene export, cinematic workflows, and spatial content pipelines *(roadmap)* |
 
 ---
 
-## ✦ Quick Start
+## 🚀 Deployment
+
+Splatial is provisioned entirely through **Terraform**. Application code is deployed via **GitHub Actions** using branch-to-environment mapping.
 
 ### Prerequisites
 
-| Requirement | Version |
+| Tool | Version |
 |---|---|
-| [Node.js](https://nodejs.org/) | ≥ 24 |
-| [Python](https://www.python.org/) | ≥ 3.10 |
-| [CUDA Toolkit](https://developer.nvidia.com/cuda-toolkit) | ≥ 11.8 |
-| [Terraform](https://www.terraform.io/) | ≥ 1.9 |
-| AWS CLI (configured) | ≥ 2.x |
+| [Terraform](https://www.terraform.io/) | `>= 1.10` |
+| [Node.js](https://nodejs.org/) | `>= 20` |
+| [AWS CLI](https://aws.amazon.com/cli/) | `>= 2.x` |
+| AWS account with appropriate IAM permissions | — |
 
----
-
-### 1 · Clone the Repository
-
-```bash
-git clone https://github.com/your-org/splatial.git
-cd splatial
-```
-
----
-
-### 2 · Configure Infrastructure Variables
-
-```bash
-# Copy the example vars file for your target environment
-cp infra/terraform.tfvars.example infra/terraform.tfvars
-
-# Open and fill in your domain, AWS account ID, and region
-nano infra/terraform.tfvars
-```
-
----
-
-### 3 · Bootstrap the Terraform State Backend
-
-> This only needs to be run once per AWS account to create the S3 state bucket and DynamoDB lock table.
+### One-Time Bootstrap (Remote State)
 
 ```bash
 cd infra/bootstrap
 terraform init
-terraform apply
+terraform apply   # Creates S3 state bucket + DynamoDB lock table
 ```
 
----
-
-### 4 · Deploy the Cloud Infrastructure
+### Deploy an Environment
 
 ```bash
+# Configure environment variables
+cp infra/envs/dev/terraform.tfvars.example infra/envs/dev/terraform.tfvars
+# Edit terraform.tfvars with your domain, GitHub repo, and hosted zone
+
 cd infra/envs/dev
 terraform init
+terraform fmt -recursive ../../
+terraform validate
+terraform plan
 terraform apply
 ```
 
----
+Repeat for `infra/envs/staging/` and `infra/envs/prod/` as environments mature.
 
-### 5 · Set Up the Frontend
+### Local Frontend Development
 
 ```bash
 cd site/my-app
-
-# Install dependencies
 npm install
-
-# Copy the environment template and fill in the Terraform outputs
-cp .env.local.example .env.local
-nano .env.local
+cp .env.local.example .env.local   # Populate from Terraform outputs
+npm run dev                        # http://localhost:3000
 ```
 
-Your `.env.local` should look like:
+### CI/CD Pipeline
 
-```env
-NEXT_PUBLIC_AWS_REGION=us-east-1
-NEXT_PUBLIC_USER_POOL_ID=<cognito_user_pool_id>
-NEXT_PUBLIC_CLIENT_ID=<cognito_client_id>
-NEXT_PUBLIC_API_GATEWAY_URL=<api_endpoint>
-NEXT_PUBLIC_RAW_SCENES_BUCKET=<raw_scenes_bucket_name>
-NEXT_PUBLIC_SCENES_TABLE=<scenes_table_name>
-```
+Every push to a tracked branch triggers the full pipeline:
 
----
-
-### 6 · Run the Local Viewer
-
-```bash
-# Start the Next.js development server
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) — sign up, upload a photo set, and watch your scene train.
-
----
-
-## ✦ Deployment (CI/CD)
-
-Splatial ships with a fully automated GitHub Actions pipeline. Every push to a tracked branch runs lint, format checks, infrastructure apply, and a production build — then syncs the static output to S3 and invalidates CloudFront.
-
-| Branch | Environment | Terraform Workspace |
+| Branch | Environment | Terraform Root |
 |---|---|---|
 | `dev` | Development | `infra/envs/dev` |
 | `staging` | Staging | `infra/envs/staging` |
 | `main` | Production | `infra/envs/prod` |
 
-Required GitHub environment secrets:
-
-```
-AWS_ACCOUNT_ID
-# IAM role ARN is resolved dynamically from branch name — no static credentials stored.
-```
+The pipeline authenticates to AWS via **GitHub OIDC** — no static credentials stored in repository secrets. Required GitHub environment configuration: `AWS_ACCOUNT_ID` (role ARN resolved dynamically from branch name).
 
 ---
 
-## ✦ Repository Structure
+## 📁 Repository Structure
 
 ```
 splatial/
-├── site/
-│   └── my-app/          # Next.js 24 frontend (React, Amplify, Cognito)
-├── infra/
-│   ├── bootstrap/       # One-time state backend provisioning
-│   ├── envs/            # Per-environment Terraform roots (dev / staging / prod)
+├── infra/                          # All Infrastructure as Code (Terraform)
+│   ├── bootstrap/                  # One-time remote state backend
+│   ├── envs/                       # Per-environment roots (dev / staging / prod)
 │   └── modules/
-│       ├── static-site/ # CloudFront, S3, Cognito, Lambda, DynamoDB, SQS, VPC
-│       └── api-gateway-domain/ # Custom domain + ACM + Route 53
-├── docs/
-│   ├── architecture.md  # Full technical deep-dive
-│   └── images/          # Architecture diagrams
-└── .github/
-    └── workflows/
-        └── deploy.yml   # CI/CD pipeline
+│       ├── static-site/            # Primary module: VPC, S3, Lambda, SQS, EC2, Cognito…
+│       │   └── src-upload/         # Lambda handler source (Node.js 18, CommonJS)
+│       └── api-gateway-domain/     # Custom API domain + ACM + Route 53
+├── site/my-app/                    # Next.js 16 frontend (TypeScript, Amplify, splat viewer)
+├── worker/                         # Python SQS GPU worker (EC2 Spot)
+├── docs/                           # Architecture reference, Postman collections
+└── .github/workflows/              # CI/CD (deploy.yml, bootstrap.yml)
 ```
 
 ---
 
-## ✦ Technical Deep Dive
+## 🗺️ Roadmap & Upcoming Features
 
-> The `/docs` directory is the authoritative reference for everything under the hood.
+> **📌 Tracking:** Each item below corresponds to an active [GitHub Issue](https://github.com/zinelaabidinenadir/splatial/issues). Issues are the source of truth for scope, acceptance criteria, and assignment.
 
-| Document | Contents |
-|---|---|
-| [`docs/architecture.md`](./docs/architecture.md) | Full pipeline blueprint, VPC design, IAM strategy, spot-interruption recovery, SQS orchestration, DynamoDB schema, scaling rules, and cost governance |
+### Infrastructure & Cloud Operations
 
-Key design decisions documented there include:
+Focused on CI/CD maturity, auto-scaling, Terraform state management, and production hardening — the core competencies for Cloud and DevOps engineering roles.
 
-- **Asynchronous decoupling** — the API never blocks on training; jobs are enqueued in SQS and processed by autoscaling GPU workers independently.
-- **Spot-first compute** — EC2 G4dn / G5 mixed-instance ASG with S3 checkpointing ensures training continues even after a spot reclaim.
-- **Zero standing credentials** — GitHub Actions authenticates to AWS via OIDC (no long-lived keys stored anywhere).
-- **S3 Gateway Endpoint** — eliminates NAT Gateway egress costs for all S3 traffic from within the VPC.
+- [ ] **Enable EC2 Spot ASG with SQS target-tracking auto-scaling** — Uncomment and validate the ASG + customized CloudWatch metric policy in `compute.tf`; scale from zero based on `ApproximateNumberOfMessagesVisible`.
+- [ ] **Convert SQS processing queue to FIFO with deduplication** — Enforce exactly-once job dispatch; update Lambda `SendMessage` parameters and worker queue resolution.
+- [ ] **Provision VPC interface endpoints** — Add SQS, DynamoDB, and SSM endpoints in private subnets to eliminate NAT dependency for worker traffic and enable SSM Session Manager debugging.
+- [ ] **Complete staging and prod environment parity** — Populate `infra/envs/staging/` and `infra/envs/prod/` with production-grade settings (`prevent_destroy`, KMS encryption, stricter CORS).
+- [ ] **Harden GitHub Actions CI/CD pipeline** — Add Terraform `validate` + plan-on-PR gates, frontend `npm run build` in CI, environment promotion workflow, and deployment smoke tests post-apply.
+- [ ] **Eliminate hardcoded AWS account IDs in Terraform** — Replace literals with `data.aws_caller_identity.current` for multi-account portability.
+- [ ] **Docker-based worker AMI bake pipeline** — Replace manual AMI builds with a reproducible Dockerfile + Packer/GitHub Actions workflow for COLMAP, CUDA, and 3DGS dependencies.
+- [ ] **CloudWatch observability stack** — Structured Lambda logs, SQS DLQ alarms, ASG scaling event dashboards, and Spot interruption rate monitoring.
+- [ ] **Terraform state migration tooling** — Document and automate workspace moves, module extraction, and `moved` block strategies for zero-downtime refactors.
+- [ ] **Remove legacy scaffold resources** — Delete unused `myfunc` Lambda, `GET /helloFromLambda` route, and committed zip artifacts from version control.
+- [ ] **Attach `AmazonSSMManagedInstanceCore` to worker role** — Enable shell-free instance debugging via SSM Session Manager.
+
+### Application & Spatial Features
+
+Focused on the media pipeline, 3D rendering experience, and spatial content workflows.
+
+- [ ] **Wire COLMAP video pipeline in worker AMI** — Replace simulation fallback for `.mp4`/`.mov` inputs with ffmpeg frame extraction + COLMAP automatic reconstruction.
+- [ ] **Migrate `scenes-list` from Scan to GSI Query** — Add `user_id-created_at-index` to DynamoDB and update handler for scalable per-user scene listing.
+- [ ] **User quota and tier system (Free / Pro)** — DynamoDB `UsersTable` with Cognito Post-Confirmation trigger; enforce per-user scene limits at the Lambda layer.
+- [ ] **Processed asset bucket + CloudFront origin** — Dedicated S3 bucket for `.splat`/`.spz` output with presigned viewer URLs and correct CORS for WebGL/WebGPU.
+- [ ] **Worker idempotency guard** — Check DynamoDB status before training to safely handle SQS duplicate delivery and visibility-timeout races.
+- [ ] **Real-time splat viewer enhancements** — Level-of-detail streaming, `.spz` decompression in a Web Worker, and trajectory playback controls.
+- [ ] **Modern C++ compute module for splat parsing** — WASM or native-addon depth sorting and binary buffer parsing to offload CPU-bound work from the main thread.
+- [ ] **Unreal Engine 5 export pipeline** — Import trained splats into UE5 for cinematic rendering, Nanite-compatible mesh generation, and spatial content authoring workflows.
+- [ ] **Google Drive import integration** — Complete the `gdrive-import` handler and frontend flow for cloud-sourced capture datasets.
+- [ ] **Job cancellation and recovery UX** — Wire `cancel-job` and `attempt-heartbeat` handlers to the dashboard with live progress and Spot interruption recovery indicators.
 
 ---
 
-## ✦ Contributing
+## 📚 Documentation
 
-Contributions are welcome. Please open an issue first to discuss what you would like to change.
+| Document | Description |
+|---|---|
+| [`docs/ARCHITECTURE_REFERENCE.md`](./docs/ARCHITECTURE_REFERENCE.md) | Definitive as-built reference: network topology, IAM, data flows, known gaps, remediation plan |
+| [`docs/architecture.md`](./docs/architecture.md) | System design narrative and cost model |
+| [`CLAUDE.md`](./CLAUDE.md) | Engineering standards and architectural contract for contributors |
+| [`docs/postman/`](./docs/postman/) | Postman collection and environment for API testing |
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome. Please open an issue before submitting significant changes.
 
 1. Fork the repository.
 2. Create a feature branch: `git checkout -b feat/your-feature`
-3. Commit your changes following [Conventional Commits](https://www.conventionalcommits.org/).
+3. Commit using [Conventional Commits](https://www.conventionalcommits.org/) (`feat`, `fix`, `refactor`, etc.).
 4. Open a pull request against `dev`.
 
 ---
 
-## ✦ License
+## 📄 License
 
-```
-MIT License
+MIT License — Copyright (c) 2026 Splatial Contributors. See repository history for full license text.
 
-Copyright (c) 2026 Splatial Contributors
+---
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+<div align="center">
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+**Built with ☁️ AWS · 🏗️ Terraform · ⚡ Spot GPU Compute · 🌐 Real-Time 3D**
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
-```
-
- 
-
- 
+</div>
