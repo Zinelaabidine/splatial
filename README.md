@@ -15,6 +15,10 @@
 
 </div>
 
+<div align="center">
+  <img src="./docs/images/pipeline.png" alt="Splatial Pipeline — From photos to photorealistic 3D in your browser" width="900"/>
+</div>
+
 ---
 
 ## 📋 Executive Overview
