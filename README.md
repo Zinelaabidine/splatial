@@ -132,7 +132,16 @@ Processed splats are served over CloudFront with Origin Access Control (OAC) and
 
 ---
 
-## 🛠️ Technology Stack
+## � AWS Well-Architected Alignment
+
+This platform is intentionally designed around the AWS Well-Architected Framework, with clear tradeoffs across cost, reliability, performance, and security:
+
+- **Cost Optimization (FinOps):** Spot-first GPU compute significantly reduces the cost of asynchronous training workloads, and S3 Gateway Endpoints help avoid unnecessary NAT Gateway egress charges.
+- **Reliability:** The decoupled SQS-based execution model ensures that interrupted Spot jobs can be retried safely without losing the original work item; state is preserved in DynamoDB and S3 checkpoints.
+- **Performance Efficiency:** Direct browser-to-S3 multipart uploads bypass API Gateway and Lambda payload constraints, allowing large datasets to flow into the platform without creating a bottleneck in the web tier.
+- **Security:** The platform uses GitHub OIDC for CI/CD authentication, enforces IMDSv2 on compute hosts, and applies least-privilege IAM so workloads run without standing credentials or broad access.
+
+## �🛠️ Technology Stack
 
 ### ☁️ Cloud & Infrastructure as Code
 
