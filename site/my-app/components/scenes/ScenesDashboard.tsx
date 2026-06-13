@@ -3,10 +3,10 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Play, Plus, Trash2, X, UploadCloud, XCircle, Eye } from "lucide-react";
 
-import Layout from "@/components/Layout";
+import Layout from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { authenticatedFetch } from "@/utils/apiClient";
+import { authenticatedFetch } from "@/api/client";
 import type {
   InitUploadResponse,
   InputType,

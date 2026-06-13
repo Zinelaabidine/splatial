@@ -76,11 +76,13 @@ splatial/
 ├── site/
 │   └── my-app/                     # <- ALL frontend lives here (Next.js / TypeScript)
 │       ├── app/                    #   App Router pages and layouts
-│       ├── components/             #   React components (shadcn/ui primitives)
-│       ├── hooks/                  #   Custom React hooks
-│       ├── lib/                    #   Pure utilities, Amplify config
+│       ├── api/                    #   HTTP client and API base URL
+│       ├── components/             #   React UI (ui/, layout/, upload/, viewer/, dashboard/)
+│       ├── hooks/                  #   Custom React hooks (upload/, viewer/)
+│       ├── lib/                    #   Auth bootstrap, cn() helper
 │       ├── types/                  #   Shared TypeScript types
-│       └── utils/                  #   API client, fetch wrappers
+│       ├── viewer/                 #   WebGL engine and trajectory math (non-React)
+│       └── fixtures/               #   Dev/mock data
 └── worker/
     ├── worker.py                   # <- Python SQS worker (runs on EC2 Spot)
     └── imds_extract.py             #   IMDSv2 metadata helper
@@ -273,14 +275,14 @@ Every handler entry point must follow this exact sequence:
 
 ### Authentication & API Calls
 
-- All authenticated API calls must go through `utils/apiClient.ts` (`authenticatedFetch`). Never call `fetch` directly with raw tokens.
-- Read the API base URL exclusively from `lib/apiBaseUrl.ts` (`getApiBaseUrl()`). Do not hardcode stage URLs.
+- All authenticated API calls must go through `api/client.ts` (`authenticatedFetch`). Never call `fetch` directly with raw tokens.
+- Read the API base URL exclusively from `api/baseUrl.ts` (`getApiBaseUrl()`). Do not hardcode stage URLs.
 - Do not store JWTs or Cognito tokens in `localStorage` or `sessionStorage`. Rely on Amplify's managed session storage.
 - Wrap Amplify-dependent components in `<AmplifyProvider>` and gate authenticated routes with `<AuthGate>`.
 
 ### Upload & Binary Data
 
-- The canonical upload implementation is `hooks/useMultipartUpload.ts`. Extend it; do not create parallel upload logic elsewhere.
+- The canonical upload implementation is `hooks/upload/useMultipartUpload.ts`. Extend it; do not create parallel upload logic elsewhere.
 - `DEFAULT_PART_SIZE = 5 * 1024 * 1024` (S3 minimum). Do not lower this value. `DEFAULT_CONCURRENCY = 6`. Do not exceed 10 without profiling.
 - Pass `AbortSignal` from a `useRef<AbortController>` into each `fetch` call inside the upload loop for cancellation support.
 - Use `DataView` for cross-endian safety when parsing `.splat` binary buffers. Never use `JSON.parse` or `TextDecoder` on raw binary.
@@ -290,7 +292,7 @@ Every handler entry point must follow this exact sequence:
 
 - Use `shadcn/ui` primitives (`components/ui/`) as the base for all new UI elements. Do not re-implement buttons, progress bars, or dialogs from scratch.
 - Use Tailwind utility classes exclusively — no raw inline styles. Use `cn()` from `lib/utils.ts` for conditional classes.
-- `Dropzone`, `ScenesDashboard`, `RightSidebar` are established compositions — extend them rather than duplicating layout logic.
+- `components/upload/Dropzone`, `components/scenes/ScenesDashboard`, `components/upload/RightSidebar` are established compositions — extend them rather than duplicating layout logic.
 - Lazy-load heavy 3D rendering components with `next/dynamic` and `{ ssr: false }`. WebGL/WebGPU contexts must not run during SSR.
 
 ---

@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
-import { interpolateViewMatrix } from "./trajectoryMath";
-import { readViewMatrix, setViewMatrix, clearViewMatrix } from "./viewer";
+import { interpolateViewMatrix } from "@/viewer/trajectoryMath";
+import { readViewMatrix, setViewMatrix, clearViewMatrix } from "@/viewer/engine/viewer";
 
 export type TrajectoryStatus = "idle" | "recording" | "playing";
 

@@ -3,8 +3,8 @@
 import { fetchAuthSession } from "aws-amplify/auth";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { getApiBaseUrl } from "@/lib/apiBaseUrl";
-import { authenticatedFetch } from "@/utils/apiClient";
+import { getApiBaseUrl } from "@/api/baseUrl";
+import { authenticatedFetch } from "@/api/client";
 import type {
   CompleteResponse,
   CompletedPart,

@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 
-const GaussianViewer = dynamic(() => import("@/components/GaussianViewer"), {
+const GaussianViewer = dynamic(() => import("@/components/viewer/GaussianViewer"), {
   ssr: false,
   loading: () => (
     <div className="flex h-full items-center justify-center bg-black">

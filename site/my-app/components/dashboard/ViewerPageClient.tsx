@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import TopNavBar from "@/components/dashboard/TopNavBar";
 
-const ViewerShell = dynamic(() => import("@/components/ViewerShell"), {
+const ViewerShell = dynamic(() => import("@/components/viewer/ViewerShell"), {
   ssr: false,
   loading: () => (
     <div className="flex h-full items-center justify-center bg-gray-950">

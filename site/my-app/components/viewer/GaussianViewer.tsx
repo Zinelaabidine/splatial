@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
-import { authenticatedFetch } from "@/utils/apiClient";
+import { authenticatedFetch } from "@/api/client";
 import type { ViewUrlResponse } from "@/types/api";
 
 // LegacySplatViewer references `window` / WebGL — never run on the server.
 const LegacySplatViewer = dynamic(
-  () => import("@/components/splatviewer/LegacySplatViewer"),
+  () => import("@/components/viewer/LegacySplatViewer"),
   { ssr: false }
 );
 

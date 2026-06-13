@@ -9,7 +9,7 @@
 - Use the **App Router** (`app/` directory) exclusively. Do not use `pages/`.
 - Mark a component `"use client"` only when it uses browser APIs, event handlers, refs, or React hooks. Server Components are the default.
 - Co-locate page-level data fetching in Server Components; push interactivity down to leaf Client Components.
-- Route segments live under `app/`. Shared UI goes in `components/`. Business-logic hooks go in `hooks/`. Pure utilities go in `lib/` or `utils/`.
+- Route segments live under `app/`. Shared UI goes in `components/` (by domain: `ui/`, `layout/`, `upload/`, `viewer/`, `dashboard/`). Business-logic hooks go in `hooks/`. API client code goes in `api/`. Pure helpers and auth bootstrap go in `lib/`.
 
 ---
 
@@ -25,9 +25,9 @@
 
 ## Authentication & API Calls
 
-- All authenticated API calls must go through `utils/apiClient.ts` (`authenticatedFetch`). Never call `fetch` directly with raw tokens.
+- All authenticated API calls must go through `api/client.ts` (`authenticatedFetch`). Never call `fetch` directly with raw tokens.
 - Do not store JWTs, Cognito tokens, or session data in `localStorage` or `sessionStorage`. Rely on Amplify's managed session storage.
-- Read the API base URL exclusively from `lib/apiBaseUrl.ts` (`getApiBaseUrl()`). Do not hardcode stage URLs or environment-specific strings in components.
+- Read the API base URL exclusively from `api/baseUrl.ts` (`getApiBaseUrl()`). Do not hardcode stage URLs or environment-specific strings in components.
 - Access the current user's identity via `fetchAuthSession()` from `aws-amplify/auth`. Extract `userId` from the JWT `sub` claim only — do not depend on Cognito username.
 - Wrap Amplify-dependent components in `<AmplifyProvider>` and gate authenticated routes with `<AuthGate>`.
 
@@ -36,7 +36,7 @@
 ## Upload & Binary Data (Browser)
 
 ### Multipart Upload Hook
-- The canonical upload implementation is `hooks/useMultipartUpload.ts`. Extend it; do not create parallel upload logic elsewhere.
+- The canonical upload implementation is `hooks/upload/useMultipartUpload.ts`. Extend it; do not create parallel upload logic elsewhere.
 - Part size is `DEFAULT_PART_SIZE = 5 * 1024 * 1024` (S3 minimum). Do not lower this value.
 - Concurrency is `DEFAULT_CONCURRENCY = 6` parallel PUTs per file. Do not exceed 10 without profiling network saturation.
 - Pass `AbortSignal` from a `useRef<AbortController>` into each `fetch` call inside the upload loop to support cancellation.
@@ -64,7 +64,7 @@
 - Use `shadcn/ui` primitives (`components/ui/`) as the base for all new UI elements. Do not re-implement buttons, progress bars, or dialogs from scratch.
 - Do not pass raw inline styles. Use Tailwind utility classes. Keep class strings readable with `cn()` from `lib/utils.ts` for conditional classes.
 - Avoid prop drilling beyond two levels. Use a Context or lift state to the nearest common ancestor.
-- `Dropzone`, `ScenesDashboard`, `RightSidebar` are established compositions — extend them rather than duplicating layout logic.
+- `components/upload/Dropzone`, `components/scenes/ScenesDashboard`, `components/upload/RightSidebar` are established compositions — extend them rather than duplicating layout logic.
 
 ---
 

@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback } from "react";
-import { useCameraTrajectory } from "./useCameraTrajectory";
-import { useMp4Export } from "./useMp4Export";
+import { useCameraTrajectory } from "@/hooks/viewer/useCameraTrajectory";
+import { useMp4Export } from "@/hooks/viewer/useMp4Export";
 
 /**
  * Floating overlay that provides camera trajectory recording / playback and

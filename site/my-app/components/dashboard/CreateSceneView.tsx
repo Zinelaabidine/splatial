@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 
 import TopNavBar from "@/components/dashboard/TopNavBar";
-import { authenticatedFetch } from "@/utils/apiClient";
+import { authenticatedFetch } from "@/api/client";
 import type {
   GdriveImportRequest,
   GdriveImportResponse,

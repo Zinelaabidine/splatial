@@ -1,5 +1,5 @@
 import { fetchAuthSession } from 'aws-amplify/auth';
-import { getApiBaseUrl } from '@/lib/apiBaseUrl';
+import { getApiBaseUrl } from '@/api/baseUrl';
 
 /**
  * A secure fetch wrapper that automatically injects the Cognito JWT token 

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { ChevronDown, RefreshCw } from "lucide-react";
 
 import SceneCard from "@/components/dashboard/SceneCard";
-import { authenticatedFetch } from "@/utils/apiClient";
+import { authenticatedFetch } from "@/api/client";
 import type { MockScene, SortOption } from "@/types/dashboard";
 import type { ListScenesV1Response, Scene } from "@/types/api";
 

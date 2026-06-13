@@ -1,6 +1,6 @@
 'use client';
 
-import { configureAmplify } from '@/lib/amplifyClient';
+import { configureAmplify } from '@/lib/auth/amplifyClient';
 import React from 'react';
 
 interface AmplifyProviderProps {

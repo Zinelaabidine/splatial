@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
-import { startViewer, stopViewer } from "./viewer";
-import TrajectoryControls from "./TrajectoryControls";
+import { startViewer, stopViewer } from "@/viewer/engine/viewer";
+import TrajectoryControls from "@/components/viewer/TrajectoryControls";
 
 interface LegacySplatViewerProps {
   /** Absolute, pre-signed URL pointing to a .splat or .ply file. */
