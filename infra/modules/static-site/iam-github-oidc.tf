@@ -718,6 +718,9 @@ data "aws_iam_policy_document" "github_deploy_cdn_policy" {
       "cloudfront:DescribeFunction",
       "cloudfront:GetFunction",
       "cloudfront:TestFunction",
+      "cloudfront:TagResource",
+      "cloudfront:UntagResource",
+      "cloudfront:ListTagsForResource",
     ]
     resources = [
       "arn:aws:cloudfront::886601940523:function/${local.name_prefix}-*",
