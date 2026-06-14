@@ -1,12 +1,12 @@
 "use client";
 
 import AuthGate from "@/components/layout/AuthGate";
-import CreateSceneView from "@/components/dashboard/CreateSceneView";
+import CreateSceneContainer from "@/components/features/create/CreateSceneContainer";
 
 export default function CreatePage() {
   return (
     <AuthGate>
-      <CreateSceneView />
+      <CreateSceneContainer />
     </AuthGate>
   );
 }

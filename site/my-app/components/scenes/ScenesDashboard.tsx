@@ -6,18 +6,16 @@ import { Play, Plus, Trash2, X, UploadCloud, XCircle, Eye } from "lucide-react";
 import Layout from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { authenticatedFetch } from "@/api/client";
+import { cancelJob, submitJob } from "@/server/services/jobsService";
+import { deleteScene, listScenes } from "@/server/services/scenesService";
+import { multipartUpload } from "@/server/services/uploadService";
 import type {
-  InitUploadResponse,
   InputType,
-  ListScenesV1Response,
-  PresignResponse,
   Scene,
 } from "@/types/api";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const PART_SIZE   = 5 * 1024 * 1024; // 5 MiB — S3 multipart minimum
 const CONCURRENCY = 4;
 
 const ACCEPT_BY_TYPE: Record<InputType, string> = {
@@ -107,7 +105,7 @@ export default function ScenesDashboard() {
     try {
       setLoading(true);
       setFetchError(null);
-      const data: ListScenesV1Response = await authenticatedFetch("/api/v1/scenes");
+      const data = await listScenes();
       setScenes(data.scenes ?? []);
     } catch (err) {
       console.error("[scenes] fetch failed", err);
@@ -149,60 +147,16 @@ export default function ScenesDashboard() {
       setCreating(true);
       setCreateError(null);
 
-      // ── Step A: init ────────────────────────────────────────────────────
-      setUploadStage("initializing");
-      const init = await authenticatedFetch("/upload/init", {
-        method: "POST",
-        body:   JSON.stringify({
-          filename:    file.name,
-          contentType,
-          name:        form.name.trim(),
-          inputType:   form.inputType,
-        }),
-      }) as InitUploadResponse;
-
-      // ── Step B: presign ─────────────────────────────────────────────────
-      setUploadStage("presigning");
-      const partCount = Math.max(1, Math.ceil(file.size / PART_SIZE));
-      const presign   = await authenticatedFetch("/upload/presign", {
-        method: "POST",
-        body:   JSON.stringify({ uploadId: init.uploadId, key: init.key, partCount }),
-      }) as PresignResponse;
-
-      // ── Step C: upload parts to S3 ──────────────────────────────────────
-      setUploadStage("uploading");
-      setUploadProgress(0);
-
-      const completed: { partNumber: number; eTag: string }[] = new Array(partCount);
-      let done = 0;
-
-      const uploadPart = async (part: PresignResponse["parts"][number]) => {
-        const start = (part.partNumber - 1) * PART_SIZE;
-        const blob  = file.slice(start, Math.min(start + PART_SIZE, file.size));
-        const res   = await fetch(part.url, { method: "PUT", body: blob });
-        if (!res.ok) throw new Error(`Part ${part.partNumber} failed: ${res.status}`);
-        const eTag = res.headers.get("ETag")?.replace(/"/g, "");
-        if (!eTag) throw new Error(`Part ${part.partNumber} missing ETag`);
-        completed[part.partNumber - 1] = { partNumber: part.partNumber, eTag };
-        done++;
-        setUploadProgress(Math.round((done / partCount) * 100));
-      };
-
-      const ordered = [...presign.parts].sort((a, b) => a.partNumber - b.partNumber);
-      for (let i = 0; i < ordered.length; i += CONCURRENCY) {
-        await Promise.all(ordered.slice(i, i + CONCURRENCY).map(uploadPart));
-      }
-
-      // ── Step D: complete ────────────────────────────────────────────────
-      setUploadStage("completing");
-      await authenticatedFetch("/upload/complete", {
-        method: "POST",
-        body:   JSON.stringify({
-          uploadId: init.uploadId,
-          key:      init.key,
-          sceneId:  init.sceneId,
-          parts:    completed,
-        }),
+      await multipartUpload({
+        file,
+        contentType,
+        name: form.name.trim(),
+        inputType: form.inputType,
+        concurrency: CONCURRENCY,
+        onProgress: (uploadStage, uploadProgress) => {
+          setUploadStage(uploadStage);
+          if (uploadProgress !== undefined) setUploadProgress(uploadProgress);
+        },
       });
 
       await fetchScenes();
@@ -223,10 +177,7 @@ export default function ScenesDashboard() {
     setSubmittingId(sceneId);
     setActionError(null);
     try {
-      await authenticatedFetch("/jobs/submit", {
-        method: "POST",
-        body: JSON.stringify({ sceneId }),
-      });
+      await submitJob(sceneId);
       setScenes((prev) =>
         prev.map((s) => (s.sceneId === sceneId ? { ...s, status: "QUEUED" } : s))
       );
@@ -245,7 +196,7 @@ export default function ScenesDashboard() {
     if (cancellingId) return;
     setCancellingId(sceneId);
     try {
-      await authenticatedFetch(`/jobs/${sceneId}/cancel`, { method: "POST" });
+      await cancelJob(sceneId);
       setScenes((prev) =>
         prev.map((s) => (s.sceneId === sceneId ? { ...s, status: "CANCELLED" } : s))
       );
@@ -264,7 +215,7 @@ export default function ScenesDashboard() {
     setDeletingId(sceneId);
     setScenes((prev) => prev.filter((s) => s.sceneId !== sceneId));
     try {
-      await authenticatedFetch(`/api/v1/scenes/${sceneId}`, { method: "DELETE" });
+      await deleteScene(sceneId);
     } catch (err) {
       console.error("[scenes] delete failed", err);
       await fetchScenes();

@@ -1,71 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import dynamic from "next/dynamic";
-import { authenticatedFetch } from "@/api/client";
-import type { ViewUrlResponse } from "@/types/api";
+import GaussianViewerView from "@/components/features/viewer/GaussianViewerView";
+import { useSceneViewUrl } from "@/hooks/viewer/useSceneViewUrl";
 
-// LegacySplatViewer references `window` / WebGL — never run on the server.
-const LegacySplatViewer = dynamic(
-  () => import("@/components/viewer/LegacySplatViewer"),
-  { ssr: false }
-);
-
-interface GaussianViewerProps {
+type GaussianViewerProps = {
   sceneId: string;
-}
+};
 
+/** Thin coordinator: resolves the presigned view URL and renders the viewer. */
 export default function GaussianViewer({ sceneId }: GaussianViewerProps) {
-  const [splatUrl, setSplatUrl] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const init = async () => {
-      try {
-        const { url } = (await authenticatedFetch(
-          `/api/v1/scenes/${sceneId}/view-url`
-        )) as ViewUrlResponse;
-
-        if (cancelled) return;
-        setSplatUrl(url);
-        setLoading(false);
-      } catch (err) {
-        if (!cancelled) {
-          console.error("[GaussianViewer] failed to fetch view URL", err);
-          setError("Failed to load the 3D scene. Please try again.");
-          setLoading(false);
-        }
-      }
-    };
-
-    init();
-    return () => { cancelled = true; };
-  }, [sceneId]);
-
-  if (loading) {
-    return (
-      <div className="flex h-full items-center justify-center bg-black">
-        <p className="text-sm text-slate-400">Loading scene…</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex h-full items-center justify-center bg-black">
-        <p className="text-sm text-red-400">{error}</p>
-      </div>
-    );
-  }
-
-  if (!splatUrl) return null;
-
+  const { splatUrl, error, loading } = useSceneViewUrl(sceneId);
   return (
-    <div className="relative h-full w-full">
-      <LegacySplatViewer splatUrl={splatUrl} />
-    </div>
+    <GaussianViewerView
+      splatUrl={splatUrl}
+      error={error}
+      loading={loading}
+    />
   );
 }

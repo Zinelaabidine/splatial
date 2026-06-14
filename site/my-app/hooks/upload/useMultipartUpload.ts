@@ -4,21 +4,23 @@ import { fetchAuthSession } from "aws-amplify/auth";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { getApiBaseUrl } from "@/api/baseUrl";
-import { authenticatedFetch } from "@/api/client";
+import { submitJob as submitSceneJob } from "@/server/services/jobsService";
+import {
+  deleteSceneLegacy,
+  getSceneStatus,
+} from "@/server/services/scenesService";
+import {
+  DEFAULT_PART_SIZE,
+  multipartUpload,
+} from "@/server/services/uploadService";
 import type {
   CompleteResponse,
-  CompletedPart,
-  InitUploadResponse,
-  PresignResponse,
   SceneStatusResponse,
   UploadItem,
   UploadStage,
 } from "@/types/api";
 
-// S3's hard minimum is 5 MiB for any part except the last.
-const DEFAULT_PART_SIZE = 5 * 1024 * 1024;
-// Cap parallel PUTs per file so large uploads don't hammer the network stack.
-const DEFAULT_CONCURRENCY = 6;
+const HOOK_DEFAULT_CONCURRENCY = 6;
 const FALLBACK_CONTENT_TYPE = "application/octet-stream";
 
 // Scene-status polling: start at 3 s, back off up to 30 s, give up after 30 min.
@@ -121,11 +123,9 @@ export function useMultipartUpload(
   // sceneId registered in DynamoDB (i.e. /upload/init succeeded).
   // ---------------------------------------------------------------------------
   const deleteScene = useCallback((sceneId: string) => {
-    void authenticatedFetch(`/scenes/${sceneId}`, { method: "DELETE" }).catch(
-      () => {
-        // Best-effort: backend TTL will clean up within 24 h if this fails.
-      },
-    );
+    void deleteSceneLegacy(sceneId).catch(() => {
+      // Best-effort: backend TTL will clean up within 24 h if this fails.
+    });
   }, []);
 
   // ---------------------------------------------------------------------------
@@ -205,9 +205,9 @@ export function useMultipartUpload(
 
         if (isAborted()) break;
 
-        const statusResp = (await authenticatedFetch(
-          `/scenes/${sceneId}`,
-          { signal: controller.signal },
+        const statusResp = (await getSceneStatus(
+          sceneId,
+          controller.signal,
         )) as SceneStatusResponse;
 
         if (statusResp.status === "READY" || statusResp.status === "FAILED") {
@@ -227,7 +227,7 @@ export function useMultipartUpload(
     async (seed: UploadItem, file: File): Promise<void> => {
       const {
         partSize = DEFAULT_PART_SIZE,
-        concurrency = DEFAULT_CONCURRENCY,
+        concurrency = HOOK_DEFAULT_CONCURRENCY,
         onComplete,
         onError,
       } = optsRef.current;
@@ -251,114 +251,27 @@ export function useMultipartUpload(
           // Non-fatal: upload proceeds; pagehide fallback just won't have token.
         }
 
-        // -------------------------------------------------------------------
-        // Step A — Initialize multipart upload
-        // -------------------------------------------------------------------
-        patch(seed.id, { stage: "initializing" });
-
-        const init = (await authenticatedFetch("/upload/init", {
-          method: "POST",
-          body: JSON.stringify({
-            filename: file.name,
-            contentType: seed.contentType,
-          }),
-          signal: controller.signal,
-        })) as InitUploadResponse;
-
-        throwIfAborted();
-        patch(seed.id, { sceneId: init.sceneId });
-
-        // -------------------------------------------------------------------
-        // Step B — Presign part URLs (file sliced into 5 MiB chunks)
-        // -------------------------------------------------------------------
-        patch(seed.id, { stage: "presigning" });
-
         const partCount = Math.max(1, Math.ceil(file.size / partSize));
         patch(seed.id, { partCount });
 
-        const presign = (await authenticatedFetch("/upload/presign", {
-          method: "POST",
-          body: JSON.stringify({
-            uploadId: init.uploadId,
-            key: init.key,
-            partCount,
-          }),
+        const { sceneId, complete } = await multipartUpload({
+          file,
+          contentType: seed.contentType,
+          partSize,
+          concurrency,
           signal: controller.signal,
-        })) as PresignResponse;
-
-        throwIfAborted();
-
-        // -------------------------------------------------------------------
-        // Step C — Direct-to-S3 part PUTs
-        // -------------------------------------------------------------------
-        patch(seed.id, { stage: "uploading", progress: 0 });
-
-        const completed: CompletedPart[] = new Array(partCount);
-        let done = 0;
-
-        const uploadPart = async (
-          part: PresignResponse["parts"][number],
-        ): Promise<void> => {
-          const start = (part.partNumber - 1) * partSize;
-          const end = Math.min(start + partSize, file.size);
-          const blob = file.slice(start, end);
-
-          const res = await fetch(part.url, {
-            method: "PUT",
-            body: blob,
-            signal: controller.signal,
-          });
-
-          if (!res.ok) {
-            throw new Error(
-              `Part ${part.partNumber} upload failed: ${res.status} ${res.statusText}`,
-            );
-          }
-
-          // S3 CORS is configured to expose ETag; strip the surrounding quotes
-          // so the value matches what CompleteMultipartUpload expects.
-          const eTag = res.headers.get("ETag")?.replace(/"/g, "");
-          if (!eTag) {
-            throw new Error(
-              `Part ${part.partNumber} response missing ETag header. ` +
-                "Verify S3 CORS ExposeHeaders includes ETag.",
-            );
-          }
-
-          completed[part.partNumber - 1] = {
-            partNumber: part.partNumber,
-            eTag,
-          };
-          done += 1;
-          patch(seed.id, { progress: Math.round((done / partCount) * 100) });
-        };
-
-        // Promise.all-driven uploads with bounded concurrency. We slice the
-        // parts list into batches of `concurrency` and await each batch.
-        const ordered = [...presign.parts].sort(
-          (a, b) => a.partNumber - b.partNumber,
-        );
-        for (let i = 0; i < ordered.length; i += concurrency) {
-          throwIfAborted();
-          const batch = ordered.slice(i, i + concurrency);
-          await Promise.all(batch.map(uploadPart));
-        }
-
-        // -------------------------------------------------------------------
-        // Step D — Complete multipart upload
-        // -------------------------------------------------------------------
-        patch(seed.id, { stage: "completing" });
-
-        const complete = (await authenticatedFetch("/upload/complete", {
-          method: "POST",
-          body: JSON.stringify({
-            uploadId: init.uploadId,
-            key: init.key,
-            sceneId: init.sceneId,
-            parts: completed,
-          }),
-          signal: controller.signal,
-        })) as CompleteResponse;
+          onProgress: (uploadStage, uploadProgress, meta) => {
+            patch(seed.id, {
+              stage: uploadStage,
+              ...(meta?.sceneId ? { sceneId: meta.sceneId } : {}),
+              ...(uploadStage === "uploading" && uploadProgress !== undefined
+                ? { progress: uploadProgress }
+                : uploadStage === "uploading"
+                  ? { progress: 0 }
+                  : {}),
+            });
+          },
+        });
 
         throwIfAborted();
 
@@ -504,11 +417,7 @@ export function useMultipartUpload(
       patch(id, { stage: "processing", error: undefined });
 
       try {
-        await authenticatedFetch("/jobs/submit", {
-          method: "POST",
-          body: JSON.stringify({ sceneId: item.sceneId }),
-          signal: controller.signal,
-        });
+        await submitSceneJob(item.sceneId, controller.signal);
 
         await pollScene(id, item.sceneId, controller);
       } catch (err) {

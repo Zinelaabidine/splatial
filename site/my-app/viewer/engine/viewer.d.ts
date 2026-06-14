@@ -20,7 +20,13 @@ export function readViewMatrix(): number[] | null;
  * Overrides the view matrix applied each frame.
  * Pass null (or call clearViewMatrix) to return control to the user.
  */
-export function setViewMatrix(m: number[]): void;
+export function setViewMatrix(m: number[] | null): void;
+
+/**
+ * External camera matrix update API (alias for setViewMatrix).
+ * Pass null to release the override.
+ */
+export function updateCameraMatrix(m: number[] | null): void;
 
 /** Releases any external view matrix override. */
 export function clearViewMatrix(): void;
