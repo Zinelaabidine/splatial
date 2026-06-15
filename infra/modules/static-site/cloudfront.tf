@@ -50,10 +50,6 @@ resource "aws_cloudfront_distribution" "site" {
     domain_name              = aws_s3_bucket.site.bucket_regional_domain_name
     origin_id                = "s3-${aws_s3_bucket.site.id}"
     origin_access_control_id = aws_cloudfront_origin_access_control.site.id
-
-    s3_origin_config {
-      origin_access_identity = ""
-    }
   }
 
   default_cache_behavior {

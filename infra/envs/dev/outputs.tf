@@ -18,6 +18,11 @@ output "github_oidc_deploy_role_arn" {
   value       = module.static_site.github_oidc_deploy_role_arn
 }
 
+output "local_dev_role_arn" {
+  description = "Local developer Terraform role ARN (use with AWS profile github-dev)"
+  value       = module.static_site.local_dev_role_arn
+}
+
 output "cognito_user_pool_id" {
   value = module.static_site.cognito_user_pool_id
 }

@@ -16,6 +16,14 @@ data "aws_iam_role" "github_oidc_deploy_role" {
   name = "${local.name_prefix}-github-deploy-role"
 }
 
+# Shared across all envs — created once in infra/bootstrap. Local developers
+# assume this role (not the GitHub OIDC deploy role) when running Terraform.
+data "aws_iam_role" "local_dev_role" {
+  provider = aws.this
+
+  name = "splatial-local-dev-role"
+}
+
 data "aws_iam_policy_document" "github_deploy_policy" {
 
   # ─── Cognito ──────────────────────────────────────────────────────────────────
@@ -408,6 +416,7 @@ data "aws_iam_policy_document" "github_deploy_policy" {
     ]
     resources = [
       "arn:aws:iam::886601940523:role/${local.name_prefix}-github-deploy-role",
+      "arn:aws:iam::886601940523:role/splatial-local-dev-role",
       aws_iam_role.lambda_exec.arn,
       # Constructed ARN for the upload Lambda execution role (does not exist yet).
       "arn:aws:iam::886601940523:role/${var.name}-upload-lambda-exec-role",
@@ -448,6 +457,14 @@ resource "aws_iam_role_policy" "github_deploy_policy" {
 
   name   = "${local.name_prefix}-github-deploy-policy"
   role   = data.aws_iam_role.github_oidc_deploy_role.id
+  policy = data.aws_iam_policy_document.github_deploy_policy.json
+}
+
+resource "aws_iam_role_policy" "local_dev_deploy_policy" {
+  provider = aws.this
+
+  name   = "${local.name_prefix}-local-dev-deploy-policy"
+  role   = data.aws_iam_role.local_dev_role.id
   policy = data.aws_iam_policy_document.github_deploy_policy.json
 }
 
@@ -667,6 +684,11 @@ resource "aws_iam_role_policy_attachment" "github_deploy_compute" {
   policy_arn = aws_iam_policy.github_deploy_compute_policy.arn
 }
 
+resource "aws_iam_role_policy_attachment" "local_dev_compute" {
+  role       = data.aws_iam_role.local_dev_role.name
+  policy_arn = aws_iam_policy.github_deploy_compute_policy.arn
+}
+
 # ── CDN / DNS / TLS / Logs permissions (separate policy to stay under 10 240-byte limit) ──
 
 data "aws_iam_policy_document" "github_deploy_cdn_policy" {
@@ -874,6 +896,11 @@ resource "aws_iam_policy" "github_deploy_cdn_policy" {
 
 resource "aws_iam_role_policy_attachment" "github_deploy_cdn" {
   role       = data.aws_iam_role.github_oidc_deploy_role.name
+  policy_arn = aws_iam_policy.github_deploy_cdn_policy.arn
+}
+
+resource "aws_iam_role_policy_attachment" "local_dev_cdn" {
+  role       = data.aws_iam_role.local_dev_role.name
   policy_arn = aws_iam_policy.github_deploy_cdn_policy.arn
 }
 

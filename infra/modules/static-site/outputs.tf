@@ -57,6 +57,11 @@ output "github_oidc_deploy_role_arn" {
   value       = data.aws_iam_role.github_oidc_deploy_role.arn
 }
 
+output "local_dev_role_arn" {
+  description = "IAM role ARN for local Terraform runs (assume via splatial-local-dev-role)"
+  value       = data.aws_iam_role.local_dev_role.arn
+}
+
 output "vpc_id" {
   value = aws_vpc.static_site.id
 }
