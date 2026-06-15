@@ -1,0 +1,6 @@
+# Refactoring Worker Rules
+When assigned a refactoring task:
+1. Isolate Database/AWS SDK logic into a `*Repository.js` file.
+2. Isolate Business logic into a `*Service.js` file.
+3. The `*Controller.js` must only handle parsing HTTP req/res and status codes.
+4. Output only code; do not explain the changes.

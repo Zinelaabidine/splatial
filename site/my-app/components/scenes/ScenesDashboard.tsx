@@ -1,30 +1,18 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Play, Plus, Trash2, X, UploadCloud, XCircle, Eye } from "lucide-react";
 
 import Layout from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { cancelJob, submitJob } from "@/server/services/jobsService";
-import { deleteScene, listScenes } from "@/server/services/scenesService";
-import { multipartUpload } from "@/server/services/uploadService";
-import type {
-  InputType,
-  Scene,
-} from "@/types/api";
-
-// ─── Constants ───────────────────────────────────────────────────────────────
-
-const CONCURRENCY = 4;
+import { useScenesDashboard } from "@/hooks/scenes/useScenesDashboard";
+import type { InputType } from "@/types/api";
 
 const ACCEPT_BY_TYPE: Record<InputType, string> = {
   video:  ".mp4,.mov,video/mp4,video/quicktime",
   images: ".jpg,.jpeg,.png,.webp,.tiff,.zip,image/jpeg,image/png,image/webp,image/tiff,application/zip,application/x-zip-compressed",
   ply:    ".ply,application/octet-stream",
 };
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const INPUT_TYPE_LABELS: Record<string, string> = {
   video:  "MP4 Video",
@@ -65,8 +53,6 @@ function formatBytes(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-// ─── Upload stage labels shown in the modal ───────────────────────────────────
-
 const STAGE_LABEL: Record<string, string> = {
   idle:        "",
   initializing:"Initializing upload…",
@@ -76,157 +62,36 @@ const STAGE_LABEL: Record<string, string> = {
   error:       "Upload failed.",
 };
 
-type UploadStage = keyof typeof STAGE_LABEL;
-
-// ─── Main component ───────────────────────────────────────────────────────────
-
-const INITIAL_FORM = { name: "", inputType: "video" as InputType, file: null as File | null };
-
 export default function ScenesDashboard() {
-  const [scenes, setScenes]         = useState<Scene[]>([]);
-  const [loading, setLoading]       = useState(true);
-  const [fetchError, setFetchError] = useState<string | null>(null);
-  const [showModal, setShowModal]   = useState(false);
-  const [form, setForm]             = useState<{ name: string; inputType: InputType; file: File | null }>(INITIAL_FORM);
-  const [creating, setCreating]     = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
-  const [uploadStage, setUploadStage] = useState<UploadStage>("idle");
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [deletingId, setDeletingId]   = useState<string | null>(null);
-  const [submittingId, setSubmittingId] = useState<string | null>(null);
-  const [cancellingId, setCancellingId] = useState<string | null>(null);
-  const [actionError, setActionError]  = useState<string | null>(null);
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // ── Fetch scenes ────────────────────────────────────────────────────────────
-
-  const fetchScenes = useCallback(async () => {
-    try {
-      setLoading(true);
-      setFetchError(null);
-      const data = await listScenes();
-      setScenes(data.scenes ?? []);
-    } catch (err) {
-      console.error("[scenes] fetch failed", err);
-      setFetchError("Failed to load scenes. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  // Fetch initial data on mount.
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { fetchScenes(); }, [fetchScenes]);
-
-  // ── Modal helpers ──────────────────────────────────────────────────────────
-
-  const openModal = () => {
-    setForm(INITIAL_FORM);
-    setCreateError(null);
-    setUploadStage("idle");
-    setUploadProgress(0);
-    setShowModal(true);
-  };
-
-  const closeModal = () => {
-    if (creating) return; // block close while uploading
-    setShowModal(false);
-  };
-
-  // ── Create + Upload pipeline ────────────────────────────────────────────────
-
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.name.trim() || !form.file) return;
-
-    const file        = form.file;
-    const contentType = file.type || "application/octet-stream";
-
-    try {
-      setCreating(true);
-      setCreateError(null);
-
-      await multipartUpload({
-        file,
-        contentType,
-        name: form.name.trim(),
-        inputType: form.inputType,
-        concurrency: CONCURRENCY,
-        onProgress: (uploadStage, uploadProgress) => {
-          setUploadStage(uploadStage);
-          if (uploadProgress !== undefined) setUploadProgress(uploadProgress);
-        },
-      });
-
-      await fetchScenes();
-      setShowModal(false);
-    } catch (err) {
-      console.error("[scenes] create+upload failed", err);
-      setCreateError("Upload failed. Please try again.");
-      setUploadStage("error");
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  // ── Submit ──────────────────────────────────────────────────────────────────
-
-  const handleSubmit = async (sceneId: string) => {
-    if (submittingId) return;
-    setSubmittingId(sceneId);
-    setActionError(null);
-    try {
-      await submitJob(sceneId);
-      setScenes((prev) =>
-        prev.map((s) => (s.sceneId === sceneId ? { ...s, status: "QUEUED" } : s))
-      );
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Submit failed";
-      setActionError(msg);
-      await fetchScenes();
-    } finally {
-      setSubmittingId(null);
-    }
-  };
-
-  // ── Cancel ──────────────────────────────────────────────────────────────────
-
-  const handleCancel = async (sceneId: string) => {
-    if (cancellingId) return;
-    setCancellingId(sceneId);
-    try {
-      await cancelJob(sceneId);
-      setScenes((prev) =>
-        prev.map((s) => (s.sceneId === sceneId ? { ...s, status: "CANCELLED" } : s))
-      );
-    } catch (err) {
-      console.error("[scenes] cancel failed", err);
-      await fetchScenes();
-    } finally {
-      setCancellingId(null);
-    }
-  };
-
-  // ── Delete ──────────────────────────────────────────────────────────────────
-
-  const handleDelete = async (sceneId: string) => {
-    if (deletingId) return;
-    setDeletingId(sceneId);
-    setScenes((prev) => prev.filter((s) => s.sceneId !== sceneId));
-    try {
-      await deleteScene(sceneId);
-    } catch (err) {
-      console.error("[scenes] delete failed", err);
-      await fetchScenes();
-    } finally {
-      setDeletingId(null);
-    }
-  };
-
-  // ── Render ──────────────────────────────────────────────────────────────────
-
-  const isUploading = creating && uploadStage !== "idle" && uploadStage !== "error";
+  const {
+    scenes,
+    loading,
+    fetchError,
+    showModal,
+    form,
+    creating,
+    createError,
+    uploadStage,
+    uploadProgress,
+    deletingId,
+    submittingId,
+    cancellingId,
+    actionError,
+    fileInputRef,
+    isUploading,
+    openModal,
+    closeModal,
+    handleCreate,
+    handleSubmit,
+    handleCancel,
+    handleDelete,
+    handleNameChange,
+    handleInputTypeChange,
+    handleFileChange,
+    handleFilePickerClick,
+    handleModalBackdropClick,
+    clearActionError,
+  } = useScenesDashboard();
 
   return (
     <Layout activeNav="library">
@@ -248,7 +113,7 @@ export default function ScenesDashboard() {
         {actionError && (
           <div className="mb-4 flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700">
             <span>{actionError}</span>
-            <button type="button" onClick={() => setActionError(null)} className="ml-3 text-red-400 hover:text-red-600">
+            <button type="button" onClick={clearActionError} className="ml-3 text-red-400 hover:text-red-600">
               <X className="h-4 w-4" />
             </button>
           </div>
@@ -350,7 +215,7 @@ export default function ScenesDashboard() {
           role="dialog"
           aria-modal="true"
           aria-labelledby="create-scene-title"
-          onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}
+          onClick={handleModalBackdropClick}
         >
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
 
@@ -384,7 +249,7 @@ export default function ScenesDashboard() {
                   autoFocus
                   disabled={isUploading}
                   value={form.name}
-                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                  onChange={handleNameChange}
                   placeholder="e.g. Garden scan, Office walkthrough"
                   className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:opacity-50"
                 />
@@ -399,10 +264,7 @@ export default function ScenesDashboard() {
                   id="input-type"
                   disabled={isUploading}
                   value={form.inputType}
-                  onChange={(e) => {
-                    setForm((f) => ({ ...f, inputType: e.target.value as InputType, file: null }));
-                    if (fileInputRef.current) fileInputRef.current.value = "";
-                  }}
+                  onChange={handleInputTypeChange}
                   className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:opacity-50"
                 >
                   <option value="video">MP4 Video</option>
@@ -423,7 +285,7 @@ export default function ScenesDashboard() {
                       : "border-slate-200 bg-slate-50 hover:border-indigo-300 hover:bg-indigo-50/30",
                     isUploading ? "pointer-events-none opacity-50" : "",
                   ].join(" ")}
-                  onClick={() => !isUploading && fileInputRef.current?.click()}
+                  onClick={handleFilePickerClick}
                 >
                   <UploadCloud className={`h-6 w-6 ${form.file ? "text-indigo-400" : "text-slate-400"}`} />
                   {form.file ? (
@@ -446,10 +308,7 @@ export default function ScenesDashboard() {
                     required
                     accept={ACCEPT_BY_TYPE[form.inputType]}
                     className="sr-only"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0] ?? null;
-                      setForm((f) => ({ ...f, file }));
-                    }}
+                    onChange={handleFileChange}
                   />
                 </div>
               </div>
