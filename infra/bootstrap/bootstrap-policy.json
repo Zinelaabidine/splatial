@@ -33,13 +33,16 @@
         "iam:UntagRole",
         "iam:ListAttachedRolePolicies",
         "iam:ListRolePolicies",
-        "iam:GetRolePolicy"
+        "iam:GetRolePolicy",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy"
       ],
       "Resource": [
         "arn:aws:iam::886601940523:role/splatial-dev-github-deploy-role",
         "arn:aws:iam::886601940523:role/splatial-staging-github-deploy-role",
         "arn:aws:iam::886601940523:role/splatial-prod-github-deploy-role",
-        "arn:aws:iam::886601940523:role/splatial-local-dev-role"
+        "arn:aws:iam::886601940523:role/splatial-local-dev-role",
+        "arn:aws:iam::886601940523:role/splatial-bootstrap-ci-role"
       ]
     },
     {

@@ -114,6 +114,17 @@ jobs:
         working-directory: ${{ env.TF_DIR }}
         run: terraform validate
 
+      # Self-bootstrap: apply the CI inline policy without refreshing state so
+      # new S3/IAM actions land before plan reads the state bucket policy.
+      # One-time escape hatch if this step fails (role lacks PutRolePolicy):
+      #   aws iam put-role-policy \
+      #     --role-name splatial-bootstrap-ci-role \
+      #     --policy-name splatial-bootstrap-ci-policy \
+      #     --policy-document file://infra/bootstrap/bootstrap-policy.json
+      - name: Self-bootstrap CI IAM policy
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform apply -target=aws_iam_role_policy.bootstrap_ci -refresh=false -auto-approve
+
       - name: Terraform Plan
         working-directory: ${{ env.TF_DIR }}
         run: terraform plan -out=tfplan

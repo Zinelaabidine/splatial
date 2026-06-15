@@ -282,6 +282,8 @@ data "aws_iam_policy_document" "bootstrap_ci_permissions" {
       "iam:ListAttachedRolePolicies",
       "iam:ListRolePolicies",
       "iam:GetRolePolicy",
+      "iam:PutRolePolicy",
+      "iam:DeleteRolePolicy",
     ]
     resources = [
       "arn:aws:iam::${var.aws_account_id}:role/splatial-*-github-deploy-role",
