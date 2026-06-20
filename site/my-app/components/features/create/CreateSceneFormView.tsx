@@ -1,3 +1,5 @@
+"use client";
+
 import {
   ArrowLeft,
   Eye,
@@ -8,7 +10,7 @@ import {
   Link,
 } from "lucide-react";
 
-import TopNavBar from "@/components/dashboard/TopNavBar";
+import { usePageSearch } from "@/components/layout/AppShellContext";
 import {
   stageLabelWithProgress,
   STAGE_LABEL,
@@ -69,30 +71,22 @@ export default function CreateSceneFormView({
   onOpenFilePicker,
 }: CreateSceneFormViewProps) {
   const stageLabel = stageLabelWithProgress(stage, progress);
+  usePageSearch("", false);
 
   return (
-    <div className="flex h-screen flex-col bg-[#080d18] text-white">
-      <TopNavBar
-        mode="dashboard"
-        onLibraryClick={onBack}
-        onAdminClick={onBack}
-        onProfileClick={onBack}
-        onCreateClick={() => {}}
-      />
-
-      <main className="flex flex-1 items-start justify-center overflow-y-auto px-6 py-10">
-        <form
-          onSubmit={activeTab === "gdrive" ? onGdriveSubmit : onSubmit}
-          className="w-full max-w-5xl"
+    <div className="mx-auto w-full max-w-5xl">
+      <form
+        onSubmit={activeTab === "gdrive" ? onGdriveSubmit : onSubmit}
+        className="w-full"
+      >
+        <button
+          type="button"
+          onClick={onBack}
+          className="mb-6 inline-flex items-center gap-2 text-sm text-[#606060] transition-colors hover:text-[#0f0f0f]"
         >
-          <button
-            type="button"
-            onClick={onBack}
-            className="mb-8 inline-flex items-center gap-2 text-sm text-slate-400 transition-colors hover:text-white"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Library
-          </button>
+          <ArrowLeft className="h-4 w-4" />
+          Back to Home
+        </button>
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <div className="rounded-2xl border border-[#1a2535] bg-[#0d1422] p-8">
@@ -410,7 +404,6 @@ export default function CreateSceneFormView({
             </div>
           </div>
         </form>
-      </main>
     </div>
   );
 }

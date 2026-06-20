@@ -491,3 +491,37 @@ body {
     transform: translate(-50%, -50%) rotateX(68deg) rotateZ(12deg);
   }
 }
+
+/* ─── Splatworks design handoff animations ─────────────────────────────── */
+@keyframes scSpin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes scPulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(0.8);
+  }
+}
+
+.sw-thumb-spin {
+  animation: scSpin 26s linear infinite;
+}
+
+.sw-status-pulse {
+  animation: scPulse 1.6s ease-in-out infinite;
+}
+
+.font-sw-mono {
+  font-family: var(--font-jetbrains), ui-monospace, monospace;
+}

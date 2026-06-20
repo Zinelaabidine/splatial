@@ -1,0 +1,115 @@
+import type { DashboardScene, DashboardStats } from "@/types/splatworks";
+
+export const MOCK_DASHBOARD_STATS: DashboardStats = {
+  totalScenes: 12,
+  trainingNow: 2,
+  splatsReady: 5,
+  gpuHours: 47.3,
+};
+
+export const MOCK_DASHBOARD_SCENES: DashboardScene[] = [
+  {
+    id: "scene-ceramic",
+    title: "Ceramic Vase Study",
+    status: "completed",
+    caption: "1.24M splats · 84 MB",
+    splatCount: 1_240_000,
+    fileSizeMb: 84,
+    preview: {
+      tintLayers: ["rgba(120,190,255,.55)"],
+      dotSize: 5,
+    },
+  },
+  {
+    id: "scene-fountain",
+    title: "Backyard Fountain",
+    status: "training",
+    caption: "iter 14.2k · ETA 8m",
+    progressPercent: 67,
+    currentIter: "14.2k",
+    eta: "8m",
+  },
+  {
+    id: "scene-loft",
+    title: "Loft Interior",
+    status: "completed",
+    caption: "2.10M splats · 142 MB",
+    splatCount: 2_100_000,
+    fileSizeMb: 142,
+    preview: {
+      tintLayers: ["rgba(150,210,200,.5)"],
+      dotSize: 5,
+    },
+  },
+  {
+    id: "scene-sneaker",
+    title: "Studio Sneaker",
+    status: "queued",
+    caption: "62 images",
+    queuePosition: 3,
+    queueEta: "~6m",
+    imageCount: 62,
+  },
+  {
+    id: "scene-trail",
+    title: "Forest Trail",
+    status: "completed",
+    caption: "1.80M splats · 121 MB",
+    splatCount: 1_800_000,
+    fileSizeMb: 121,
+    preview: {
+      tintLayers: ["rgba(130,170,255,.5)"],
+      dotSize: 5,
+    },
+  },
+  {
+    id: "scene-garden",
+    title: "Garden Statue",
+    status: "draft",
+    caption: "edited 2h ago",
+    uploadedImageCount: 48,
+    editedAt: "2h ago",
+  },
+  {
+    id: "scene-desk",
+    title: "Desk Setup",
+    status: "training",
+    caption: "iter 4.9k · ETA 21m",
+    progressPercent: 24,
+    currentIter: "4.9k",
+    eta: "21m",
+  },
+  {
+    id: "scene-arch",
+    title: "Riverside Arch",
+    status: "completed",
+    caption: "0.96M splats · 71 MB",
+    splatCount: 960_000,
+    fileSizeMb: 71,
+    preview: {
+      tintLayers: ["rgba(180,200,255,.5)"],
+      dotSize: 5,
+    },
+  },
+  {
+    id: "scene-camera",
+    title: "Vintage Camera",
+    status: "failed",
+    caption: "failed 40m ago",
+    errorMessage: "CUDA out of memory",
+    failedAtIter: "3.1k",
+    failedAt: "40m ago",
+  },
+  {
+    id: "scene-typewriter",
+    title: "Old Typewriter",
+    status: "completed",
+    caption: "1.45M splats · 98 MB",
+    splatCount: 1_450_000,
+    fileSizeMb: 98,
+    preview: {
+      tintLayers: ["rgba(140,200,230,.5)"],
+      dotSize: 5,
+    },
+  },
+];

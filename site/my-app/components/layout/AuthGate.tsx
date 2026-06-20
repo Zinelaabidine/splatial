@@ -113,7 +113,7 @@ interface AuthGateProps {
 export default function AuthGate({ children }: AuthGateProps) {
   return (
     <ThemeProvider theme={minimalTheme}>
-      <div className="auth-gate min-h-screen w-full bg-slate-50 text-slate-900 antialiased">
+      <div className="auth-gate min-h-screen w-full antialiased">
         <Authenticator signUpAttributes={["email"]} loginMechanisms={["email"]}>
           {() => <>{children}</>}
         </Authenticator>

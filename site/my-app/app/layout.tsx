@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Inter } from "next/font/google";
+import { Geist, Geist_Mono, Hanken_Grotesk, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import AmplifyProvider from "@/components/layout/AmplifyProvider";
 
@@ -13,16 +13,21 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const inter = Inter({
-  variable: "--font-inter",
+const hankenGrotesk = Hanken_Grotesk({
+  variable: "--font-hanken",
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
 });
 
-
+const jetbrainsMono = JetBrains_Mono({
+  variable: "--font-jetbrains",
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+});
 
 export const metadata: Metadata = {
-  title: "Create Next App",
-  description: "Next.js Frontend",
+  title: "Splatworks",
+  description: "Gaussian splatting platform",
 };
 
 export default function RootLayout({
@@ -31,11 +36,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-<html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} ${inter.className}`}>
-        <AmplifyProvider>
-          {children}
-        </AmplifyProvider>
+    <html lang="en">
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} ${hankenGrotesk.variable} ${jetbrainsMono.variable} font-[family-name:var(--font-hanken)] bg-[#121212] text-[#f1f1f1] antialiased`}
+      >
+        <AmplifyProvider>{children}</AmplifyProvider>
       </body>
     </html>
   );
