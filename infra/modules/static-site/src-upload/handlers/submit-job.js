@@ -112,6 +112,26 @@ exports.handler = async (event) => {
     throw err;
   }
 
+  // Write the attempt record BEFORE enqueueing so a fast worker cannot receive
+  // the SQS message and PATCH /api/attempts/:attemptId before this row exists
+  // (that race produced 404 → 3 receive cycles → DLQ with no training run).
+  await dynamo.send(
+    new PutItemCommand({
+      TableName: TABLE,
+      Item: {
+        scene_id:        { S: attemptId },       // PK — intentionally the attemptId
+        record_type:     { S: "attempt" },
+        parent_scene_id: { S: sceneId },
+        user_id:         { S: userId },
+        attempt_number:  { N: String(attemptNumber) },
+        status:          { S: "QUEUED" },
+        worker_token:    { S: workerToken },
+        created_at:      { S: now },
+        updated_at:      { S: now },
+      },
+    })
+  );
+
   await sqs.send(
     new SendMessageCommand({
       QueueUrl:    QUEUE_URL,
@@ -134,26 +154,6 @@ exports.handler = async (event) => {
         maxAttempts:    MAX_ATTEMPTS,
         trainConfig:    trainConfig ?? {},
       }),
-    })
-  );
-
-  // Write an attempt record keyed by attemptId so the worker API endpoints
-  // (PATCH /api/attempts/:attemptId and POST /api/attempts/:attemptId/heartbeat)
-  // can look it up directly without a secondary index.
-  await dynamo.send(
-    new PutItemCommand({
-      TableName: TABLE,
-      Item: {
-        scene_id:        { S: attemptId },       // PK — intentionally the attemptId
-        record_type:     { S: "attempt" },
-        parent_scene_id: { S: sceneId },
-        user_id:         { S: userId },
-        attempt_number:  { N: String(attemptNumber) },
-        status:          { S: "QUEUED" },
-        worker_token:    { S: workerToken },
-        created_at:      { S: now },
-        updated_at:      { S: now },
-      },
     })
   );
 

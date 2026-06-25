@@ -23,11 +23,11 @@ Usage:
 
 Environment Variables:
     API_BASE_URL (default: https://api.zinelaabidine-nadir.com)
-    QUEUE_NAME (default: splat-processing-queue.fifo)
-    DLQ_NAME (default: splat-processing-dlq.fifo)
+    QUEUE_NAME (default: splatial-dev-splat-processing-queue)
+    DLQ_NAME (default: splatial-dev-splat-processing-dlq)
     AWS_REGION (auto-discovered from IMDSv2)
     WORKSPACE_ROOT (default: /tmp/streaming-splat)
-    VISIBILITY_TIMEOUT_SECONDS (default: 300) - New timeout to set on each renewal
+    VISIBILITY_TIMEOUT_SECONDS (default: 30) - New timeout to set on each renewal
     VISIBILITY_EXTENSION_INTERVAL_SECONDS (default: 150) - How often to renew visibility
     SIM_TOTAL_SECONDS (default: 30) - Simulation duration
     SIM_UPDATE_INTERVAL_SECONDS (default: 5) - Progress update cadence
@@ -71,11 +71,11 @@ except Exception:
 # These defaults mimic the behavior of imds_extract.py
 DEFAULTS = {
     "API_BASE_URL": "https://api-dev.openspacenexus.store",
-    "QUEUE_NAME": "splat-processing-queue.fifo",
-    "DLQ_NAME": "splat-processing-dlq.fifo",
+    "QUEUE_NAME": "splatial-dev-splat-processing-queue",
+    "DLQ_NAME": "splatial-dev-splat-processing-dlq",
     "WORKER_POLL_INTERVAL_SECONDS": "20",
     "VISIBILITY_EXTENSION_INTERVAL_SECONDS": "150",  # How often to renew
-    "VISIBILITY_TIMEOUT_SECONDS": "300",  # What timeout value to set on renewal
+    "VISIBILITY_TIMEOUT_SECONDS": "30",  # What timeout value to set on each renewal
     "HEARTBEAT_INTERVAL_SECONDS": "30",
     "DELETE_INVALID_MESSAGES": "true",
     "SUCCESS_RATE": "1.0",
@@ -252,11 +252,11 @@ INSTANCE_LIFECYCLE = instance_lifecycle
 
 # Runtime Config Variables
 API_BASE_URL = os.getenv("API_BASE_URL", "").rstrip("/")
-QUEUE_NAME = os.getenv("QUEUE_NAME", "splat-processing-queue.fifo")
-DLQ_NAME = os.getenv("DLQ_NAME", "splat-processing-dlq.fifo")
+QUEUE_NAME = os.getenv("QUEUE_NAME", "splatial-dev-splat-processing-queue")
+DLQ_NAME = os.getenv("DLQ_NAME", "splatial-dev-splat-processing-dlq")
 
 POLL_WAIT_TIME = getenv_int("WORKER_POLL_INTERVAL_SECONDS", 20)
-VISIBILITY_TIMEOUT_SECONDS = getenv_int("VISIBILITY_TIMEOUT_SECONDS", 300)
+VISIBILITY_TIMEOUT_SECONDS = getenv_int("VISIBILITY_TIMEOUT_SECONDS", 30)
 VISIBILITY_EXTENSION_INTERVAL_SECONDS = getenv_int("VISIBILITY_EXTENSION_INTERVAL_SECONDS", 150)
 HEARTBEAT_INTERVAL_SECONDS = max(1, getenv_int("HEARTBEAT_INTERVAL_SECONDS", 30))
 DELETE_INVALID_MESSAGES = getenv_bool("DELETE_INVALID_MESSAGES", True)

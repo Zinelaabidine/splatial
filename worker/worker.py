@@ -43,8 +43,8 @@ Environment Variables:
     AWS_PROFILE (default: default) - AWS credentials profile to use
     AWS_REGION (default: us-east-1) - AWS region for SQS and S3 operations
     API_BASE_URL (default: https://api.zinelaabidine-nadir.com)
-    QUEUE_NAME (default: splatial-dev-splat-processing-queue.fifo)
-    DLQ_NAME (default: splatial-dev-splat-processing-dlq.fifo)
+    QUEUE_NAME (default: splatial-dev-splat-processing-queue)
+    DLQ_NAME (default: splatial-dev-splat-processing-dlq)
     AWS_REGION (auto-discovered from IMDSv2)
     WORKSPACE_ROOT (default: /tmp/streaming-splat)
     VISIBILITY_TIMEOUT_SECONDS (default: 300) - New timeout to set on each renewal
@@ -77,6 +77,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
+from botocore.exceptions import ClientError
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -104,11 +105,11 @@ os.environ.setdefault("AWS_REGION", "us-east-1")
 # These defaults mimic the behavior of imds_extract.py
 DEFAULTS = {
     "API_BASE_URL": "https://api-dev.openspacenexus.store",
-    "QUEUE_NAME": "splatial-dev-splat-processing-queue.fifo",
-    "DLQ_NAME": "splatial-dev-splat-processing-dlq.fifo",
+    "QUEUE_NAME": "splatial-dev-splat-processing-queue",
+    "DLQ_NAME": "splatial-dev-splat-processing-dlq",
     "WORKER_POLL_INTERVAL_SECONDS": "20",
     "VISIBILITY_EXTENSION_INTERVAL_SECONDS": "150",  # How often to renew
-    "VISIBILITY_TIMEOUT_SECONDS": "300",  # What timeout value to set on renewal
+    "VISIBILITY_TIMEOUT_SECONDS": "300",  # What timeout value to set on each renewal
     "HEARTBEAT_INTERVAL_SECONDS": "30",
     "DELETE_INVALID_MESSAGES": "true",
     "SUCCESS_RATE": "1.0",
@@ -285,8 +286,8 @@ INSTANCE_LIFECYCLE = instance_lifecycle
 
 # Runtime Config Variables
 API_BASE_URL = os.getenv("API_BASE_URL", "").rstrip("/")
-QUEUE_NAME = os.getenv("QUEUE_NAME", "splatial-dev-splat-processing-queue.fifo")
-DLQ_NAME = os.getenv("DLQ_NAME", "splatial-dev-splat-processing-dlq.fifo")
+QUEUE_NAME = os.getenv("QUEUE_NAME", "splatial-dev-splat-processing-queue")
+DLQ_NAME = os.getenv("DLQ_NAME", "splatial-dev-splat-processing-dlq")
 
 POLL_WAIT_TIME = getenv_int("WORKER_POLL_INTERVAL_SECONDS", 20)
 VISIBILITY_TIMEOUT_SECONDS = getenv_int("VISIBILITY_TIMEOUT_SECONDS", 300)
@@ -1002,11 +1003,28 @@ def _safe_extract_zip(zip_path: str, dest_dir: str) -> None:
                 raise ValueError(f"Unsafe zip member path: {member.filename!r}")
         zf.extractall(abs_dest)
 
+IMAGE_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff"})
+
+
+def _count_images_in_directory(dir_path: str) -> int:
+    """Count image files directly inside a directory (non-recursive)."""
+    try:
+        return sum(
+            1
+            for entry in os.listdir(dir_path)
+            if os.path.isfile(os.path.join(dir_path, entry))
+            and os.path.splitext(entry)[1].lower() in IMAGE_EXTENSIONS
+        )
+    except OSError:
+        return 0
+
+
 def _find_scene_directory(extracted_dir: str) -> str:
     """
     Find the actual scene directory containing either:
     - sparse/ folder (COLMAP data)
     - transforms_train.json file (Blender/NeRF data)
+    - a folder of raw images (e.g. Google Drive photo ZIPs)
     
     This handles cases where the ZIP contains a nested folder structure.
     For example, if the ZIP contains "bicycle/sparse/..." the actual scene
@@ -1049,10 +1067,42 @@ def _find_scene_directory(extracted_dir: str) -> str:
             valid_dirs.append(subdir)
     
     if len(valid_dirs) == 0:
-        # No valid scene directory found - provide helpful error message
+        # Raw image folders (common for Google Drive photo ZIPs)
+        root_image_count = _count_images_in_directory(extracted_dir)
+        if root_image_count > 0:
+            log.info(
+                "Using extraction root as image dataset (%d image(s) at top level)",
+                root_image_count,
+            )
+            return extracted_dir
+
+        image_dirs = [
+            (subdir, _count_images_in_directory(subdir))
+            for subdir in subdirs
+        ]
+        image_dirs = [(path, count) for path, count in image_dirs if count > 0]
+        if len(image_dirs) == 1:
+            chosen_path, image_count = image_dirs[0]
+            log.info(
+                "Using image folder %s (%d image(s))",
+                os.path.basename(chosen_path),
+                image_count,
+            )
+            return chosen_path
+        if len(image_dirs) > 1:
+            chosen_path, image_count = max(image_dirs, key=lambda item: item[1])
+            log.warning(
+                "Found multiple image folders %s; using %s (%d image(s))",
+                [os.path.basename(path) for path, _ in image_dirs],
+                os.path.basename(chosen_path),
+                image_count,
+            )
+            return chosen_path
+
         raise ValueError(
             f"Could not find valid scene directory in {extracted_dir}. "
-            f"Expected to find 'sparse/' folder (COLMAP) or 'transforms_train.json' file (Blender/NeRF). "
+            f"Expected 'sparse/' (COLMAP), 'transforms_train.json' (Blender/NeRF), "
+            f"or a folder of images. "
             f"Found {len(subdirs)} subdirectories: {[os.path.basename(d) for d in subdirs[:5]]}"
         )
     
@@ -1090,8 +1140,19 @@ def download_and_extract_zip_input(
     if interrupt_event and interrupt_event.is_set():
         raise RuntimeError("Interrupted before download")
 
-    log.info("Downloading zip input: s3://%s/%s -> %s", item.input_bucket, item.input_prefix_or_key, zip_local_path)
-    s3.download_file(item.input_bucket, item.input_prefix_or_key, zip_local_path)
+    s3_uri = f"s3://{item.input_bucket}/{item.input_prefix_or_key}"
+    log.info("Downloading zip input: %s -> %s", s3_uri, zip_local_path)
+    try:
+        s3.download_file(item.input_bucket, item.input_prefix_or_key, zip_local_path)
+    except ClientError as e:
+        error_code = e.response.get("Error", {}).get("Code", "")
+        if error_code in ("404", "NoSuchKey", "NotFound"):
+            raise ValueError(
+                f"Input file not found in S3: {s3_uri}. "
+                "The upload may not have completed, or this scene references a key that was never written. "
+                "Each scene has its own S3 key even when importing the same Google Drive file."
+            ) from e
+        raise
 
     if interrupt_event and interrupt_event.is_set():
         raise RuntimeError("Interrupted before unzip")
@@ -1900,8 +1961,7 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
                 log.error("Invalid ZIP file: %s", e)
                 dl_ok, dl_error = False, "INVALID_INPUT"
             except ValueError as e:
-                # Raised for unsafe zip paths (Zip Slip prevention)
-                log.error("Invalid ZIP contents (unsafe paths): %s", e)
+                log.error("Invalid ZIP input: %s", e)
                 dl_ok, dl_error = False, "INVALID_INPUT"
             except RuntimeError as e:
                 # Raised for interruption

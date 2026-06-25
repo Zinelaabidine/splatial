@@ -1,3 +1,5 @@
+import type { SceneManagementStatus } from "@/types/api";
+
 /** Scene lifecycle per design handoff. */
 export type SceneStatus =
   | "draft"
@@ -49,6 +51,8 @@ export type DashboardScene = {
   sceneId?: string;
   title: string;
   status: SceneStatus;
+  /** Original API status — used for polling decisions. */
+  apiStatus?: SceneManagementStatus;
   /** Bottom caption line (mono, muted). */
   caption: string;
   preview?: SplatPreviewTint;

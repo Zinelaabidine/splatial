@@ -9,7 +9,7 @@ const TABLE  = process.env.SCENES_TABLE_NAME;
 // Maps worker execution status → scene management status
 const STATUS_MAP = {
   RUNNING:     "PROCESSING",
-  SUCCEEDED:   "COMPLETED",
+  SUCCEEDED:   "READY",
   FAILED:      "FAILED",
   INTERRUPTED: "QUEUED",  // message will be re-delivered; worker sets RUNNING again
 };
