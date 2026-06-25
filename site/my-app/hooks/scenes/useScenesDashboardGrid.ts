@@ -8,6 +8,7 @@ import {
   isActiveSceneStatus,
   POLL_INTERVAL_MS,
 } from "@/lib/scenes/sceneMappers";
+import { submitJob } from "@/server/services/jobsService";
 import { listScenes } from "@/server/services/scenesService";
 import type { DashboardScene } from "@/types/splatworks";
 
@@ -16,6 +17,8 @@ export function useScenesDashboardGrid(search: string) {
   const [scenes, setScenes] = useState<DashboardScene[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [submittingId, setSubmittingId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortCtrlRef = useRef<AbortController | null>(null);
 
@@ -66,14 +69,39 @@ export function useScenesDashboardGrid(search: string) {
   const openScene = (scene: DashboardScene) => {
     if (scene.status === "completed" && scene.sceneId) {
       router.push(`/scenes/view?id=${scene.sceneId}`);
-      return;
     }
-    if (scene.status === "draft") {
-      router.push("/scenes/create");
-      return;
-    }
-    console.info("[Splatworks] Scene detail not implemented", scene.id);
   };
+
+  const submitScene = useCallback(
+    async (scene: DashboardScene) => {
+      if (!scene.sceneId || submittingId) return;
+      setSubmittingId(scene.sceneId);
+      setActionError(null);
+      setScenes((prev) =>
+        prev.map((s) =>
+          s.sceneId === scene.sceneId
+            ? {
+                ...s,
+                status: "queued",
+                apiStatus: "QUEUED",
+                caption: "In queue",
+              }
+            : s,
+        ),
+      );
+      try {
+        await submitJob(scene.sceneId);
+        await fetchScenes(true);
+      } catch (err) {
+        console.error("[useScenesDashboardGrid] submit failed", err);
+        setActionError("Failed to submit scene. Please try again.");
+        await fetchScenes(true);
+      } finally {
+        setSubmittingId(null);
+      }
+    },
+    [fetchScenes, submittingId],
+  );
 
   const createScene = () => {
     router.push("/scenes/create");
@@ -83,8 +111,12 @@ export function useScenesDashboardGrid(search: string) {
     scenes: filteredScenes,
     loading,
     error,
+    actionError,
+    submittingId,
     fetchScenes,
     openScene,
+    submitScene,
     createScene,
+    clearActionError: () => setActionError(null),
   };
 }

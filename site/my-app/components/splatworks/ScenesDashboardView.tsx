@@ -8,8 +8,17 @@ import { useScenesDashboardGrid } from "@/hooks/scenes/useScenesDashboardGrid";
 
 export default function ScenesDashboardView() {
   const { search } = usePageSearch("Search scenes");
-  const { scenes, loading, error, fetchScenes, openScene } =
-    useScenesDashboardGrid(search);
+  const {
+    scenes,
+    loading,
+    error,
+    actionError,
+    submittingId,
+    fetchScenes,
+    openScene,
+    submitScene,
+    clearActionError,
+  } = useScenesDashboardGrid(search);
 
   const emptyMessage = search.trim()
     ? "No scenes match your search."
@@ -33,19 +42,34 @@ export default function ScenesDashboardView() {
             Retry
           </button>
         </div>
-      ) : !loading && scenes.length === 0 ? (
+      ) : actionError ? (
+        <div className="mb-4 rounded-xl border border-red-900/50 bg-red-950/40 px-5 py-4 text-sm text-red-300">
+          {actionError}{" "}
+          <button
+            type="button"
+            onClick={clearActionError}
+            className="font-medium underline underline-offset-2 hover:text-red-200"
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
+
+      {!error && !loading && scenes.length === 0 ? (
         <p className="py-16 text-center text-sm text-[#909090]">{emptyMessage}</p>
-      ) : (
+      ) : !error && scenes.length > 0 ? (
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
           {scenes.map((scene) => (
             <DashboardSceneCard
               key={scene.id}
               scene={scene}
               onClick={openScene}
+              onSubmitScene={submitScene}
+              submitting={submittingId === scene.sceneId}
             />
           ))}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

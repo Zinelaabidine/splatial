@@ -1,7 +1,10 @@
 "use client";
 
+import { Send } from "lucide-react";
+
 import PointCloudThumbnail from "@/components/splatworks/PointCloudThumbnail";
 import StatusDot, { STATUS_LABELS } from "@/components/splatworks/StatusDot";
+import { Button } from "@/components/ui/button";
 import type { DashboardScene, SceneStatus } from "@/types/splatworks";
 
 const DARK_STATUS: Record<
@@ -18,23 +21,42 @@ const DARK_STATUS: Record<
 type DashboardSceneCardProps = {
   scene: DashboardScene;
   onClick: (scene: DashboardScene) => void;
+  onSubmitScene?: (scene: DashboardScene) => void;
+  submitting?: boolean;
 };
 
-export default function DashboardSceneCard({ scene, onClick }: DashboardSceneCardProps) {
+function canSubmitScene(scene: DashboardScene): boolean {
+  return scene.apiStatus === "UPLOADED" || scene.apiStatus === "FAILED";
+}
+
+export default function DashboardSceneCard({
+  scene,
+  onClick,
+  onSubmitScene,
+  submitting = false,
+}: DashboardSceneCardProps) {
   const styles = DARK_STATUS[scene.status];
+  const isViewable = scene.status === "completed";
+  const showSubmit = canSubmitScene(scene);
 
   return (
     <article
-      role="button"
-      tabIndex={0}
-      onClick={() => onClick(scene)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onClick(scene);
-        }
-      }}
-      className="cursor-pointer overflow-hidden rounded-xl bg-[#212121] transition-transform duration-200 hover:-translate-y-1"
+      role={isViewable ? "button" : undefined}
+      tabIndex={isViewable ? 0 : undefined}
+      onClick={isViewable ? () => onClick(scene) : undefined}
+      onKeyDown={
+        isViewable
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onClick(scene);
+              }
+            }
+          : undefined
+      }
+      className={`overflow-hidden rounded-xl bg-[#212121] transition-transform duration-200 ${
+        isViewable ? "cursor-pointer hover:-translate-y-1" : ""
+      }`}
     >
       {scene.status === "completed" && scene.preview ? (
         <PointCloudThumbnail
@@ -55,6 +77,24 @@ export default function DashboardSceneCard({ scene, onClick }: DashboardSceneCar
       <div className="p-3">
         <h3 className="truncate text-[15px] font-semibold text-white">{scene.title}</h3>
         <p className="mt-1 font-sw-mono text-xs text-[#909090]">{scene.caption}</p>
+        {showSubmit && (
+          <Button
+            size="sm"
+            disabled={submitting}
+            onClick={(e) => {
+              e.stopPropagation();
+              onSubmitScene?.(scene);
+            }}
+            className="mt-3 w-full bg-emerald-600 text-white hover:bg-emerald-700"
+          >
+            <Send data-icon="inline-start" />
+            {submitting
+              ? "Submitting…"
+              : scene.apiStatus === "FAILED"
+                ? "Retry"
+                : "Submit for processing"}
+          </Button>
+        )}
       </div>
     </article>
   );
@@ -81,7 +121,11 @@ function StatusTile({
         style={{ color: textColor }}
       >
         <StatusDot status={scene.status} pulse={pulse} className="h-1.5 w-1.5" />
-        {STATUS_LABELS[scene.status]}
+        {scene.apiStatus === "UPLOADED"
+          ? "Ready to submit"
+          : scene.apiStatus === "PENDING_UPLOAD"
+            ? "Importing"
+            : STATUS_LABELS[scene.status]}
       </span>
 
       {scene.status === "training" && scene.progressPercent != null && (
