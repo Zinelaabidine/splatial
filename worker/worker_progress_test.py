@@ -1,31 +1,40 @@
 #!/usr/bin/env python3
 """
-Progress-test SQS worker
-------------------------
+Progress-test SQS worker (CPU-only)
+---------------------------------
 Lightweight worker for testing live progress updates without running 3DGS training.
+
+**No GPU required.** This script only sleeps and sends HTTP PATCH/heartbeat requests.
+It does not import PyTorch, CUDA, COLMAP, train.py, or the GPU worker AMI stack.
+Runs on any machine with Python 3 + boto3 + requests (e.g. t3.micro, your laptop).
 
 Polls the same SQS queue as worker.py, walks the full 7-phase progress pipeline
 (INIT → PREPARATION → COLMAP → TRAINING → POST_PROCESSING → EXPORT → FINALIZE),
 and PATCHes / heartbeats the backend on a fixed cadence. No S3 download, COLMAP,
 or train.py — total simulated runtime defaults to 2 minutes.
 
-Usage (local):
+Minimal install (CPU instance or laptop):
+    pip install -r requirements-progress-test.txt
+
+Usage (local or CPU EC2):
     cd worker
     RUN_ONCE=true python3 worker_progress_test.py
 
-    # Custom duration / update cadence
-    SIM_TOTAL_SECONDS=120 SIM_UPDATE_INTERVAL_SECONDS=5 python3 worker_progress_test.py
+    # On a manual CPU test box — do not terminate the instance after the job
+    SELF_TERMINATE=false RUN_ONCE=true python3 worker_progress_test.py
 
-Environment variables (same names as worker.py where applicable):
+Environment variables:
     API_BASE_URL, QUEUE_NAME, SQS_QUEUE_URL / QURL
     SIM_TOTAL_SECONDS (default: 120)
     SIM_UPDATE_INTERVAL_SECONDS (default: 5)
     HEARTBEAT_INTERVAL_SECONDS (default: 30)
-    RUN_ONCE (default: true) — exit after one message (recommended locally)
+    RUN_ONCE (default: true) — exit poll loop after one message
+    SELF_TERMINATE (default: false) — terminate EC2 after job (ASG one-shot mode)
     UPLOAD_PLACEHOLDER (default: false) — upload manifest.json + output.splat stub
     SUCCESS_RATE (default: 1.0)
+    AWS_REGION (default: us-east-1, auto-detected on EC2 via IMDSv2)
     VISIBILITY_TIMEOUT_SECONDS, VISIBILITY_EXTENSION_INTERVAL_SECONDS
-    IDLE_EXIT_SECONDS (default: 0 locally useful; 120 on EC2)
+    IDLE_EXIT_SECONDS (default: 0)
     LOG_LEVEL
 """
 
@@ -69,6 +78,7 @@ DEFAULTS = {
     "SIM_TOTAL_SECONDS": "120",
     "SIM_UPDATE_INTERVAL_SECONDS": "5",
     "RUN_ONCE": "true",
+    "SELF_TERMINATE": "false",
     "UPLOAD_PLACEHOLDER": "false",
     "IDLE_EXIT_SECONDS": "0",
     "DELETE_MESSAGE_MAX_RETRIES": "5",
@@ -84,8 +94,7 @@ logging.basicConfig(
 )
 log = logging.getLogger("progress-test-worker")
 
-import aws_config  # noqa: E402
-
+# HTTP session (also used for IMDSv2 on EC2)
 session = requests.Session()
 retry_strategy = Retry(
     total=3,
@@ -96,6 +105,62 @@ retry_strategy = Retry(
 adapter = HTTPAdapter(max_retries=retry_strategy)
 session.mount("http://", adapter)
 session.mount("https://", adapter)
+
+
+def _imds_token() -> Optional[str]:
+    try:
+        r = session.put(
+            "http://169.254.169.254/latest/api/token",
+            headers={"X-aws-ec2-metadata-token-ttl-seconds": "21600"},
+            timeout=2,
+        )
+        r.raise_for_status()
+        return r.text
+    except Exception:
+        return None
+
+
+def is_ec2() -> bool:
+    return _imds_token() is not None
+
+
+def get_instance_metadata() -> Dict[str, str]:
+    token = _imds_token()
+    if not token:
+        return {"instance_id": "local", "region": os.getenv("AWS_REGION", "us-east-1")}
+
+    headers = {"X-aws-ec2-metadata-token": token}
+    instance_id = "unknown"
+    region = os.getenv("AWS_REGION", "us-east-1")
+    try:
+        r = session.get(
+            "http://169.254.169.254/latest/meta-data/instance-id",
+            headers=headers,
+            timeout=2,
+        )
+        if r.status_code == 200:
+            instance_id = r.text.strip()
+    except Exception:
+        pass
+    try:
+        r = session.get(
+            "http://169.254.169.254/latest/dynamic/instance-identity/document",
+            headers=headers,
+            timeout=2,
+        )
+        if r.status_code == 200:
+            region = r.json().get("region") or region
+    except Exception:
+        pass
+    return {"instance_id": instance_id, "region": region}
+
+
+def get_boto3_session():
+    import boto3
+
+    meta = get_instance_metadata()
+    region = meta["region"] or os.getenv("AWS_REGION", "us-east-1")
+    return boto3.Session(region_name=region)
 
 
 def getenv_int(name: str, default: int) -> int:
@@ -115,14 +180,13 @@ def getenv_bool(name: str, default: bool) -> bool:
     return v.strip().lower() in ("1", "true", "yes", "y", "on")
 
 
-aws_session = aws_config.get_session()
-AWS_REGION = aws_session.region_name
+aws_session = get_boto3_session()
+AWS_REGION = aws_session.region_name or os.getenv("AWS_REGION", "us-east-1")
 sqs = aws_session.client("sqs")
-s3 = aws_session.client("s3")
 
-instance_metadata = aws_config.get_instance_metadata()
+instance_metadata = get_instance_metadata()
 INSTANCE_ID = instance_metadata["instance_id"]
-IS_EC2 = aws_config.is_ec2()
+IS_EC2 = is_ec2()
 
 API_BASE_URL = os.getenv("API_BASE_URL", "").rstrip("/")
 QUEUE_NAME = os.getenv("QUEUE_NAME", "splatial-dev-splat-processing-queue")
@@ -137,6 +201,7 @@ SUCCESS_RATE = float(os.getenv("SUCCESS_RATE", "1.0"))
 SIM_TOTAL_SECONDS = max(1, getenv_int("SIM_TOTAL_SECONDS", 120))
 SIM_UPDATE_INTERVAL_SECONDS = max(1, getenv_int("SIM_UPDATE_INTERVAL_SECONDS", 5))
 RUN_ONCE = getenv_bool("RUN_ONCE", True)
+SELF_TERMINATE = getenv_bool("SELF_TERMINATE", False)
 UPLOAD_PLACEHOLDER = getenv_bool("UPLOAD_PLACEHOLDER", False)
 IDLE_EXIT_SECONDS = max(0, getenv_int("IDLE_EXIT_SECONDS", 0))
 WORKSPACE_ROOT = os.getenv("WORKSPACE_ROOT", "/tmp/streaming-splat-progress-test")
@@ -184,12 +249,14 @@ def _phase_duration_seconds(phase: str, total_seconds: int) -> int:
 
 
 def terminate_self(reason: str, decrement_desired: bool = True) -> None:
+    if not SELF_TERMINATE:
+        log.info("SELF_TERMINATE=false; keeping instance running (%s)", reason)
+        return
     if not IS_EC2:
         log.info("Not on EC2; skipping self-termination (%s)", reason)
         return
 
-    meta = aws_config.get_instance_metadata()
-    instance_id = meta["instance_id"]
+    instance_id = get_instance_metadata()["instance_id"]
     log.warning(
         "Self-termination requested (%s); terminating instance %s",
         reason,
@@ -391,6 +458,7 @@ def upload_placeholder_outputs(item: WorkItem, workspace: str) -> bool:
         log.info("No output bucket/prefix; skipping placeholder upload")
         return True
     try:
+        s3 = aws_session.client("s3")
         os.makedirs(os.path.join(workspace, "outputs"), exist_ok=True)
         manifest_path = os.path.join(workspace, "outputs/manifest.json")
         with open(manifest_path, "w", encoding="utf-8") as f:
@@ -684,10 +752,16 @@ def main() -> None:
         log.error("No queue URL; set SQS_QUEUE_URL or QUEUE_NAME")
         return
 
-    log.info("Progress-test worker started")
+    log.info("Progress-test worker started (CPU-only, no GPU dependencies)")
     log.info("  queue=%s", qurl)
     log.info("  SIM_TOTAL_SECONDS=%d SIM_UPDATE_INTERVAL_SECONDS=%d", SIM_TOTAL_SECONDS, SIM_UPDATE_INTERVAL_SECONDS)
-    log.info("  RUN_ONCE=%s IS_EC2=%s UPLOAD_PLACEHOLDER=%s", RUN_ONCE, IS_EC2, UPLOAD_PLACEHOLDER)
+    log.info(
+        "  RUN_ONCE=%s SELF_TERMINATE=%s IS_EC2=%s UPLOAD_PLACEHOLDER=%s",
+        RUN_ONCE,
+        SELF_TERMINATE,
+        IS_EC2,
+        UPLOAD_PLACEHOLDER,
+    )
 
     last_received_time = time.time()
     poll_count = 0
@@ -729,7 +803,7 @@ def main() -> None:
             log.warning("Invalid message %s", msg_id)
             if DELETE_INVALID_MESSAGES and receipt:
                 delete_message_with_retries(sqs, qurl, receipt, msg_id)
-            if IS_EC2:
+            if IS_EC2 and SELF_TERMINATE:
                 terminate_self("invalid_message_processed", decrement_desired=True)
             return
 
@@ -768,7 +842,7 @@ def main() -> None:
         elif not ok and not was_interrupted:
             log.info("Processing failed; message will retry")
 
-        if IS_EC2:
+        if IS_EC2 and SELF_TERMINATE:
             if ok:
                 terminate_self("job_success", decrement_desired=True)
             elif was_interrupted:
@@ -776,7 +850,7 @@ def main() -> None:
             else:
                 terminate_self("job_failure", decrement_desired=True)
         else:
-            log.info("Local run complete (success=%s interrupted=%s)", ok, was_interrupted)
+            log.info("Job finished (success=%s interrupted=%s); instance kept running", ok, was_interrupted)
 
         if RUN_ONCE:
             return
