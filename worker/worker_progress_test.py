@@ -6,7 +6,8 @@ Lightweight worker for testing live progress updates without running 3DGS traini
 
 **No GPU required.** This script only sleeps and sends HTTP PATCH/heartbeat requests.
 It does not import PyTorch, CUDA, COLMAP, train.py, or the GPU worker AMI stack.
-Runs on any machine with Python 3 + boto3 + requests (e.g. t3.micro, your laptop).
+Runs on any CPU instance with **Python 3.7+**, boto3, and requests (e.g. t3.micro on
+Amazon Linux 2). No GPU, CUDA, or training stack required.
 
 Polls the same SQS queue as worker.py, walks the full 7-phase progress pipeline
 (INIT → PREPARATION → COLMAP → TRAINING → POST_PROCESSING → EXPORT → FINALIZE),
@@ -14,7 +15,8 @@ and PATCHes / heartbeats the backend on a fixed cadence. No S3 download, COLMAP,
 or train.py — total simulated runtime defaults to 2 minutes.
 
 Minimal install (CPU instance or laptop):
-    pip install -r requirements-progress-test.txt
+    python3 --version          # need 3.7+ (AL2 default is OK)
+    pip3 install -r requirements-progress-test.txt
 
 Usage (local or CPU EC2):
     cd worker
