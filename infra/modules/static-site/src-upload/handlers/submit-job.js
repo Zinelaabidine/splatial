@@ -17,6 +17,14 @@ const OUTPUT_BUCKET  = process.env.SPLAT_SCENES_BUCKET_NAME;
 const API_BASE_URL   = (process.env.API_BASE_URL ?? "").replace(/\/$/, "");
 const MAX_ATTEMPTS   = 3;
 
+/** Default training preset; request trainConfig keys override these. */
+const DEFAULT_TRAIN_CONFIG = Object.freeze({
+  iterations:         15000,
+  densify_until_iter: 7000,
+  resolution:         2,
+  sh_degree:          2,
+});
+
 const SUBMITTABLE = new Set(["READY", "FAILED", "UPLOADED"]);
 
 /**
@@ -26,6 +34,8 @@ const SUBMITTABLE = new Set(["READY", "FAILED", "UPLOADED"]);
  * READY, FAILED, or UPLOADED state.
  *
  * Request body: { "sceneId": "...", "trainConfig"?: {} }
+ *
+ * When trainConfig is omitted, defaults are applied (15k iterations, resolution 2, etc.).
  *
  * Success response (202): { "sceneId": "...", "attemptId": "...", "status": "QUEUED" }
  */
@@ -48,6 +58,8 @@ exports.handler = async (event) => {
       (typeof trainConfig !== "object" || Array.isArray(trainConfig) || trainConfig === null)) {
     return response(400, { error: "trainConfig must be a plain object" });
   }
+
+  const resolvedTrainConfig = { ...DEFAULT_TRAIN_CONFIG, ...(trainConfig ?? {}) };
 
   const { Item } = await dynamo.send(
     new GetItemCommand({ TableName: TABLE, Key: { scene_id: { S: sceneId } } })
@@ -152,7 +164,7 @@ exports.handler = async (event) => {
         apiAuthToken:   workerToken,
         queuedAt:       now,
         maxAttempts:    MAX_ATTEMPTS,
-        trainConfig:    trainConfig ?? {},
+        trainConfig:    resolvedTrainConfig,
       }),
     })
   );

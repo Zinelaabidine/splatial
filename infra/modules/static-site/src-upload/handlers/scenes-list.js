@@ -42,6 +42,10 @@ exports.handler = async (event) => {
     status:    item.status?.S     ?? "",
     createdAt: item.created_at?.S ?? "",
     ...(item.ply_key ? { plyKey: item.ply_key.S } : {}),
+    ...(item.progress_percent?.N != null
+      ? { progressPercent: Number(item.progress_percent.N) }
+      : {}),
+    ...(item.progress_phase?.S ? { progressPhase: item.progress_phase.S } : {}),
   }));
 
   // Sort newest-first by createdAt (ISO strings sort lexicographically).

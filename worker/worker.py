@@ -22,11 +22,11 @@ Features:
 Training Mode:
 When the SQS message references a ZIP file (inputPrefix/inputPrefixOrKey ends with .zip):
 1. Downloads and safely extracts the ZIP dataset
-2. Runs train.py with hardcoded parameters:
-   --data_device cpu --sh_degree 2 --densify_until_iter 10000
-   --densify_grad_threshold 0.0003 --test_iterations -1
-3. Streams training logs to worker logger in real-time
-4. Uploads training outputs to S3 (point clouds, configs, etc.)
+2. Runs COLMAP via convert.py when the dataset is a raw image folder (no sparse/ yet)
+3. Runs train.py with hardcoded parameters:
+   --optimizer_type sparse_adam --disable_viewer
+4. Streams training logs to worker logger in real-time
+5. Uploads training outputs to S3 (point clouds, configs, etc.)
 
 Usage:
     # Run with defaults (RUN_ENV=local, AWS_PROFILE=default, AWS_REGION=us-east-1)
@@ -320,10 +320,37 @@ WORKSPACE_ROOT = os.getenv("WORKSPACE_ROOT", "/tmp/streaming-splat")
 # ]
 
 TRAINING_PARAMS = [
-    "--optimizer_type", "sparse_adam"
+    "--optimizer_type", "sparse_adam",
+    "--disable_viewer",  # headless workers; avoids port 6009 bind conflicts
 ]
+
+# Default training quality/speed preset; SQS trainConfig keys override these.
+DEFAULT_TRAIN_CONFIG: Dict[str, Any] = {
+    "iterations": 15000,
+    "densify_until_iter": 7000,
+    "resolution": 2,
+    "sh_degree": 2,
+}
+
+
+def merge_train_config(overrides: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Merge message trainConfig over DEFAULT_TRAIN_CONFIG (None values ignored)."""
+    merged = dict(DEFAULT_TRAIN_CONFIG)
+    if overrides:
+        for key, value in overrides.items():
+            if value is not None:
+                merged[key] = value
+    return merged
 # How many recent log lines to capture for error reporting
 TRAINING_LOG_TAIL_LINES = 50
+COLMAP_LOG_TAIL_LINES = 50
+COLMAP_EXECUTABLE = os.getenv("COLMAP_EXECUTABLE", "").strip()
+COLMAP_NO_GPU = getenv_bool("COLMAP_NO_GPU", False)
+
+
+def _gaussian_splatting_root() -> str:
+    """Directory containing train.py / convert.py (co-located with worker.py on AMI)."""
+    return os.path.dirname(os.path.abspath(__file__))
 
 def sanitize_output_path(s: str) -> str:
     """
@@ -962,6 +989,12 @@ def _test_train_config_to_args() -> None:
     
     log.info("train_config_to_args self-tests passed")
 
+    assert merge_train_config(None) == DEFAULT_TRAIN_CONFIG
+    assert merge_train_config({}) == DEFAULT_TRAIN_CONFIG
+    assert merge_train_config({"iterations": 30000})["iterations"] == 30000
+    assert merge_train_config({"iterations": 30000})["resolution"] == 2
+    log.info("merge_train_config self-tests passed")
+
 _test_train_config_to_args()
 
 # ----------------------------
@@ -1114,6 +1147,67 @@ def _find_scene_directory(extracted_dir: str) -> str:
         )
     
     return valid_dirs[0]
+
+
+def _scene_has_colmap_output(scene_dir: str) -> bool:
+    """Return True when scene_dir already contains a usable COLMAP sparse reconstruction."""
+    sparse_dir = os.path.join(scene_dir, "sparse")
+    if not os.path.isdir(sparse_dir):
+        return False
+    sparse0 = os.path.join(sparse_dir, "0")
+    if os.path.isdir(sparse0):
+        return True
+    try:
+        return any(
+            name.startswith(("cameras", "images", "points3D"))
+            for name in os.listdir(sparse_dir)
+        )
+    except OSError:
+        return False
+
+
+def _scene_is_blender_dataset(scene_dir: str) -> bool:
+    return os.path.isfile(os.path.join(scene_dir, "transforms_train.json"))
+
+
+def _scene_needs_colmap(scene_dir: str) -> bool:
+    """Raw image folders need COLMAP; pre-built COLMAP and Blender datasets do not."""
+    if _scene_is_blender_dataset(scene_dir):
+        return False
+    return not _scene_has_colmap_output(scene_dir)
+
+
+def _prepare_colmap_input_dir(scene_dir: str) -> None:
+    """
+    Ensure convert.py's expected layout: scene_dir/input/ contains the source images.
+
+    When images live directly in scene_dir (typical Google Drive photo ZIPs), symlinks
+    them into input/ to avoid duplicating large datasets.
+    """
+    input_dir = os.path.join(scene_dir, "input")
+    if os.path.isdir(input_dir) and _count_images_in_directory(input_dir) > 0:
+        log.info("COLMAP input directory already populated: %s", input_dir)
+        return
+
+    os.makedirs(input_dir, exist_ok=True)
+    linked = 0
+    for entry in os.listdir(scene_dir):
+        src = os.path.join(scene_dir, entry)
+        if not os.path.isfile(src):
+            continue
+        if os.path.splitext(entry)[1].lower() not in IMAGE_EXTENSIONS:
+            continue
+        dst = os.path.join(input_dir, entry)
+        if os.path.lexists(dst):
+            continue
+        os.symlink(os.path.abspath(src), dst)
+        linked += 1
+
+    if linked == 0:
+        raise ValueError(f"No images found to prepare COLMAP input in {scene_dir}")
+
+    log.info("Prepared COLMAP input directory with %d image(s): %s", linked, input_dir)
+
 
 def download_and_extract_zip_input(
     item: WorkItem,
@@ -1347,14 +1441,17 @@ def run_training_subprocess(
             - log_tail: Last N lines of training logs for error reporting
     """
     # Build command with sys.executable to use same Python interpreter
-    train_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "train.py")
+    train_script = os.path.join(_gaussian_splatting_root(), "train.py")
     
-    # Convert trainConfig to CLI args if present
-    extra_args = train_config_to_args(train_config) if train_config else []
+    effective_config = merge_train_config(train_config)
+    extra_args = train_config_to_args(effective_config)
+    if train_config:
+        log.info("Training trainConfig overrides: %s", train_config)
+    log.info("Effective training config: %s", effective_config)
     if extra_args:
-        log.info("Training extra args from trainConfig: %s", extra_args)
-    
-    # Build final command: base params + trainConfig overrides
+        log.info("Training config args: %s", extra_args)
+
+    # Build final command: base params + merged trainConfig
     cmd = [
         sys.executable,
         train_script,
@@ -1479,6 +1576,112 @@ def run_training_subprocess(
             except Exception:
                 pass
         return False, output_folder, list(log_tail) + [f"Exception: {e}"]
+
+
+def run_colmap_subprocess(
+    scene_dir: str,
+    interrupt_event: threading.Event,
+    heartbeat_callback: Optional[callable] = None,
+) -> Tuple[bool, List[str]]:
+    """
+    Run gaussian-splatting convert.py to produce COLMAP sparse reconstruction in scene_dir.
+
+    Returns:
+        Tuple[bool, List[str]]: (success, log_tail)
+    """
+    gs_root = _gaussian_splatting_root()
+    convert_script = os.path.join(gs_root, "convert.py")
+    if not os.path.isfile(convert_script):
+        msg = f"convert.py not found at {convert_script}"
+        log.error(msg)
+        return False, [msg]
+
+    cmd = [sys.executable, convert_script, "-s", scene_dir]
+    if COLMAP_EXECUTABLE:
+        cmd.extend(["--colmap_executable", COLMAP_EXECUTABLE])
+    if COLMAP_NO_GPU:
+        cmd.append("--no_gpu")
+
+    log.info("=" * 60)
+    log.info("Starting COLMAP Conversion")
+    log.info("=" * 60)
+    log.info("Python: %s", sys.executable)
+    log.info("Script: %s", os.path.basename(convert_script))
+    log.info("Source: %s", scene_dir)
+    log.info("Full command: %s", " ".join(cmd))
+    log.info("=" * 60)
+
+    env = os.environ.copy()
+    env["PYTHONUNBUFFERED"] = "1"
+    log_tail: deque = deque(maxlen=COLMAP_LOG_TAIL_LINES)
+
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            env=env,
+            cwd=gs_root,
+        )
+    except Exception as e:
+        log.error("Failed to start COLMAP subprocess: %s", e)
+        return False, [f"Failed to start COLMAP: {e}"]
+
+    last_heartbeat_time = time.time()
+    heartbeat_interval = HEARTBEAT_INTERVAL_SECONDS
+
+    try:
+        while True:
+            if interrupt_event.is_set():
+                log.warning("Interruption detected; terminating COLMAP subprocess")
+                proc.terminate()
+                try:
+                    proc.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    log.warning("COLMAP subprocess did not terminate gracefully; killing")
+                    proc.kill()
+                    proc.wait(timeout=5)
+                return False, list(log_tail)
+
+            line = proc.stdout.readline()
+            if line:
+                line = line.rstrip()
+                log_tail.append(line)
+                print(line, flush=True)
+
+            if proc.poll() is not None and not line:
+                break
+
+            now = time.time()
+            if heartbeat_callback and (now - last_heartbeat_time) >= heartbeat_interval:
+                heartbeat_callback()
+                last_heartbeat_time = now
+
+        exit_code = proc.returncode
+        log.info("COLMAP subprocess exited with code %d", exit_code)
+        if exit_code != 0:
+            return False, list(log_tail)
+
+        if not _scene_has_colmap_output(scene_dir):
+            msg = f"COLMAP finished but sparse reconstruction missing in {scene_dir}"
+            log.error(msg)
+            return False, list(log_tail) + [msg]
+
+        return True, list(log_tail)
+
+    except Exception as e:
+        log.exception("Error during COLMAP subprocess execution: %s", e)
+        try:
+            proc.terminate()
+            proc.wait(timeout=5)
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+        return False, list(log_tail) + [f"Exception: {e}"]
 
 
 def upload_training_outputs(
@@ -2005,15 +2208,34 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
         _send_heartbeat_if_due("INIT", overall_percent("INIT", 100), force=True)
         log.info("Download complete")
 
-        # Phase 1.5: PREPARATION placeholder (lightweight stage)
-        log.info("Starting PREPARATION phase (placeholder)")
+        # Phase 1.5: PREPARATION — lay out images for COLMAP when needed
+        needs_colmap = bool(extracted_folder and _scene_needs_colmap(extracted_folder))
+        if needs_colmap:
+            log.info("Starting PREPARATION phase: preparing COLMAP input layout")
+        elif extracted_folder:
+            log.info("Scene already has COLMAP/Blender structure; skipping PREPARATION")
+        else:
+            log.info("Starting PREPARATION phase (no dataset path; placeholder)")
+
         patch_attempt(attempt_id, token, {
             "progressPhase": "PREPARATION",
             "progressPercent": overall_percent("PREPARATION", 0),
         }, api_base_url=api_url)
         _send_heartbeat_if_due("PREPARATION", overall_percent("PREPARATION", 0))
-        
-        # Complete PREPARATION phase
+
+        if needs_colmap:
+            try:
+                _prepare_colmap_input_dir(extracted_folder)
+            except ValueError as e:
+                log.error("PREPARATION failed: %s", e)
+                patch_attempt(attempt_id, token, {
+                    "status": "FAILED",
+                    "reason": "INVALID_INPUT",
+                    "errorMessage": str(e),
+                    "progressPhase": "PREPARATION",
+                }, api_base_url=api_url)
+                return False, False
+
         patch_attempt(attempt_id, token, {
             "progressPhase": "PREPARATION",
             "progressPercent": overall_percent("PREPARATION", 100),
@@ -2021,15 +2243,54 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
         _send_heartbeat_if_due("PREPARATION", overall_percent("PREPARATION", 100))
         log.info("PREPARATION phase complete")
 
-        # Phase 1.75: COLMAP placeholder (lightweight stage)
-        log.info("Starting COLMAP phase (placeholder)")
+        # Phase 1.75: COLMAP — run convert.py for raw image datasets
+        if needs_colmap:
+            log.info("Starting COLMAP phase for scene: %s", extracted_folder)
+        elif extracted_folder:
+            log.info("Skipping COLMAP phase; scene already has reconstruction data")
+        else:
+            log.info("Starting COLMAP phase (no dataset path; placeholder)")
+
         patch_attempt(attempt_id, token, {
             "progressPhase": "COLMAP",
             "progressPercent": overall_percent("COLMAP", 0),
         }, api_base_url=api_url)
         _send_heartbeat_if_due("COLMAP", overall_percent("COLMAP", 0))
-        
-        # Complete COLMAP phase
+
+        if needs_colmap:
+            def colmap_heartbeat():
+                _send_heartbeat_if_due("COLMAP", overall_percent("COLMAP", 50))
+
+            colmap_ok, colmap_log_tail = run_colmap_subprocess(
+                scene_dir=extracted_folder,
+                interrupt_event=interrupt_event,
+                heartbeat_callback=colmap_heartbeat,
+            )
+
+            if interrupt_event.is_set() or global_stop.is_set():
+                log.warning("COLMAP was interrupted")
+                patch_attempt(attempt_id, token, {
+                    "status": "INTERRUPTED",
+                    "progressPhase": "COLMAP",
+                    "progressPercent": overall_percent("COLMAP", 50),
+                }, api_base_url=api_url)
+                _release_message_visibility()
+                return False, True
+
+            if not colmap_ok:
+                log.error("COLMAP failed")
+                error_detail = "COLMAP subprocess failed"
+                if colmap_log_tail:
+                    error_detail += "\n\nLast log lines:\n" + "\n".join(colmap_log_tail[-20:])
+                patch_attempt(attempt_id, token, {
+                    "status": "FAILED",
+                    "reason": "WORKER_ERROR",
+                    "errorMessage": error_detail[:2000],
+                    "progressPhase": "COLMAP",
+                    "progressPercent": overall_percent("COLMAP", 50),
+                }, api_base_url=api_url)
+                return False, False
+
         patch_attempt(attempt_id, token, {
             "progressPhase": "COLMAP",
             "progressPercent": overall_percent("COLMAP", 100),
@@ -2642,7 +2903,46 @@ def _test_sanitize_output_path() -> None:
     if failed > 0:
         raise AssertionError(f"sanitize_output_path tests failed: {failed} test(s) did not pass")
 
+
+def _test_colmap_helpers() -> None:
+    """Self-tests for COLMAP scene detection and input preparation."""
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        raw_scene = os.path.join(tmp, "photos")
+        os.makedirs(raw_scene)
+        for name in ("a.jpg", "b.png"):
+            with open(os.path.join(raw_scene, name), "wb") as f:
+                f.write(b"x")
+
+        assert _scene_needs_colmap(raw_scene) is True
+        assert _scene_has_colmap_output(raw_scene) is False
+
+        _prepare_colmap_input_dir(raw_scene)
+        input_dir = os.path.join(raw_scene, "input")
+        assert os.path.isdir(input_dir)
+        assert _count_images_in_directory(input_dir) == 2
+        assert _prepare_colmap_input_dir(raw_scene) is None  # idempotent
+
+        sparse0 = os.path.join(raw_scene, "sparse", "0")
+        os.makedirs(sparse0)
+        with open(os.path.join(sparse0, "cameras.bin"), "wb") as f:
+            f.write(b"")
+        assert _scene_has_colmap_output(raw_scene) is True
+        assert _scene_needs_colmap(raw_scene) is False
+
+        blender_scene = os.path.join(tmp, "blender")
+        os.makedirs(blender_scene)
+        with open(os.path.join(blender_scene, "transforms_train.json"), "w") as f:
+            f.write("{}")
+        assert _scene_is_blender_dataset(blender_scene) is True
+        assert _scene_needs_colmap(blender_scene) is False
+
+    log.info("colmap helper self-tests passed")
+
+
 if __name__ == "__main__":
     _run_simulation_self_tests()
     _test_sanitize_output_path()
+    _test_colmap_helpers()
     main()

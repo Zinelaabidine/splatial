@@ -101,6 +101,10 @@ export function apiSceneToDashboardScene(scene: Scene): DashboardScene {
     status,
     apiStatus: scene.status,
     caption: dashboardCaption(scene, status),
+    ...(scene.progressPercent != null
+      ? { progressPercent: scene.progressPercent }
+      : {}),
+    ...(scene.progressPhase ? { progressPhase: scene.progressPhase } : {}),
   };
 
   if (status === "completed") {

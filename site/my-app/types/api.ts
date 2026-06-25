@@ -139,6 +139,9 @@ export interface Scene {
   createdAt: string;
   /** S3 key in the splat-scenes bucket — present when the scene is READY. */
   plyKey?: string;
+  /** 0–100 while status is PROCESSING (updated by worker PATCH / heartbeat). */
+  progressPercent?: number;
+  progressPhase?: string;
 }
 
 export interface CreateSceneRequest {
