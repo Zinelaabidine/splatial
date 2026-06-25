@@ -13,8 +13,8 @@ const SORT_LABELS = {
 } as const;
 
 export default function SplatsGalleryView() {
-  const { search, setSearch } = usePageSearch("Search splats");
-  const gallery = useSplatsGallery(search, setSearch);
+  const { search } = usePageSearch("Search splats");
+  const gallery = useSplatsGallery(search);
 
   const {
     splats,

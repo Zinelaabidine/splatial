@@ -7,9 +7,9 @@ import { usePageSearch } from "@/components/layout/AppShellContext";
 import { useScenesDashboardGrid } from "@/hooks/scenes/useScenesDashboardGrid";
 
 export default function ScenesDashboardView() {
-  const { search, setSearch } = usePageSearch("Search scenes");
+  const { search } = usePageSearch("Search scenes");
   const { scenes, loading, error, fetchScenes, openScene } =
-    useScenesDashboardGrid(search, setSearch);
+    useScenesDashboardGrid(search);
 
   const emptyMessage = search.trim()
     ? "No scenes match your search."

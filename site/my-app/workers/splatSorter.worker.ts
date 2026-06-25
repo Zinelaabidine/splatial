@@ -18,10 +18,10 @@ const _int32View = new Int32Array(_floatView.buffer);
 
 function floatToHalf(float: number): number {
   _floatView[0] = float;
-  let f = _int32View[0];
+  const f = _int32View[0];
 
   const sign = (f >> 31) & 0x0001;
-  let exp = (f >> 23) & 0x00ff;
+  const exp = (f >> 23) & 0x00ff;
   let frac = f & 0x007fffff;
 
   let newExp: number;

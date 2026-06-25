@@ -15,10 +15,7 @@ const RECENCY: Record<string, number> = {
   "3 weeks ago": 3,
 };
 
-export function useSplatsGallery(
-  search: string,
-  _setSearch: (value: string) => void,
-) {
+export function useSplatsGallery(search: string) {
   const router = useRouter();
   const [sortBy, setSortBy] = useState<SplatsSortOption>("newest");
   const [sortOpen, setSortOpen] = useState(false);
@@ -26,27 +23,24 @@ export function useSplatsGallery(
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    let list = q
+    const list = q
       ? MOCK_SPLATS.filter((s) => s.title.toLowerCase().includes(q))
       : [...MOCK_SPLATS];
 
     switch (sortBy) {
       case "name":
-        list.sort((a, b) => a.title.localeCompare(b.title));
-        break;
+        return [...list].sort((a, b) => a.title.localeCompare(b.title));
       case "oldest":
-        list.sort(
+        return [...list].sort(
           (a, b) =>
             (RECENCY[a.createdAt] ?? 99) - (RECENCY[b.createdAt] ?? 99),
         );
-        break;
       default:
-        list.sort(
+        return [...list].sort(
           (a, b) =>
             (RECENCY[b.createdAt] ?? 0) - (RECENCY[a.createdAt] ?? 0),
         );
     }
-    return list;
   }, [search, sortBy]);
 
   const open3D = (splat: Splat) => {

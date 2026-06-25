@@ -254,7 +254,7 @@ export function useMultipartUpload(
         const partCount = Math.max(1, Math.ceil(file.size / partSize));
         patch(seed.id, { partCount });
 
-        const { sceneId, complete } = await multipartUpload({
+        const { complete } = await multipartUpload({
           file,
           contentType: seed.contentType,
           partSize,

@@ -11,10 +11,7 @@ import {
 import { listScenes } from "@/server/services/scenesService";
 import type { DashboardScene } from "@/types/splatworks";
 
-export function useScenesDashboardGrid(
-  search: string,
-  _setSearch: (value: string) => void,
-) {
+export function useScenesDashboardGrid(search: string) {
   const router = useRouter();
   const [scenes, setScenes] = useState<DashboardScene[]>([]);
   const [loading, setLoading] = useState(true);
