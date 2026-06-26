@@ -90,8 +90,11 @@ resource "aws_launch_template" "worker" {
   tag_specifications {
     resource_type = "instance"
     tags = {
-      Name        = "${local.name_prefix}-splat-worker"
-      Environment = var.environment
+      Name               = "${local.name_prefix}-splat-worker"
+      Environment        = var.environment
+      AllowSelfTerminate = "true"
+      Project            = var.project_name
+      ManagedBy          = "terraform"
     }
   }
 

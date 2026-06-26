@@ -1,5 +1,9 @@
 # ── EC2 Worker Instance Role ─────────────────────────────────────────────────
 
+data "aws_caller_identity" "worker" {
+  provider = aws.this
+}
+
 resource "aws_iam_role" "worker_instance_role" {
   provider = aws.this
 
@@ -83,7 +87,7 @@ resource "aws_iam_role_policy" "worker_policy" {
         Action = [
           "autoscaling:TerminateInstanceInAutoScalingGroup",
         ]
-        Resource = "arn:aws:autoscaling:${var.aws_region}:*:autoScalingGroup:*:autoScalingGroupName/${local.name_prefix}-splat-worker-asg"
+        Resource = "arn:aws:autoscaling:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:autoScalingGroup:*:autoScalingGroupName/${local.name_prefix}-splat-worker-asg"
       },
       {
         # Required to look up the ASG name from the instance's metadata.
@@ -93,12 +97,24 @@ resource "aws_iam_role_policy" "worker_policy" {
         Resource = "*"
       },
       {
-        # EC2 fallback self-termination when not in an ASG.
-        # Scoped to instances tagged as workers in this environment.
+        # EC2 fallback self-termination when not in an ASG (manual test launches).
+        # Requires AllowSelfTerminate=true on the instance (set in launch template).
         Sid      = "EC2SelfTerminate"
         Effect   = "Allow"
         Action   = ["ec2:TerminateInstances"]
-        Resource = "arn:aws:ec2:${var.aws_region}:*:instance/*"
+        Resource = "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:instance/*"
+        Condition = {
+          StringEquals = {
+            "ec2:ResourceTag/AllowSelfTerminate" = "true"
+          }
+        }
+      },
+      {
+        # Backward-compatible path for instances launched with the worker Name tag only.
+        Sid      = "EC2SelfTerminateByName"
+        Effect   = "Allow"
+        Action   = ["ec2:TerminateInstances"]
+        Resource = "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:instance/*"
         Condition = {
           StringEquals = {
             "ec2:ResourceTag/Name" = "${local.name_prefix}-splat-worker"

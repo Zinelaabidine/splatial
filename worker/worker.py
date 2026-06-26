@@ -119,6 +119,7 @@ DEFAULTS = {
     "RUN_ONCE": "false",
     "IDLE_EXIT_SECONDS": "120",  # DEFAULT CHANGED: 120s for scale-to-zero
     "DELETE_MESSAGE_MAX_RETRIES": "5",  # Max retries for robust delete
+    "SELF_TERMINATE": "true",
 }
 
 for key, val in DEFAULTS.items():
@@ -154,6 +155,19 @@ adapter = HTTPAdapter(max_retries=retry_strategy)
 session.mount("http://", adapter)
 session.mount("https://", adapter)
 
+def _instance_in_autoscaling_group(instance_id: str) -> bool:
+    if not instance_id or instance_id in ("local", "unknown"):
+        return False
+    try:
+        asg = aws_session.client("autoscaling")
+        resp = asg.describe_auto_scaling_instances(InstanceIds=[instance_id])
+        instances = resp.get("AutoScalingInstances", [])
+        return bool(instances and instances[0].get("AutoScalingGroupName"))
+    except Exception as e:
+        log.debug("ASG membership check failed: %s", e)
+        return False
+
+
 def terminate_self(reason: str, decrement_desired: bool = True) -> None:
     """
     Terminate this instance via Auto Scaling API (preferred) or EC2 API (fallback).
@@ -184,44 +198,51 @@ def terminate_self(reason: str, decrement_desired: bool = True) -> None:
     if not instance_id or instance_id in ("local", "unknown"):
         log.error("Cannot terminate self: instance-id unavailable or not on EC2")
         return
-    
-    # Try ASG termination first (preferred for clean scale-down)
-    try:
-        asg = aws_session.client("autoscaling")
-        asg.terminate_instance_in_auto_scaling_group(
-            InstanceId=instance_id,
-            ShouldDecrementDesiredCapacity=decrement_desired
-        )
+
+    if not getenv_bool("SELF_TERMINATE", True):
         log.warning(
-            "AutoScaling TerminateInstanceInAutoScalingGroup invoked for %s (reason: %s, decrement: %s)",
+            "Self-termination disabled (SELF_TERMINATE=false); instance %s left running (%s)",
             instance_id,
             reason,
-            decrement_desired
         )
         return
-    except asg.exceptions.ScalingActivityInProgressFault:
-        log.warning("ASG scaling activity in progress; retrying termination")
-        # Retry once after brief delay
-        time.sleep(2)
+    
+    # Try ASG termination first (preferred for clean scale-down)
+    if _instance_in_autoscaling_group(instance_id):
         try:
+            asg = aws_session.client("autoscaling")
             asg.terminate_instance_in_auto_scaling_group(
                 InstanceId=instance_id,
                 ShouldDecrementDesiredCapacity=decrement_desired
             )
             log.warning(
-                "AutoScaling TerminateInstanceInAutoScalingGroup succeeded on retry for %s (decrement: %s)",
+                "AutoScaling TerminateInstanceInAutoScalingGroup invoked for %s (reason: %s, decrement: %s)",
                 instance_id,
+                reason,
                 decrement_desired
             )
             return
+        except asg.exceptions.ScalingActivityInProgressFault:
+            log.warning("ASG scaling activity in progress; retrying termination")
+            # Retry once after brief delay
+            time.sleep(2)
+            try:
+                asg.terminate_instance_in_auto_scaling_group(
+                    InstanceId=instance_id,
+                    ShouldDecrementDesiredCapacity=decrement_desired
+                )
+                log.warning(
+                    "AutoScaling TerminateInstanceInAutoScalingGroup succeeded on retry for %s (decrement: %s)",
+                    instance_id,
+                    decrement_desired
+                )
+                return
+            except Exception as e:
+                log.warning("ASG termination retry failed: %s; falling back to EC2", e)
         except Exception as e:
-            log.warning("ASG termination retry failed: %s; falling back to EC2", e)
-    except Exception as e:
-        error_code = getattr(e, 'response', {}).get('Error', {}).get('Code', '')
-        if error_code == 'ValidationError':
-            log.info("Instance not in ASG (ValidationError); using EC2 termination")
-        else:
             log.warning("ASG termination failed: %s; falling back to EC2", e)
+    else:
+        log.info("Instance not in an ASG; using EC2 termination")
     
     # Fallback to EC2 termination
     try:

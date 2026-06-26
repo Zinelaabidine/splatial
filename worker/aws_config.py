@@ -84,6 +84,16 @@ def get_instance_metadata() -> Dict[str, str]:
     }
 
 
+def _configure_ec2_boto_env() -> None:
+    """
+    EC2 workers use the instance IAM role. worker.py sets AWS_PROFILE=default for
+    local dev, but botocore reads that (and ~/.aws/config) on every client call.
+    """
+    for key in ("AWS_PROFILE", "AWS_DEFAULT_PROFILE"):
+        os.environ.pop(key, None)
+    os.environ["AWS_SDK_LOAD_CONFIG"] = "0"
+
+
 def get_session() -> Any:
     meta = get_instance_metadata()
     region = meta["region"] or os.getenv("AWS_REGION", "us-east-1")
@@ -93,6 +103,7 @@ def get_session() -> Any:
 
     run_env = os.getenv("RUN_ENV", "local").strip().lower()
     if is_ec2() or run_env == "ec2":
+        _configure_ec2_boto_env()
         return boto3.Session(region_name=region)
 
     profile = os.getenv("AWS_PROFILE", "default")
