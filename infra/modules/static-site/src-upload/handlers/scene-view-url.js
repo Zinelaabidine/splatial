@@ -1,6 +1,11 @@
 "use strict";
 
-const { S3Client, GetObjectCommand } = require("@aws-sdk/client-s3");
+const {
+  S3Client,
+  GetObjectCommand,
+  HeadObjectCommand,
+  ListObjectsV2Command,
+} = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { DynamoDBClient, GetItemCommand } = require("@aws-sdk/client-dynamodb");
 const response = require("../lib/response");
@@ -32,33 +37,98 @@ function pickSplatFromManifest(manifest) {
   return scored[0].f;
 }
 
-async function loadManifest(outputPrefix) {
+async function loadManifest(bucket, outputPrefix) {
   const manifestKey = `${outputPrefix.replace(/\/$/, "")}/manifest.json`;
   const resp = await s3.send(
-    new GetObjectCommand({ Bucket: SPLAT_BUCKET, Key: manifestKey })
+    new GetObjectCommand({ Bucket: bucket, Key: manifestKey })
   );
   const body = await resp.Body.transformToString();
   return JSON.parse(body);
+}
+
+async function objectExists(bucket, key) {
+  try {
+    await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function resolveViewKeyFromPrefix(bucket, prefix) {
+  const normalized = prefix.replace(/\/$/, "");
+
+  try {
+    const manifest = await loadManifest(bucket, normalized);
+    const rel = pickSplatFromManifest(manifest);
+    if (rel) return `${normalized}/${rel.replace(/^\.\//, "")}`;
+  } catch (err) {
+    console.error("scene-view-url manifest lookup failed", {
+      outputPrefix: normalized,
+      message: err.message,
+    });
+  }
+
+  const outputSplatKey = `${normalized}/output.splat`;
+  if (await objectExists(bucket, outputSplatKey)) {
+    return outputSplatKey;
+  }
+
+  return null;
+}
+
+async function listAttemptPrefixes(bucket, s3Key) {
+  const root = `${s3Key.replace(/\/$/, "")}/output/`;
+  const prefixes = [];
+  let continuationToken;
+
+  do {
+    const resp = await s3.send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: root,
+        Delimiter: "/",
+        ContinuationToken: continuationToken,
+      })
+    );
+
+    for (const entry of resp.CommonPrefixes ?? []) {
+      const prefix = entry.Prefix?.replace(/\/$/, "");
+      if (prefix && prefix.includes("/attempt-")) {
+        prefixes.push(prefix);
+      }
+    }
+
+    continuationToken = resp.NextContinuationToken;
+  } while (continuationToken);
+
+  return prefixes.sort().reverse();
 }
 
 async function resolveViewKey(item) {
   const plyKey = item.ply_key?.S;
   if (plyKey) return plyKey;
 
+  const bucket = item.output_bucket?.S ?? SPLAT_BUCKET;
+  const tried = new Set();
+
   const outputPrefix = item.output_prefix?.S;
-  if (!outputPrefix) return null;
+  if (outputPrefix) {
+    const normalized = outputPrefix.replace(/\/$/, "");
+    tried.add(normalized);
+    const key = await resolveViewKeyFromPrefix(bucket, normalized);
+    if (key) return key;
+  }
 
-  const prefix = outputPrefix.replace(/\/$/, "");
+  const s3Key = item.s3_key?.S;
+  if (!s3Key) return null;
 
-  try {
-    const manifest = await loadManifest(prefix);
-    const rel = pickSplatFromManifest(manifest);
-    if (rel) return `${prefix}/${rel.replace(/^\.\//, "")}`;
-  } catch (err) {
-    console.error("scene-view-url manifest lookup failed", {
-      outputPrefix: prefix,
-      message: err.message,
-    });
+  const attemptPrefixes = await listAttemptPrefixes(bucket, s3Key);
+  for (const attemptPrefix of attemptPrefixes) {
+    if (tried.has(attemptPrefix)) continue;
+    tried.add(attemptPrefix);
+    const key = await resolveViewKeyFromPrefix(bucket, attemptPrefix);
+    if (key) return key;
   }
 
   return null;
@@ -101,12 +171,13 @@ exports.handler = async (event) => {
 
   const viewKey = await resolveViewKey(item);
   if (!viewKey) {
-    return response(409, { error: "Scene has no PLY file associated" });
+    return response(409, { error: "Scene has no viewable splat file associated" });
   }
 
+  const bucket = item.output_bucket?.S ?? SPLAT_BUCKET;
   const url = await getSignedUrl(
     s3,
-    new GetObjectCommand({ Bucket: SPLAT_BUCKET, Key: viewKey }),
+    new GetObjectCommand({ Bucket: bucket, Key: viewKey }),
     { expiresIn: URL_TTL_S }
   );
 

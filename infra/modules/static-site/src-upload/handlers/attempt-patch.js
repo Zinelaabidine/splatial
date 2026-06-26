@@ -137,14 +137,14 @@ exports.handler = async (event) => {
       parentParts.push("#s = :sceneStatus");
       parentNames["#s"] = "status";
       parentValues[":sceneStatus"] = { S: mappedStatus };
-      if (status === "SUCCEEDED" && outputBucket && outputPrefix) {
-        parentParts.push("output_bucket = :obucket, output_prefix = :oprefix");
-        parentValues[":obucket"] = { S: outputBucket };
-        parentValues[":oprefix"] = { S: outputPrefix };
-      }
       if (status === "SUCCEEDED" && resolvedViewKey) {
         parentParts.push("ply_key = :viewkey");
         parentValues[":viewkey"] = { S: resolvedViewKey };
+        if (outputBucket && outputPrefix) {
+          parentParts.push("output_bucket = :obucket, output_prefix = :oprefix");
+          parentValues[":obucket"] = { S: outputBucket };
+          parentValues[":oprefix"] = { S: outputPrefix };
+        }
       }
     }
 

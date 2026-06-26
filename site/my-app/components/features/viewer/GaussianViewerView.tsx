@@ -1,4 +1,5 @@
 import dynamic from "next/dynamic";
+import Link from "next/link";
 
 const LegacySplatViewer = dynamic(
   () => import("@/components/viewer/LegacySplatViewer"),
@@ -26,8 +27,14 @@ export default function GaussianViewerView({
 
   if (error) {
     return (
-      <div className="flex h-full items-center justify-center bg-black">
-        <p className="text-sm text-red-400">{error}</p>
+      <div className="flex h-full flex-col items-center justify-center gap-4 bg-black px-6 text-center">
+        <p className="max-w-md text-sm text-red-400">{error}</p>
+        <Link
+          href="/scenes"
+          className="text-sm font-medium text-slate-300 underline-offset-4 hover:text-white hover:underline"
+        >
+          Back to Your Scenes
+        </Link>
       </div>
     );
   }
