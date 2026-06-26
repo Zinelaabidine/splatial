@@ -50,7 +50,15 @@ exports.handler = async (event) => {
     ec2InstanceId, spotRequestId,
     reason, errorMessage,
     outputBucket, outputPrefix,
+    viewKey, plyKey,
   } = body;
+
+  const resolvedViewKey =
+    (typeof viewKey === "string" && viewKey.trim() !== "")
+      ? viewKey.trim()
+      : (typeof plyKey === "string" && plyKey.trim() !== "")
+        ? plyKey.trim()
+        : null;
 
   const now = new Date().toISOString();
   const exprParts  = ["updated_at = :now"];
@@ -92,6 +100,10 @@ exports.handler = async (event) => {
       exprValues[":obucket"] = { S: outputBucket };
       exprValues[":oprefix"] = { S: outputPrefix };
     }
+    if (status === "SUCCEEDED" && resolvedViewKey) {
+      exprParts.push("ply_key = :viewkey");
+      exprValues[":viewkey"] = { S: resolvedViewKey };
+    }
   }
 
   // Update the attempt record
@@ -129,6 +141,10 @@ exports.handler = async (event) => {
         parentParts.push("output_bucket = :obucket, output_prefix = :oprefix");
         parentValues[":obucket"] = { S: outputBucket };
         parentValues[":oprefix"] = { S: outputPrefix };
+      }
+      if (status === "SUCCEEDED" && resolvedViewKey) {
+        parentParts.push("ply_key = :viewkey");
+        parentValues[":viewkey"] = { S: resolvedViewKey };
       }
     }
 

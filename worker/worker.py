@@ -1924,6 +1924,28 @@ def find_point_cloud_ply_dirs(output_folder: str) -> List[str]:
     return ply_dirs
 
 
+def resolve_view_splat_s3_key(output_prefix: str, output_folder: str) -> Optional[str]:
+    """Return the S3 key for the highest-iteration point_cloud.splat in output_folder."""
+    if not output_prefix or not output_folder or not os.path.isdir(output_folder):
+        return None
+
+    prefix = output_prefix.rstrip("/")
+    candidates: List[Tuple[int, str]] = []
+    for root, _, files in os.walk(output_folder):
+        if "point_cloud.splat" not in files:
+            continue
+        rel = os.path.relpath(os.path.join(root, "point_cloud.splat"), output_folder)
+        match = re.search(r"iteration_(\d+)", rel)
+        iteration = int(match.group(1)) if match else -1
+        candidates.append((iteration, rel))
+
+    if not candidates:
+        return None
+
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    return f"{prefix}/{candidates[0][1]}"
+
+
 def run_subprocess_with_interrupt(
     cmd: List[str],
     cwd: str,
@@ -2389,6 +2411,7 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
         
         training_output_folder: Optional[str] = None
         training_log_tail: List[str] = []
+        view_splat_key: Optional[str] = None
         
         if extracted_folder:
             # ----------------------------
@@ -2549,6 +2572,10 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
             
             # Complete POST_PROCESSING phase (always emit 100%)
             _pp_mark(100)
+
+            view_splat_key = resolve_view_splat_s3_key(item.output_prefix, training_output_folder)
+            if view_splat_key:
+                log.info("Resolved viewer asset key: %s", view_splat_key)
             
             # Phase 3: Upload Training Outputs
             log.info("Starting training output upload phase")
@@ -2657,17 +2684,23 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
                 }, api_base_url=api_url)
                 return False, False
 
+            if item.output_prefix:
+                view_splat_key = f"{item.output_prefix.rstrip('/')}/output.splat"
+
         # Phase 4: Success (or simulated failure based on SUCCESS_RATE)
         success = random.random() <= SUCCESS_RATE
         if success:
             log.info("Marking attempt as SUCCEEDED")
-            final_result = patch_attempt(attempt_id, token, {
+            final_body: Dict[str, Any] = {
                 "status": "SUCCEEDED",
                 "progressPhase": "FINALIZE",
                 "progressPercent": overall_percent("FINALIZE", 100),
                 "outputBucket": item.output_bucket,
                 "outputPrefix": item.output_prefix,
-            }, api_base_url=api_url)
+            }
+            if view_splat_key:
+                final_body["viewKey"] = view_splat_key
+            final_result = patch_attempt(attempt_id, token, final_body, api_base_url=api_url)
             _send_heartbeat_if_due("FINALIZE", overall_percent("FINALIZE", 100), force=True)
             
             # Only return True if backend accepted the final patch

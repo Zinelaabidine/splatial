@@ -12,11 +12,63 @@ const TABLE        = process.env.SCENES_TABLE_NAME;
 const SPLAT_BUCKET = process.env.SPLAT_SCENES_BUCKET_NAME;
 const URL_TTL_S    = 3600; // 1 hour
 
+function pickSplatFromManifest(manifest) {
+  const files = Array.isArray(manifest?.files) ? manifest.files : [];
+  const splats = files.filter((f) => typeof f === "string" && f.endsWith(".splat"));
+  if (splats.length === 0) return null;
+
+  const scored = splats.map((f) => {
+    const match = f.match(/iteration_(\d+)/);
+    const iter = match ? parseInt(match[1], 10) : -1;
+    const isPointCloud = f.endsWith("point_cloud.splat");
+    return { f, iter, isPointCloud };
+  });
+
+  scored.sort((a, b) => {
+    if (a.isPointCloud !== b.isPointCloud) return a.isPointCloud ? -1 : 1;
+    return b.iter - a.iter;
+  });
+
+  return scored[0].f;
+}
+
+async function loadManifest(outputPrefix) {
+  const manifestKey = `${outputPrefix.replace(/\/$/, "")}/manifest.json`;
+  const resp = await s3.send(
+    new GetObjectCommand({ Bucket: SPLAT_BUCKET, Key: manifestKey })
+  );
+  const body = await resp.Body.transformToString();
+  return JSON.parse(body);
+}
+
+async function resolveViewKey(item) {
+  const plyKey = item.ply_key?.S;
+  if (plyKey) return plyKey;
+
+  const outputPrefix = item.output_prefix?.S;
+  if (!outputPrefix) return null;
+
+  const prefix = outputPrefix.replace(/\/$/, "");
+
+  try {
+    const manifest = await loadManifest(prefix);
+    const rel = pickSplatFromManifest(manifest);
+    if (rel) return `${prefix}/${rel.replace(/^\.\//, "")}`;
+  } catch (err) {
+    console.error("scene-view-url manifest lookup failed", {
+      outputPrefix: prefix,
+      message: err.message,
+    });
+  }
+
+  return null;
+}
+
 /**
  * GET /api/v1/scenes/{sceneId}/view-url
  *
- * Generates a presigned S3 GET URL for the scene's PLY file, valid for 1 hour.
- * The browser-side Gaussian Splat viewer fetches the PLY directly from S3.
+ * Generates a presigned S3 GET URL for the scene's .splat or .ply file, valid for 1 hour.
+ * The browser-side Gaussian Splat viewer fetches the asset directly from S3.
  *
  * Success response (200):
  *   { "sceneId": "...", "url": "https://s3.amazonaws.com/...", "expiresIn": 3600 }
@@ -47,14 +99,14 @@ exports.handler = async (event) => {
     return response(409, { error: "Scene is not ready", status: item.status?.S ?? "UNKNOWN" });
   }
 
-  const plyKey = item.ply_key?.S;
-  if (!plyKey) {
+  const viewKey = await resolveViewKey(item);
+  if (!viewKey) {
     return response(409, { error: "Scene has no PLY file associated" });
   }
 
   const url = await getSignedUrl(
     s3,
-    new GetObjectCommand({ Bucket: SPLAT_BUCKET, Key: plyKey }),
+    new GetObjectCommand({ Bucket: SPLAT_BUCKET, Key: viewKey }),
     { expiresIn: URL_TTL_S }
   );
 
