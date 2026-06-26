@@ -62,16 +62,31 @@ output "local_dev_role_arn" {
   value       = data.aws_iam_role.local_dev_role.arn
 }
 
+output "vpc" {
+  description = "VPC where this environment's resources are deployed"
+  value = {
+    id                 = aws_vpc.static_site.id
+    arn                = aws_vpc.static_site.arn
+    cidr_block         = aws_vpc.static_site.cidr_block
+    name               = aws_vpc.static_site.tags.Name
+    public_subnet_ids  = [for s in aws_subnet.public : s.id]
+    private_subnet_ids = [for s in aws_subnet.private : s.id]
+  }
+}
+
 output "vpc_id" {
-  value = aws_vpc.static_site.id
+  description = "ID of the VPC where this environment's resources are deployed"
+  value       = aws_vpc.static_site.id
 }
 
 output "public_subnet_ids" {
-  value = [for s in aws_subnet.public : s.id]
+  description = "IDs of public subnets in the environment VPC"
+  value       = [for s in aws_subnet.public : s.id]
 }
 
 output "private_subnet_ids" {
-  value = [for s in aws_subnet.private : s.id]
+  description = "IDs of private subnets in the environment VPC"
+  value       = [for s in aws_subnet.private : s.id]
 }
 
 

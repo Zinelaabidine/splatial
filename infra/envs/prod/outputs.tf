@@ -53,3 +53,13 @@ output "scenes_table_arn" {
   description = "Prod DynamoDB ScenesTable ARN"
   value       = module.static_site.scenes_table_arn
 }
+
+output "vpc" {
+  description = "VPC where prod resources are deployed"
+  value       = module.static_site.vpc
+}
+
+output "vpc_id" {
+  description = "ID of the VPC where prod resources are deployed"
+  value       = module.static_site.vpc_id
+}
