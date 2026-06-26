@@ -14,6 +14,7 @@ export default function ScenesLibraryContainer() {
     sortOpen,
     deleteTarget,
     deleting,
+    deleteError,
     sceneCount,
     setSortBy,
     setSortOpen,
@@ -49,6 +50,7 @@ export default function ScenesLibraryContainer() {
         <DeleteSceneModal
           scene={deleteTarget}
           deleting={deleting}
+          error={deleteError}
           onCancel={dismissDeleteModal}
           onConfirm={confirmDelete}
         />

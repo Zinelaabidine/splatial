@@ -153,6 +153,13 @@ export interface ListScenesV1Response {
   scenes: Scene[];
 }
 
+export interface DeleteSceneResponse {
+  sceneId: string;
+  deleted: true;
+  /** True when an in-flight job was marked CANCELLED before cleanup. */
+  cancelledJob?: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // Seed a READY scene for a manually-uploaded PLY file
 // ---------------------------------------------------------------------------

@@ -2,6 +2,7 @@
 
 import { authenticatedFetch } from "@/server/services/apiClient";
 import type {
+  DeleteSceneResponse,
   ListScenesV1Response,
   SceneStatusResponse,
   ViewUrlResponse,
@@ -16,11 +17,11 @@ export async function listScenes(
 export async function deleteScene(
   sceneId: string,
   signal?: AbortSignal,
-): Promise<void> {
-  await authenticatedFetch(`/api/v1/scenes/${sceneId}`, {
+): Promise<DeleteSceneResponse> {
+  return authenticatedFetch(`/api/v1/scenes/${sceneId}`, {
     method: "DELETE",
     signal,
-  });
+  }) as Promise<DeleteSceneResponse>;
 }
 
 export async function deleteSceneLegacy(

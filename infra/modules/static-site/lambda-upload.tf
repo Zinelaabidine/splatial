@@ -59,6 +59,17 @@ resource "aws_iam_role_policy" "upload_lambda_data_access" {
     Version = "2012-10-17"
     Statement = [
       {
+        Sid    = "S3RawScenesListForDelete"
+        Effect = "Allow"
+        Action = ["s3:ListBucket"]
+        Resource = aws_s3_bucket.raw_scenes.arn
+        Condition = {
+          StringLike = {
+            "s3:prefix" = ["users/*"]
+          }
+        }
+      },
+      {
         Sid    = "S3MultipartUpload"
         Effect = "Allow"
         Action = [
@@ -92,11 +103,23 @@ resource "aws_iam_role_policy" "upload_lambda_data_access" {
         Resource = aws_sqs_queue.processing_queue.arn
       },
       {
+        Sid    = "S3SplatScenesListForDelete"
+        Effect = "Allow"
+        Action = ["s3:ListBucket"]
+        Resource = aws_s3_bucket.splat_scenes.arn
+        Condition = {
+          StringLike = {
+            "s3:prefix" = ["splat-scenes/*", "users/*"]
+          }
+        }
+      },
+      {
         Sid    = "S3SplatScenesReadWrite"
         Effect = "Allow"
         Action = [
           "s3:GetObject",
           "s3:PutObject",
+          "s3:DeleteObject",
         ]
         Resource = "${aws_s3_bucket.splat_scenes.arn}/*"
       },

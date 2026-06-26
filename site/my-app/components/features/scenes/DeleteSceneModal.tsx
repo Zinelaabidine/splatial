@@ -5,6 +5,7 @@ import type { MockScene } from "@/types/dashboard";
 type DeleteSceneModalProps = {
   scene: MockScene;
   deleting: boolean;
+  error?: string | null;
   onCancel: () => void;
   onConfirm: () => void;
 };
@@ -12,6 +13,7 @@ type DeleteSceneModalProps = {
 export default function DeleteSceneModal({
   scene,
   deleting,
+  error,
   onCancel,
   onConfirm,
 }: DeleteSceneModalProps) {
@@ -35,11 +37,16 @@ export default function DeleteSceneModal({
               <span className="font-medium text-gray-700">
                 &ldquo;{scene.title}&rdquo;
               </span>
-              ? This will permanently remove the scene and its uploaded files.
-              This action cannot be undone.
+              ? This permanently removes the scene, uploaded files, training
+              outputs, and any queued processing jobs. This cannot be undone.
             </p>
           </div>
         </div>
+        {error ? (
+          <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
+            {error}
+          </p>
+        ) : null}
         <div className="flex justify-end gap-2">
           <button
             type="button"

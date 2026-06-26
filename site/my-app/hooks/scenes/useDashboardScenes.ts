@@ -18,6 +18,7 @@ export function useDashboardScenes() {
   const [error, setError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<MockScene | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>("newest");
   const [sortOpen, setSortOpen] = useState(false);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -83,26 +84,35 @@ export function useDashboardScenes() {
   );
 
   const handleDeleteScene = useCallback((scene: MockScene) => {
+    setDeleteError(null);
     setDeleteTarget(scene);
   }, []);
 
   const dismissDeleteModal = useCallback(() => {
-    if (!deleting) setDeleteTarget(null);
+    if (!deleting) {
+      setDeleteTarget(null);
+      setDeleteError(null);
+    }
   }, [deleting]);
 
   const confirmDelete = useCallback(async () => {
     if (!deleteTarget?.sceneId) return;
     setDeleting(true);
+    setDeleteError(null);
     try {
       await deleteScene(deleteTarget.sceneId);
       setScenes((prev) => prev.filter((s) => s.id !== deleteTarget.id));
       setDeleteTarget(null);
     } catch (err) {
       console.error("[useDashboardScenes] delete failed", err);
+      setDeleteError(
+        err instanceof Error ? err.message : "Failed to delete scene. Please try again.",
+      );
+      await fetchScenes(true);
     } finally {
       setDeleting(false);
     }
-  }, [deleteTarget]);
+  }, [deleteTarget, fetchScenes]);
 
   const handleSubmitScene = useCallback(
     async (scene: MockScene) => {
@@ -135,6 +145,7 @@ export function useDashboardScenes() {
     sortOpen,
     deleteTarget,
     deleting,
+    deleteError,
     sceneCount: scenes.length,
     setSortBy,
     setSortOpen,

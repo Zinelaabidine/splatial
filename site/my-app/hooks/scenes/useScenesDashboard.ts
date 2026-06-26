@@ -130,11 +130,14 @@ export function useScenesDashboard() {
   const handleDelete = async (sceneId: string) => {
     if (deletingId) return;
     setDeletingId(sceneId);
-    setScenes((prev) => prev.filter((s) => s.sceneId !== sceneId));
+    setActionError(null);
     try {
       await deleteScene(sceneId);
+      setScenes((prev) => prev.filter((s) => s.sceneId !== sceneId));
     } catch (err) {
       console.error("[scenes] delete failed", err);
+      const msg = err instanceof Error ? err.message : "Delete failed";
+      setActionError(msg);
       await fetchScenes();
     } finally {
       setDeletingId(null);
