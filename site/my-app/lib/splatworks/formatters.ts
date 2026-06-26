@@ -10,6 +10,11 @@ export function formatSplatCount(count: number): string {
   return `${count} splats`;
 }
 
-export function formatSplatStats(count: number, sizeMb: number): string {
-  return `${formatSplatCount(count)} • ${sizeMb} MB`;
+export function formatSplatStats(count?: number, sizeMb?: number): string {
+  if (count != null && sizeMb != null) {
+    return `${formatSplatCount(count)} • ${sizeMb} MB`;
+  }
+  if (count != null) return formatSplatCount(count);
+  if (sizeMb != null) return `${sizeMb} MB`;
+  return "Ready to view";
 }

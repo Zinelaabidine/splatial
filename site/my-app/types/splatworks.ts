@@ -35,9 +35,13 @@ export type Splat = {
   /** Backend scene id when wired to API. */
   sceneId?: string;
   title: string;
-  splatCount: number;
-  fileSizeMb: number;
+  /** Present when output metadata is available from the API. */
+  splatCount?: number;
+  fileSizeMb?: number;
+  /** Human-readable created date for display. */
   createdAt: string;
+  /** ISO timestamp for sorting. */
+  createdAtIso?: string;
   author: SplatAuthor;
   /** Visual subject for preview rendering. */
   subject: SplatSubject;

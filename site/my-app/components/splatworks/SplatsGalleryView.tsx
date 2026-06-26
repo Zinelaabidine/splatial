@@ -1,7 +1,8 @@
 "use client";
 
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, RefreshCw } from "lucide-react";
 
+import DeleteSceneModal from "@/components/features/scenes/DeleteSceneModal";
 import { usePageSearch } from "@/components/layout/AppShellContext";
 import SplatCard from "@/components/splatworks/SplatCard";
 import { useSplatsGallery } from "@/hooks/splats/useSplatsGallery";
@@ -18,11 +19,18 @@ export default function SplatsGalleryView() {
 
   const {
     splats,
+    totalReady,
+    loading,
+    error,
     sortBy,
     setSortBy,
     sortOpen,
     setSortOpen,
     sortOptions,
+    deleteTarget,
+    deleting,
+    deleteError,
+    fetchSplats,
     open3D,
     startTour,
     openDetail,
@@ -30,14 +38,29 @@ export default function SplatsGalleryView() {
     share,
     rename,
     remove,
+    dismissDeleteModal,
+    confirmDelete,
   } = gallery;
+
+  const emptyMessage =
+    search.trim().length > 0
+      ? "No splats match your search."
+      : totalReady === 0
+        ? "No completed splats yet. Finish training a scene to see it here."
+        : "No splats match your search.";
 
   return (
     <div className="mx-auto w-full max-w-[1400px]">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
-          Splatworks: My Splats
-        </h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
+            Splatworks: My Splats
+            {!loading && totalReady > 0 ? ` (${totalReady})` : ""}
+          </h1>
+          {loading && (
+            <RefreshCw className="h-4 w-4 animate-spin text-[#909090]" aria-hidden />
+          )}
+        </div>
 
         <div className="relative">
           <button
@@ -68,10 +91,28 @@ export default function SplatsGalleryView() {
         </div>
       </div>
 
-      {splats.length === 0 ? (
-        <p className="py-16 text-center text-sm text-[#909090]">
-          No splats match your search.
-        </p>
+      {error ? (
+        <div className="rounded-xl border border-red-900/50 bg-red-950/40 px-5 py-4 text-sm text-red-300">
+          {error}{" "}
+          <button
+            type="button"
+            onClick={() => void fetchSplats()}
+            className="ml-2 font-medium underline hover:no-underline"
+          >
+            Retry
+          </button>
+        </div>
+      ) : loading ? (
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div
+              key={i}
+              className="aspect-[4/5] animate-pulse rounded-xl bg-[#212121]"
+            />
+          ))}
+        </div>
+      ) : splats.length === 0 ? (
+        <p className="py-16 text-center text-sm text-[#909090]">{emptyMessage}</p>
       ) : (
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
           {splats.map((splat) => (
@@ -88,6 +129,23 @@ export default function SplatsGalleryView() {
             />
           ))}
         </div>
+      )}
+
+      {deleteTarget && (
+        <DeleteSceneModal
+          scene={{
+            id: deleteTarget.id,
+            sceneId: deleteTarget.sceneId ?? deleteTarget.id,
+            title: deleteTarget.title,
+            state: "complete",
+            createdAt: deleteTarget.createdAt,
+            lastModified: deleteTarget.createdAt,
+          }}
+          deleting={deleting}
+          error={deleteError}
+          onCancel={dismissDeleteModal}
+          onConfirm={confirmDelete}
+        />
       )}
     </div>
   );

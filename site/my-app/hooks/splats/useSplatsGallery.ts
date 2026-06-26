@@ -1,90 +1,149 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { MOCK_SPLATS } from "@/fixtures/mockSplats";
+import { useAppAccount } from "@/hooks/layout/useAppAccount";
+import { apiSceneToSplat } from "@/lib/splatworks/splatMappers";
+import { deleteScene, listScenes } from "@/server/services/scenesService";
 import type { Splat, SplatsSortOption, SplatsViewMode } from "@/types/splatworks";
 
 const SORT_OPTIONS: SplatsSortOption[] = ["newest", "oldest", "name"];
 
-/** Relative date weight for mock sorting (lower = newer). */
-const RECENCY: Record<string, number> = {
-  "1 week ago": 1,
-  "2 weeks ago": 2,
-  "3 weeks ago": 3,
-};
+function sortSplats(list: Splat[], sortBy: SplatsSortOption): Splat[] {
+  const copy = [...list];
+  switch (sortBy) {
+    case "name":
+      return copy.sort((a, b) => a.title.localeCompare(b.title));
+    case "oldest":
+      return copy.sort((a, b) =>
+        (a.createdAtIso ?? "").localeCompare(b.createdAtIso ?? ""),
+      );
+    default:
+      return copy.sort((a, b) =>
+        (b.createdAtIso ?? "").localeCompare(a.createdAtIso ?? ""),
+      );
+  }
+}
 
 export function useSplatsGallery(search: string) {
   const router = useRouter();
+  const author = useAppAccount();
+  const [splats, setSplats] = useState<Splat[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SplatsSortOption>("newest");
   const [sortOpen, setSortOpen] = useState(false);
   const [viewMode, setViewMode] = useState<SplatsViewMode>("grid");
+  const [deleteTarget, setDeleteTarget] = useState<Splat | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const fetchSplats = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await listScenes();
+      const ready = (data.scenes ?? []).filter((scene) => scene.status === "READY");
+      setSplats(ready.map((scene) => apiSceneToSplat(scene, author)));
+    } catch (err) {
+      console.error("[useSplatsGallery] fetch failed", err);
+      setError("Failed to load splats. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }, [author.name, author.initials]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void fetchSplats();
+  }, [fetchSplats]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     const list = q
-      ? MOCK_SPLATS.filter((s) => s.title.toLowerCase().includes(q))
-      : [...MOCK_SPLATS];
+      ? splats.filter((s) => s.title.toLowerCase().includes(q))
+      : splats;
+    return sortSplats(list, sortBy);
+  }, [search, sortBy, splats]);
 
-    switch (sortBy) {
-      case "name":
-        return [...list].sort((a, b) => a.title.localeCompare(b.title));
-      case "oldest":
-        return [...list].sort(
-          (a, b) =>
-            (RECENCY[a.createdAt] ?? 99) - (RECENCY[b.createdAt] ?? 99),
-        );
-      default:
-        return [...list].sort(
-          (a, b) =>
-            (RECENCY[b.createdAt] ?? 0) - (RECENCY[a.createdAt] ?? 0),
-        );
+  const open3D = useCallback(
+    (splat: Splat) => {
+      const sceneId = splat.sceneId ?? splat.id;
+      router.push(`/scenes/view?id=${sceneId}`);
+    },
+    [router],
+  );
+
+  const startTour = useCallback(
+    (splat: Splat) => {
+      open3D(splat);
+    },
+    [open3D],
+  );
+
+  const openDetail = useCallback(
+    (splat: Splat) => {
+      open3D(splat);
+    },
+    [open3D],
+  );
+
+  const download = useCallback((_splat: Splat, _format: "ply" | "splat") => {
+    // TODO: presigned download URLs from API
+  }, []);
+
+  const share = useCallback((splat: Splat) => {
+    const sceneId = splat.sceneId ?? splat.id;
+    const url = `${window.location.origin}/scenes/view?id=${sceneId}`;
+    void navigator.clipboard.writeText(url).catch(() => {
+      /* clipboard may be unavailable */
+    });
+  }, []);
+
+  const rename = useCallback((_splat: Splat) => {
+    // TODO: rename via API
+  }, []);
+
+  const handleDeleteRequest = useCallback((splat: Splat) => {
+    setDeleteError(null);
+    setDeleteTarget(splat);
+  }, []);
+
+  const dismissDeleteModal = useCallback(() => {
+    if (!deleting) {
+      setDeleteTarget(null);
+      setDeleteError(null);
     }
-  }, [search, sortBy]);
+  }, [deleting]);
 
-  const open3D = (splat: Splat) => {
-    if (splat.sceneId) {
-      router.push(`/scenes/view?id=${splat.sceneId}`);
-      return;
+  const confirmDelete = useCallback(async () => {
+    if (!deleteTarget) return;
+    const sceneId = deleteTarget.sceneId ?? deleteTarget.id;
+    const splatId = deleteTarget.id;
+
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteScene(sceneId);
+      setSplats((prev) => prev.filter((s) => s.id !== splatId));
+      setDeleteTarget(null);
+    } catch (err) {
+      console.error("[useSplatsGallery] delete failed", err);
+      setDeleteError(
+        err instanceof Error ? err.message : "Failed to delete splat. Please try again.",
+      );
+    } finally {
+      setDeleting(false);
     }
-    // TODO: wire full-screen WebGL splat viewer route
-    router.push(`/scenes/view?id=${splat.id}`);
-  };
-
-  const startTour = (splat: Splat) => {
-    // TODO: play pre-authored camera fly-through
-    console.info("[Splatworks] Tour not implemented", splat.id);
-  };
-
-  const openDetail = (splat: Splat) => {
-    // TODO: scene/splat detail view
-    console.info("[Splatworks] Detail view not implemented", splat.id);
-  };
-
-  const download = (splat: Splat, format: "ply" | "splat") => {
-    // TODO: trigger download via presigned URL
-    console.info("[Splatworks] Download", format, splat.id);
-  };
-
-  const share = (splat: Splat) => {
-    // TODO: open share dialog
-    console.info("[Splatworks] Share", splat.id);
-  };
-
-  const rename = (splat: Splat) => {
-    // TODO: inline rename modal
-    console.info("[Splatworks] Rename", splat.id);
-  };
-
-  const remove = (splat: Splat) => {
-    // TODO: confirm delete via API
-    console.info("[Splatworks] Delete", splat.id);
-  };
+  }, [deleteTarget]);
 
   return {
     splats: filtered,
     count: filtered.length,
+    totalReady: splats.length,
+    loading,
+    error,
     sortBy,
     setSortBy,
     sortOpen,
@@ -92,12 +151,18 @@ export function useSplatsGallery(search: string) {
     sortOptions: SORT_OPTIONS,
     viewMode,
     setViewMode,
+    deleteTarget,
+    deleting,
+    deleteError,
+    fetchSplats,
     open3D,
     startTour,
     openDetail,
     download,
     share,
     rename,
-    remove,
+    remove: handleDeleteRequest,
+    dismissDeleteModal,
+    confirmDelete,
   };
 }
