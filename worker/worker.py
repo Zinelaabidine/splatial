@@ -299,6 +299,8 @@ SUCCESS_RATE = float(os.getenv("SUCCESS_RATE", "1.0"))
 SPOT_REQUEST_ID = os.getenv("SPOT_REQUEST_ID", "")
 SIM_TOTAL_SECONDS = getenv_int("SIM_TOTAL_SECONDS", 30)
 SIM_UPDATE_INTERVAL_SECONDS = getenv_int("SIM_UPDATE_INTERVAL_SECONDS", 5)
+TRAINING_PROGRESS_INTERVAL_SECONDS = max(1, getenv_int("TRAINING_PROGRESS_INTERVAL_SECONDS", 5))
+TRAINING_ESTIMATED_SECONDS = max(60, getenv_int("TRAINING_ESTIMATED_SECONDS", 900))
 FORCE_SPOT_INTERRUPT = getenv_bool("FORCE_SPOT_INTERRUPT", False)
 RUN_ONCE = getenv_bool("RUN_ONCE", False)
 IDLE_EXIT_SECONDS = max(0, getenv_int("IDLE_EXIT_SECONDS", 0))
@@ -925,12 +927,40 @@ def _progress_fraction(elapsed: float, total_seconds: float) -> float:
     denom = max(float(total_seconds), 1.0)
     return min(max(elapsed / denom, 0.0), 1.0)
 
+_TRAINING_ITER_RE = re.compile(r"(\d+)\s*/\s*(\d+)")
+
+
+def _parse_training_iteration_percent(line: str, expected_total: int) -> Optional[float]:
+    """
+    Parse train.py tqdm output (e.g. '4500/15000 [03:12<07:28, 23.41it/s]') into
+    local TRAINING phase percent (0-100).
+    """
+    if expected_total <= 0:
+        return None
+    if "it/s" not in line and "Training progress" not in line and "|" not in line:
+        return None
+    for match in _TRAINING_ITER_RE.finditer(line):
+        current = int(match.group(1))
+        total = int(match.group(2))
+        if total <= 0 or current < 0 or current > total:
+            continue
+        if total != expected_total and abs(total - expected_total) / expected_total > 0.05:
+            continue
+        return min(100.0, max(0.0, 100.0 * current / total))
+    return None
+
+
 def _run_simulation_self_tests() -> None:
     assert _progress_fraction(0, 5) == 0.0
     assert abs(_progress_fraction(3, 5) - 0.6) < 1e-6
     assert _progress_fraction(5, 5) == 1.0
     assert _progress_fraction(-10, 5) == 0.0
     assert _progress_fraction(100, 5) == 1.0
+    assert _parse_training_iteration_percent(
+        "Training progress:  30%|███| 4500/15000 [03:12<07:28, 23.41it/s]",
+        15000,
+    ) == 30.0
+    assert _parse_training_iteration_percent("unrelated log line", 15000) is None
 
 def _test_train_config_to_args() -> None:
     """Self-tests for train_config_to_args conversion."""
@@ -1423,6 +1453,8 @@ def run_training_subprocess(
     extracted_folder: str,
     interrupt_event: threading.Event,
     heartbeat_callback: Optional[callable] = None,
+    progress_callback: Optional[callable] = None,
+    expected_iterations: Optional[int] = None,
     train_config: Optional[Dict[str, Any]] = None,
 ) -> Tuple[bool, Optional[str], List[str]]:
     """
@@ -1431,7 +1463,9 @@ def run_training_subprocess(
     Args:
         extracted_folder: Path to the extracted dataset (passed as -s argument)
         interrupt_event: Event to signal interruption
-        heartbeat_callback: Optional callback to send heartbeats periodically
+        heartbeat_callback: Deprecated — use progress_callback (kept for compatibility)
+        progress_callback: Called with local TRAINING percent (0-100) on a throttled cadence
+        expected_iterations: Total iterations for log parsing (defaults from merged trainConfig)
         train_config: Optional training configuration dict from SQS message
     
     Returns:
@@ -1445,6 +1479,8 @@ def run_training_subprocess(
     
     effective_config = merge_train_config(train_config)
     extra_args = train_config_to_args(effective_config)
+    iter_total = int(expected_iterations or effective_config.get("iterations") or DEFAULT_TRAIN_CONFIG["iterations"])
+    on_progress = progress_callback or heartbeat_callback
     if train_config:
         log.info("Training trainConfig overrides: %s", train_config)
     log.info("Effective training config: %s", effective_config)
@@ -1498,7 +1534,23 @@ def run_training_subprocess(
         return False, None, [f"Failed to start training: {e}"]
     
     last_heartbeat_time = time.time()
-    heartbeat_interval = HEARTBEAT_INTERVAL_SECONDS
+    heartbeat_interval = TRAINING_PROGRESS_INTERVAL_SECONDS
+    training_start = time.time()
+    last_reported_local_pct = -1.0
+
+    def _emit_progress(local_pct: float) -> None:
+        nonlocal last_reported_local_pct, last_heartbeat_time
+        local_clamped = min(99.0, max(0.0, float(local_pct)))
+        now = time.time()
+        if (
+            local_clamped <= last_reported_local_pct
+            and now - last_heartbeat_time < heartbeat_interval
+        ):
+            return
+        if on_progress:
+            on_progress(local_clamped)
+        last_reported_local_pct = local_clamped
+        last_heartbeat_time = now
     
     try:
         # Read output line by line and stream to logger
@@ -1543,16 +1595,23 @@ def run_training_subprocess(
                         output_folder = os.path.abspath(os.path.join(train_cwd, cleaned_path))
                     
                     log.info("Resolved absolute output folder: %s", output_folder)
+
+                parsed_pct = _parse_training_iteration_percent(line, iter_total)
+                if parsed_pct is not None:
+                    _emit_progress(parsed_pct)
             
             # Check if process has ended
             if proc.poll() is not None and not line:
                 break
             
-            # Send periodic heartbeats during training
             now = time.time()
-            if heartbeat_callback and (now - last_heartbeat_time) >= heartbeat_interval:
-                heartbeat_callback()
-                last_heartbeat_time = now
+            if on_progress and (now - last_heartbeat_time) >= heartbeat_interval:
+                elapsed = now - training_start
+                time_pct = min(99.0, 100.0 * elapsed / float(TRAINING_ESTIMATED_SECONDS))
+                _emit_progress(max(last_reported_local_pct, time_pct))
+        
+        if on_progress:
+            on_progress(100.0)
         
         # Get exit code
         exit_code = proc.returncode
@@ -2259,7 +2318,12 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
 
         if needs_colmap:
             def colmap_heartbeat():
-                _send_heartbeat_if_due("COLMAP", overall_percent("COLMAP", 50))
+                pct = overall_percent("COLMAP", 50)
+                patch_attempt(attempt_id, token, {
+                    "progressPhase": "COLMAP",
+                    "progressPercent": pct,
+                }, api_base_url=api_url)
+                _send_heartbeat_if_due("COLMAP", pct)
 
             colmap_ok, colmap_log_tail = run_colmap_subprocess(
                 scene_dir=extracted_folder,
@@ -2319,10 +2383,13 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
             }, api_base_url=api_url)
             _send_heartbeat_if_due("TRAINING", overall_percent("TRAINING", 0), force=True)
             
-            # Create a heartbeat callback for the training subprocess
-            def training_heartbeat():
-                # Use 50% as placeholder during training (mid-point)
-                _send_heartbeat_if_due("TRAINING", overall_percent("TRAINING", 50))
+            def _report_training_progress(local_pct: float) -> None:
+                global_pct = overall_percent("TRAINING", local_pct)
+                patch_attempt(attempt_id, token, {
+                    "progressPhase": "TRAINING",
+                    "progressPercent": global_pct,
+                }, api_base_url=api_url)
+                _send_heartbeat_if_due("TRAINING", global_pct)
             
             # Combine interrupt_event and global_stop into a single event for training
             combined_interrupt = threading.Event()
@@ -2341,9 +2408,16 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
             training_success, training_output_folder, training_log_tail = run_training_subprocess(
                 extracted_folder=extracted_folder,
                 interrupt_event=combined_interrupt,
-                heartbeat_callback=training_heartbeat,
+                progress_callback=_report_training_progress,
+                expected_iterations=int(merge_train_config(item.train_config).get("iterations", DEFAULT_TRAIN_CONFIG["iterations"])),
                 train_config=item.train_config,
             )
+            
+            patch_attempt(attempt_id, token, {
+                "progressPhase": "TRAINING",
+                "progressPercent": overall_percent("TRAINING", 100),
+            }, api_base_url=api_url)
+            _send_heartbeat_if_due("TRAINING", overall_percent("TRAINING", 100), force=True)
             
             combined_interrupt.set()  # Stop the monitor thread
             interrupt_monitor.join(timeout=1)

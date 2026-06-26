@@ -59,5 +59,30 @@ exports.handler = async (event) => {
     })
   );
 
+  // Cascade progress to parent scene (same as attempt-patch) so dashboard polling sees updates.
+  const parentSceneId = Item.parent_scene_id?.S;
+  if (parentSceneId && (progressPhase || typeof progressPercent === "number")) {
+    const parentParts  = ["updated_at = :now", "last_heartbeat_at = :now"];
+    const parentValues = { ":now": { S: now } };
+
+    if (progressPhase) {
+      parentParts.push("progress_phase = :phase");
+      parentValues[":phase"] = { S: progressPhase };
+    }
+    if (typeof progressPercent === "number") {
+      parentParts.push("progress_percent = :pct");
+      parentValues[":pct"] = { N: String(progressPercent) };
+    }
+
+    await dynamo.send(
+      new UpdateItemCommand({
+        TableName: TABLE,
+        Key: { scene_id: { S: parentSceneId } },
+        UpdateExpression: "SET " + parentParts.join(", "),
+        ExpressionAttributeValues: parentValues,
+      })
+    );
+  }
+
   return response(200, { attemptId, received: true });
 };
