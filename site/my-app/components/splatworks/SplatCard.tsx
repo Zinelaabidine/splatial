@@ -56,7 +56,10 @@ export default function SplatCard({
 
   return (
     <article
-      className="group flex flex-col overflow-hidden rounded-xl bg-[#212121] transition-transform duration-200 hover:-translate-y-1"
+      className={cn(
+        "group relative flex flex-col rounded-xl bg-[#212121] transition-transform duration-200 hover:-translate-y-1",
+        menuOpen && "z-50",
+      )}
       onClick={() => onCardClick(splat)}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
@@ -68,7 +71,7 @@ export default function SplatCard({
       tabIndex={0}
     >
       {/* Thumbnail — ~70% visual weight */}
-      <div className="relative aspect-[16/10] w-full overflow-hidden">
+      <div className="relative aspect-[16/10] w-full overflow-hidden rounded-t-xl">
         <SplatPreviewVisual
           subject={splat.subject}
           className="relative h-full w-full"
@@ -103,7 +106,7 @@ export default function SplatCard({
       </div>
 
       {/* Metadata — ~30% */}
-      <div className="flex gap-3 p-3">
+      <div className="flex gap-3 rounded-b-xl p-3">
         <UserAvatar initials={splat.author.initials} size={36} className="mt-0.5" />
 
         <div className="min-w-0 flex-1">
@@ -111,18 +114,32 @@ export default function SplatCard({
             <h3 className="min-w-0 flex-1 truncate text-[15px] font-semibold leading-snug text-white">
               {splat.title}
             </h3>
-            <div ref={menuRef} className="relative shrink-0">
+            <div
+              ref={menuRef}
+              className="relative shrink-0"
+              onClick={(e) => e.stopPropagation()}
+            >
               <button
                 type="button"
                 aria-label="More actions"
                 aria-expanded={menuOpen}
-                onClick={() => setMenuOpen((o) => !o)}
-                className="rounded-full p-1 text-[#909090] opacity-0 transition-opacity hover:bg-[#303030] hover:text-white group-hover:opacity-100"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMenuOpen((o) => !o);
+                }}
+                className={cn(
+                  "rounded-full p-1.5 text-[#b3b3b3] transition-colors hover:bg-[#303030] hover:text-white",
+                  menuOpen ? "bg-[#303030] text-white opacity-100" : "opacity-70 group-hover:opacity-100",
+                )}
               >
                 <MoreVertical className="h-4 w-4" />
               </button>
               {menuOpen && (
-                <div className="absolute right-0 top-full z-20 mt-1 min-w-[168px] rounded-lg border border-[#303030] bg-[#212121] py-1 shadow-xl">
+                <div
+                  role="menu"
+                  className="absolute bottom-full right-0 z-50 mb-2 min-w-[188px] overflow-hidden rounded-lg border border-[#404040] bg-[#1a1a1a] py-1.5 shadow-2xl ring-1 ring-black/50"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <MenuItem
                     icon={Download}
                     label="Download .ply"
@@ -197,10 +214,14 @@ function MenuItem({
   return (
     <button
       type="button"
-      onClick={onClick}
+      role="menuitem"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
       className={cn(
-        "flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors hover:bg-[#303030]",
-        destructive ? "text-[#f87171]" : "text-[#e5e5e5]",
+        "flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm font-medium transition-colors hover:bg-[#2a2a2a]",
+        destructive ? "text-[#f87171] hover:bg-red-950/40" : "text-[#f0f0f0]",
       )}
     >
       <Icon className="h-3.5 w-3.5" strokeWidth={1.5} />

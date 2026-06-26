@@ -2,9 +2,37 @@
 
 import { RefreshCw } from "lucide-react";
 
+import DeleteSceneModal from "@/components/features/scenes/DeleteSceneModal";
 import DashboardSceneCard from "@/components/splatworks/DashboardSceneCard";
 import { usePageSearch } from "@/components/layout/AppShellContext";
 import { useScenesDashboardGrid } from "@/hooks/scenes/useScenesDashboardGrid";
+import type { DashboardScene } from "@/types/splatworks";
+import type { MockScene, SceneCardState } from "@/types/dashboard";
+
+function dashboardSceneToModalScene(scene: DashboardScene): MockScene {
+  const state: SceneCardState =
+    scene.status === "completed"
+      ? "complete"
+      : scene.status === "training"
+        ? "processing"
+        : scene.status === "queued"
+          ? "preprocessing"
+          : scene.status === "failed"
+            ? "failed"
+            : scene.apiStatus === "UPLOADED"
+              ? "uploaded"
+              : "draft";
+
+  const date = scene.caption;
+  return {
+    id: scene.id,
+    sceneId: scene.sceneId ?? scene.id,
+    title: scene.title,
+    state,
+    createdAt: date,
+    lastModified: date,
+  };
+}
 
 export default function ScenesDashboardView() {
   const { search } = usePageSearch("Search scenes");
@@ -18,6 +46,12 @@ export default function ScenesDashboardView() {
     openScene,
     submitScene,
     clearActionError,
+    deleteTarget,
+    deleting,
+    deleteError,
+    remove,
+    dismissDeleteModal,
+    confirmDelete,
   } = useScenesDashboardGrid(search);
 
   const emptyMessage = search.trim()
@@ -65,11 +99,22 @@ export default function ScenesDashboardView() {
               scene={scene}
               onClick={openScene}
               onSubmitScene={submitScene}
+              onDeleteScene={remove}
               submitting={submittingId === scene.sceneId}
             />
           ))}
         </div>
       ) : null}
+
+      {deleteTarget && (
+        <DeleteSceneModal
+          scene={dashboardSceneToModalScene(deleteTarget)}
+          deleting={deleting}
+          error={deleteError}
+          onCancel={dismissDeleteModal}
+          onConfirm={confirmDelete}
+        />
+      )}
     </div>
   );
 }

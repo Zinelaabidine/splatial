@@ -9,7 +9,7 @@ import {
   POLL_INTERVAL_MS,
 } from "@/lib/scenes/sceneMappers";
 import { submitJob } from "@/server/services/jobsService";
-import { listScenes } from "@/server/services/scenesService";
+import { deleteScene, listScenes } from "@/server/services/scenesService";
 import type { DashboardScene } from "@/types/splatworks";
 
 export function useScenesDashboardGrid(search: string) {
@@ -19,6 +19,9 @@ export function useScenesDashboardGrid(search: string) {
   const [error, setError] = useState<string | null>(null);
   const [submittingId, setSubmittingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<DashboardScene | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortCtrlRef = useRef<AbortController | null>(null);
 
@@ -107,6 +110,38 @@ export function useScenesDashboardGrid(search: string) {
     router.push("/scenes/create");
   };
 
+  const handleDeleteRequest = useCallback((scene: DashboardScene) => {
+    setDeleteError(null);
+    setDeleteTarget(scene);
+  }, []);
+
+  const dismissDeleteModal = useCallback(() => {
+    if (!deleting) {
+      setDeleteTarget(null);
+      setDeleteError(null);
+    }
+  }, [deleting]);
+
+  const confirmDelete = useCallback(async () => {
+    if (!deleteTarget) return;
+    const sceneId = deleteTarget.sceneId ?? deleteTarget.id;
+
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteScene(sceneId);
+      setScenes((prev) => prev.filter((s) => s.id !== deleteTarget.id));
+      setDeleteTarget(null);
+    } catch (err) {
+      console.error("[useScenesDashboardGrid] delete failed", err);
+      setDeleteError(
+        err instanceof Error ? err.message : "Failed to delete scene. Please try again.",
+      );
+    } finally {
+      setDeleting(false);
+    }
+  }, [deleteTarget]);
+
   return {
     scenes: filteredScenes,
     loading,
@@ -118,5 +153,11 @@ export function useScenesDashboardGrid(search: string) {
     submitScene,
     createScene,
     clearActionError: () => setActionError(null),
+    deleteTarget,
+    deleting,
+    deleteError,
+    remove: handleDeleteRequest,
+    dismissDeleteModal,
+    confirmDelete,
   };
 }

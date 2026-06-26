@@ -1,10 +1,12 @@
 "use client";
 
-import { Send } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { MoreVertical, Send, Trash2 } from "lucide-react";
 
 import PointCloudThumbnail from "@/components/splatworks/PointCloudThumbnail";
 import StatusDot, { STATUS_LABELS } from "@/components/splatworks/StatusDot";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import type { DashboardScene, SceneStatus } from "@/types/splatworks";
 
 const DARK_STATUS: Record<
@@ -22,6 +24,7 @@ type DashboardSceneCardProps = {
   scene: DashboardScene;
   onClick: (scene: DashboardScene) => void;
   onSubmitScene?: (scene: DashboardScene) => void;
+  onDeleteScene?: (scene: DashboardScene) => void;
   submitting?: boolean;
 };
 
@@ -33,11 +36,25 @@ export default function DashboardSceneCard({
   scene,
   onClick,
   onSubmitScene,
+  onDeleteScene,
   submitting = false,
 }: DashboardSceneCardProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
   const styles = DARK_STATUS[scene.status];
   const isViewable = scene.status === "completed";
   const showSubmit = canSubmitScene(scene);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [menuOpen]);
 
   return (
     <article
@@ -54,9 +71,11 @@ export default function DashboardSceneCard({
             }
           : undefined
       }
-      className={`overflow-hidden rounded-xl bg-[#212121] transition-transform duration-200 ${
-        isViewable ? "cursor-pointer hover:-translate-y-1" : ""
-      }`}
+      className={cn(
+        "group relative rounded-xl bg-[#212121] transition-transform duration-200",
+        isViewable && "cursor-pointer hover:-translate-y-1",
+        menuOpen && "z-50",
+      )}
     >
       {scene.status === "completed" && scene.preview ? (
         <PointCloudThumbnail
@@ -74,8 +93,54 @@ export default function DashboardSceneCard({
         />
       )}
 
-      <div className="p-3">
-        <h3 className="truncate text-[15px] font-semibold text-white">{scene.title}</h3>
+      <div className="rounded-b-xl p-3">
+        <div className="flex items-start gap-2">
+          <h3 className="min-w-0 flex-1 truncate text-[15px] font-semibold text-white">
+            {scene.title}
+          </h3>
+          <div
+            ref={menuRef}
+            className="relative shrink-0"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              aria-label="More actions"
+              aria-expanded={menuOpen}
+              onClick={(e) => {
+                e.stopPropagation();
+                setMenuOpen((open) => !open);
+              }}
+              className={cn(
+                "rounded-full p-1.5 text-[#b3b3b3] transition-colors hover:bg-[#303030] hover:text-white",
+                menuOpen ? "bg-[#303030] text-white opacity-100" : "opacity-70 group-hover:opacity-100",
+              )}
+            >
+              <MoreVertical className="h-4 w-4" />
+            </button>
+            {menuOpen && (
+              <div
+                role="menu"
+                className="absolute bottom-full right-0 z-50 mb-2 min-w-[140px] overflow-hidden rounded-lg border border-[#404040] bg-[#1a1a1a] py-1.5 shadow-2xl ring-1 ring-black/50"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setMenuOpen(false);
+                    onDeleteScene?.(scene);
+                  }}
+                  className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm font-medium text-[#f87171] transition-colors hover:bg-red-950/40"
+                >
+                  <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
+                  Delete
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
         <p className="mt-1 font-sw-mono text-xs text-[#909090]">{scene.caption}</p>
         {showSubmit && (
           <Button
