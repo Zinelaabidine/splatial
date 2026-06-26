@@ -3,6 +3,10 @@
 import { fetchAuthSession } from "aws-amplify/auth";
 
 import { getApiBaseUrl } from "@/api/baseUrl";
+import {
+  ApiRequestError,
+  isExpectedSceneConflict,
+} from "@/lib/api/apiErrors";
 
 /**
  * Secure fetch wrapper that injects the Cognito JWT and handles silent refresh.
@@ -41,7 +45,7 @@ export async function authenticatedFetch(
       } catch {
         /* non-JSON body, keep default */
       }
-      throw new Error(message);
+      throw new ApiRequestError(message, response.status);
     }
 
     return await response.json();
@@ -49,7 +53,7 @@ export async function authenticatedFetch(
     const isAbort =
       (error instanceof DOMException && error.name === "AbortError") ||
       Boolean(options?.signal?.aborted);
-    if (!isAbort) {
+    if (!isAbort && !isExpectedSceneConflict(error)) {
       console.error("Authenticated API call failed:", error);
     }
     throw error;

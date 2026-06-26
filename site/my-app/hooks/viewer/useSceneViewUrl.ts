@@ -2,8 +2,13 @@
 
 import { useEffect, useState } from "react";
 
+import { isExpectedSceneConflict } from "@/lib/api/apiErrors";
 import { mapViewUrlError } from "@/lib/viewer/viewUrlErrors";
-import { getSceneViewUrl, listScenes } from "@/server/services/scenesService";
+import { getSceneStatus, getSceneViewUrl } from "@/server/services/scenesService";
+
+function formatPendingStatus(status: string): string {
+  return status.toLowerCase().replace(/_/g, " ");
+}
 
 export function useSceneViewUrl(sceneId: string) {
   const [splatUrl, setSplatUrl] = useState<string | null>(null);
@@ -22,18 +27,12 @@ export function useSceneViewUrl(sceneId: string) {
       setSplatUrl(null);
 
       try {
-        const scenesResp = await listScenes(ctrl.signal);
-        const scene = (scenesResp.scenes ?? []).find((s) => s.sceneId === sceneId);
-
-        if (!scene) {
-          if (!cancelled) setFetchError("Scene not found.");
-          return;
-        }
+        const scene = await getSceneStatus(sceneId, ctrl.signal);
 
         if (scene.status !== "READY") {
           if (!cancelled) {
             setFetchError(
-              `This scene is still ${scene.status.toLowerCase().replace(/_/g, " ")}. Open it again once processing finishes.`,
+              `This scene is still ${formatPendingStatus(scene.status)}. Open it again once processing finishes.`,
             );
           }
           return;
@@ -45,7 +44,8 @@ export function useSceneViewUrl(sceneId: string) {
         if (!cancelled) {
           if (
             !(err instanceof DOMException && err.name === "AbortError") &&
-            !ctrl.signal.aborted
+            !ctrl.signal.aborted &&
+            !isExpectedSceneConflict(err)
           ) {
             console.error("[useSceneViewUrl] failed to fetch view URL", err);
           }

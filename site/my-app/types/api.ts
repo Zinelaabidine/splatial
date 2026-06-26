@@ -79,7 +79,7 @@ export interface CompleteResponse {
 // ---------------------------------------------------------------------------
 export interface SceneStatusResponse {
   sceneId: string;
-  status: SceneStatus;
+  status: SceneManagementStatus;
   location: string | null;
 }
 
