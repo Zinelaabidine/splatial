@@ -101,6 +101,7 @@ import logging
 import os
 import random
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -1230,6 +1231,61 @@ def _safe_extract_zip(zip_path: str, dest_dir: str) -> None:
 
 IMAGE_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff"})
 
+_JUNK_DIR_NAMES = frozenset({
+    "__macosx",
+    ".ds_store",
+    "ds_store",
+    "thumbs.db",
+    ".git",
+    ".svn",
+})
+
+def _is_junk_dirname(name: str) -> bool:
+    """Skip macOS metadata and other non-scene folders inside ZIP extracts."""
+    lower = name.lower().strip()
+    if lower in _JUNK_DIR_NAMES:
+        return True
+    if lower.startswith(".") and lower not in (".", ".."):
+        return True
+    return False
+
+
+def _is_junk_filename(name: str) -> bool:
+    lower = name.lower().strip()
+    if lower in (".ds_store", "thumbs.db", "desktop.ini"):
+        return True
+    if lower.startswith("._"):
+        return True
+    return False
+
+
+def _is_image_filename(name: str) -> bool:
+    return os.path.splitext(name)[1].lower() in IMAGE_EXTENSIONS
+
+
+def _collect_all_image_files(root: str, *, max_depth: int = 16) -> List[str]:
+    """Recursively collect image file paths under root, skipping junk directories."""
+    if not os.path.isdir(root):
+        return []
+
+    root_abs = os.path.abspath(root)
+    found: List[str] = []
+
+    for dirpath, dirnames, filenames in os.walk(root_abs):
+        rel_depth = os.path.relpath(dirpath, root_abs).count(os.sep)
+        if rel_depth >= max_depth:
+            dirnames.clear()
+            continue
+
+        dirnames[:] = sorted(d for d in dirnames if not _is_junk_dirname(d))
+
+        for filename in filenames:
+            if _is_junk_filename(filename) or not _is_image_filename(filename):
+                continue
+            found.append(os.path.join(dirpath, filename))
+
+    return sorted(found)
+
 
 def _count_images_in_directory(dir_path: str) -> int:
     """Count image files directly inside a directory (non-recursive)."""
@@ -1238,10 +1294,139 @@ def _count_images_in_directory(dir_path: str) -> int:
             1
             for entry in os.listdir(dir_path)
             if os.path.isfile(os.path.join(dir_path, entry))
-            and os.path.splitext(entry)[1].lower() in IMAGE_EXTENSIONS
+            and _is_image_filename(entry)
         )
     except OSError:
         return 0
+
+
+def _scene_image_score(dir_path: str) -> int:
+    """Return total image count under a candidate scene root (recursive)."""
+    return len(_collect_all_image_files(dir_path))
+
+
+def _sanitize_input_filename(name: str) -> str:
+    base = os.path.basename(name).strip()
+    base = re.sub(r"[^a-zA-Z0-9._-]+", "_", base).strip("._")
+    if not base:
+        return "image.jpg"
+    if not _is_image_filename(base):
+        base = f"{base}.jpg"
+    return base
+
+
+def _dedupe_input_path(input_dir: str, filename: str) -> str:
+    candidate = os.path.join(input_dir, filename)
+    if not os.path.lexists(candidate):
+        return candidate
+    stem, ext = os.path.splitext(filename)
+    index = 2
+    while True:
+        candidate = os.path.join(input_dir, f"{stem}_{index}{ext}")
+        if not os.path.lexists(candidate):
+            return candidate
+        index += 1
+
+
+def _flatten_input_dir(input_dir: str) -> None:
+    """Move images from nested input/** folders into the input/ root."""
+    input_abs = os.path.abspath(input_dir)
+    while True:
+        nested: List[str] = []
+        for dirpath, dirnames, filenames in os.walk(input_abs):
+            dirnames[:] = [d for d in dirnames if not _is_junk_dirname(d)]
+            if dirpath == input_abs:
+                continue
+            for filename in filenames:
+                if _is_image_filename(filename) and not _is_junk_filename(filename):
+                    nested.append(os.path.join(dirpath, filename))
+        if not nested:
+            break
+        for src in nested:
+            dest = _dedupe_input_path(
+                input_abs,
+                _sanitize_input_filename(os.path.basename(src)),
+            )
+            shutil.move(src, dest)
+
+        for dirpath, dirnames, _filenames in os.walk(input_abs, topdown=False):
+            if dirpath == input_abs:
+                continue
+            try:
+                if not os.listdir(dirpath):
+                    os.rmdir(dirpath)
+            except OSError:
+                pass
+
+
+def _remove_non_image_files_in_dir(dir_path: str) -> None:
+    try:
+        for entry in os.listdir(dir_path):
+            path = os.path.join(dir_path, entry)
+            if os.path.isfile(path) or os.path.islink(path):
+                if not _is_image_filename(entry) or _is_junk_filename(entry):
+                    os.remove(path)
+    except OSError:
+        pass
+
+
+def _cleanup_scene_dir(scene_dir: str, *, keep_dirs: frozenset[str]) -> None:
+    """Remove every file/folder under scene_dir except named keep_dirs (e.g. input/)."""
+    try:
+        for entry in os.listdir(scene_dir):
+            if entry in keep_dirs:
+                child = os.path.join(scene_dir, entry)
+                if entry == "input" and os.path.isdir(child):
+                    _remove_non_image_files_in_dir(child)
+                continue
+            path = os.path.join(scene_dir, entry)
+            if os.path.islink(path) or os.path.isfile(path):
+                os.remove(path)
+            elif os.path.isdir(path):
+                shutil.rmtree(path)
+    except OSError as e:
+        log.warning("Partial cleanup failure under %s: %s", scene_dir, e)
+
+
+def _normalize_raw_image_scene(scene_dir: str) -> int:
+    """
+    Canonical layout for convert.py: scene_dir/input/<images only>.
+
+    - Gathers images from anywhere under scene_dir (root, images/, nested folders)
+    - Moves them into input/ (flattened, de-duplicated filenames)
+    - Deletes junk dirs (__MACOSX), non-image files, and legacy image folders
+    """
+    if not _scene_needs_colmap(scene_dir):
+        input_dir = os.path.join(scene_dir, "input")
+        return _count_images_in_directory(input_dir) if os.path.isdir(input_dir) else 0
+
+    input_dir = os.path.join(scene_dir, "input")
+    input_abs = os.path.abspath(input_dir)
+    all_images = _collect_all_image_files(scene_dir)
+    if not all_images:
+        raise ValueError(f"No images found under {scene_dir}")
+
+    os.makedirs(input_dir, exist_ok=True)
+
+    for src in all_images:
+        src_abs = os.path.abspath(src)
+        if os.path.dirname(src_abs) == input_abs:
+            continue
+
+        dest = _dedupe_input_path(
+            input_dir,
+            _sanitize_input_filename(os.path.basename(src)),
+        )
+        shutil.move(src, dest)
+
+    _flatten_input_dir(input_dir)
+    _remove_non_image_files_in_dir(input_dir)
+    _cleanup_scene_dir(scene_dir, keep_dirs=frozenset({"input"}))
+
+    count = _count_images_in_directory(input_dir)
+    if count == 0:
+        raise ValueError(f"Failed to normalize images into {input_dir}")
+    return count
 
 
 def _find_scene_directory(extracted_dir: str) -> str:
@@ -1276,11 +1461,12 @@ def _find_scene_directory(extracted_dir: str) -> str:
     except OSError as e:
         raise ValueError(f"Cannot list extracted directory: {e}")
     
-    # Filter to directories only
+    # Filter to directories only (skip macOS __MACOSX etc.)
     subdirs = [
         os.path.join(extracted_dir, entry)
         for entry in entries
         if os.path.isdir(os.path.join(extracted_dir, entry))
+        and not _is_junk_dirname(entry)
     ]
     
     # Look for valid scene directories in subdirectories
@@ -1292,19 +1478,16 @@ def _find_scene_directory(extracted_dir: str) -> str:
             valid_dirs.append(subdir)
     
     if len(valid_dirs) == 0:
-        # Raw image folders (common for Google Drive photo ZIPs)
-        root_image_count = _count_images_in_directory(extracted_dir)
+        # Raw image folders (flat, images/ subfolder, or nested e.g. truck/images/)
+        root_image_count = _scene_image_score(extracted_dir)
         if root_image_count > 0:
             log.info(
-                "Using extraction root as image dataset (%d image(s) at top level)",
+                "Using extraction root as image dataset (%d image(s))",
                 root_image_count,
             )
             return extracted_dir
 
-        image_dirs = [
-            (subdir, _count_images_in_directory(subdir))
-            for subdir in subdirs
-        ]
+        image_dirs = [(subdir, _scene_image_score(subdir)) for subdir in subdirs]
         image_dirs = [(path, count) for path, count in image_dirs if count > 0]
         if len(image_dirs) == 1:
             chosen_path, image_count = image_dirs[0]
@@ -1324,11 +1507,21 @@ def _find_scene_directory(extracted_dir: str) -> str:
             )
             return chosen_path
 
+        junk_dirs = [
+            entry
+            for entry in entries
+            if os.path.isdir(os.path.join(extracted_dir, entry))
+            and _is_junk_dirname(entry)
+        ]
+        detail = (
+            f"Found {len(subdirs)} scene subdirectories"
+            + (f" (ignored junk: {junk_dirs})" if junk_dirs else "")
+        )
         raise ValueError(
             f"Could not find valid scene directory in {extracted_dir}. "
             f"Expected 'sparse/' (COLMAP), 'transforms_train.json' (Blender/NeRF), "
-            f"or a folder of images. "
-            f"Found {len(subdirs)} subdirectories: {[os.path.basename(d) for d in subdirs[:5]]}"
+            f"or a folder of images (optionally under images/). "
+            f"{detail}: {[os.path.basename(d) for d in subdirs[:5]]}"
         )
     
     if len(valid_dirs) > 1:
@@ -1371,34 +1564,22 @@ def _scene_needs_colmap(scene_dir: str) -> bool:
 
 def _prepare_colmap_input_dir(scene_dir: str) -> None:
     """
-    Ensure convert.py's expected layout: scene_dir/input/ contains the source images.
+    Normalize raw image ZIP extracts for convert.py: scene_dir/input/ only.
 
-    When images live directly in scene_dir (typical Google Drive photo ZIPs), symlinks
-    them into input/ to avoid duplicating large datasets.
+    Idempotent — safe to call when input/ is already populated.
+    Skips pre-built COLMAP (sparse/) and Blender (transforms_train.json) datasets.
     """
-    input_dir = os.path.join(scene_dir, "input")
-    if os.path.isdir(input_dir) and _count_images_in_directory(input_dir) > 0:
-        log.info("COLMAP input directory already populated: %s", input_dir)
-        return
+    if not _scene_needs_colmap(scene_dir):
+        log.info("Scene has COLMAP/Blender data; skipping input normalization")
+        return None
 
-    os.makedirs(input_dir, exist_ok=True)
-    linked = 0
-    for entry in os.listdir(scene_dir):
-        src = os.path.join(scene_dir, entry)
-        if not os.path.isfile(src):
-            continue
-        if os.path.splitext(entry)[1].lower() not in IMAGE_EXTENSIONS:
-            continue
-        dst = os.path.join(input_dir, entry)
-        if os.path.lexists(dst):
-            continue
-        os.symlink(os.path.abspath(src), dst)
-        linked += 1
-
-    if linked == 0:
-        raise ValueError(f"No images found to prepare COLMAP input in {scene_dir}")
-
-    log.info("Prepared COLMAP input directory with %d image(s): %s", linked, input_dir)
+    count = _normalize_raw_image_scene(scene_dir)
+    log.info(
+        "COLMAP input ready: %d image(s) in %s (non-image files removed)",
+        count,
+        os.path.join(scene_dir, "input"),
+    )
+    return None
 
 
 def download_and_extract_zip_input(
@@ -1465,7 +1646,15 @@ def download_and_extract_zip_input(
     # Find the actual scene directory (handles nested directories in ZIP)
     scene_dir = _find_scene_directory(extracted_dir)
     log.info("Scene directory resolved to: %s", scene_dir)
-    
+
+    if _scene_needs_colmap(scene_dir):
+        image_count = _normalize_raw_image_scene(scene_dir)
+        log.info(
+            "Post-unzip normalization: %d image(s) in %s/input",
+            image_count,
+            scene_dir,
+        )
+
     return scene_dir
 
 def download_s3_objects(
@@ -3539,15 +3728,15 @@ def _test_colmap_helpers() -> None:
         for name in ("a.jpg", "b.png"):
             with open(os.path.join(raw_scene, name), "wb") as f:
                 f.write(b"x")
+        with open(os.path.join(raw_scene, "notes.txt"), "w", encoding="utf-8") as f:
+            f.write("ignore me")
 
         assert _scene_needs_colmap(raw_scene) is True
-        assert _scene_has_colmap_output(raw_scene) is False
-
         _prepare_colmap_input_dir(raw_scene)
-        input_dir = os.path.join(raw_scene, "input")
-        assert os.path.isdir(input_dir)
-        assert _count_images_in_directory(input_dir) == 2
-        assert _prepare_colmap_input_dir(raw_scene) is None  # idempotent
+        assert set(os.listdir(raw_scene)) == {"input"}
+        assert _count_images_in_directory(os.path.join(raw_scene, "input")) == 2
+        _prepare_colmap_input_dir(raw_scene)
+        assert _count_images_in_directory(os.path.join(raw_scene, "input")) == 2
 
         sparse0 = os.path.join(raw_scene, "sparse", "0")
         os.makedirs(sparse0)
@@ -3562,6 +3751,40 @@ def _test_colmap_helpers() -> None:
             f.write("{}")
         assert _scene_is_blender_dataset(blender_scene) is True
         assert _scene_needs_colmap(blender_scene) is False
+
+    with tempfile.TemporaryDirectory() as zip_root:
+        nested_scene = os.path.join(zip_root, "truck")
+        os.makedirs(os.path.join(nested_scene, "images"))
+        for name in ("0001.jpg", "0002.jpg"):
+            with open(os.path.join(nested_scene, "images", name), "wb") as f:
+                f.write(b"x")
+        os.makedirs(os.path.join(zip_root, "__MACOSX"))
+        with open(os.path.join(zip_root, "__MACOSX", "junk"), "wb") as f:
+            f.write(b"x")
+
+        found = _find_scene_directory(zip_root)
+        assert found == nested_scene
+        count = _normalize_raw_image_scene(found)
+        assert count == 2
+        assert set(os.listdir(found)) == {"input"}
+        assert not os.path.exists(os.path.join(found, "images"))
+
+    with tempfile.TemporaryDirectory() as zip_root:
+        scene = zip_root
+        os.makedirs(os.path.join(scene, "input"))
+        for name in ("x.jpg", "y.jpg"):
+            with open(os.path.join(scene, "input", name), "wb") as f:
+                f.write(b"x")
+        os.makedirs(os.path.join(scene, "images"))
+        with open(os.path.join(scene, "images", "z.jpg"), "wb") as f:
+            f.write(b"x")
+        with open(os.path.join(scene, "readme.txt"), "w", encoding="utf-8") as f:
+            f.write("x")
+
+        count = _normalize_raw_image_scene(scene)
+        assert count == 3
+        assert set(os.listdir(scene)) == {"input"}
+        assert _count_images_in_directory(os.path.join(scene, "input")) == 3
 
     log.info("colmap helper self-tests passed")
 
