@@ -1300,6 +1300,22 @@ def _count_images_in_directory(dir_path: str) -> int:
         return 0
 
 
+def _scene_image_score_shallow(dir_path: str) -> int:
+    """
+    Count images at the scene root or in immediate images|input|photos|rgb folders.
+
+    Does not count images nested inside other subfolders (e.g. truck/images/).
+    """
+    if not os.path.isdir(dir_path):
+        return 0
+    count = _count_images_in_directory(dir_path)
+    for sub in ("images", "input", "photos", "rgb"):
+        sub_path = os.path.join(dir_path, sub)
+        if os.path.isdir(sub_path):
+            count += _count_images_in_directory(sub_path)
+    return count
+
+
 def _scene_image_score(dir_path: str) -> int:
     """Return total image count under a candidate scene root (recursive)."""
     return len(_collect_all_image_files(dir_path))
@@ -1478,30 +1494,43 @@ def _find_scene_directory(extracted_dir: str) -> str:
             valid_dirs.append(subdir)
     
     if len(valid_dirs) == 0:
-        # Raw image folders (flat, images/ subfolder, or nested e.g. truck/images/)
-        root_image_count = _scene_image_score(extracted_dir)
-        if root_image_count > 0:
+        # Raw image folders — do not treat the extract root as the scene when images
+        # live only inside a nested subfolder (e.g. truck/images/*.jpg).
+        root_shallow = _scene_image_score_shallow(extracted_dir)
+        subdir_scores = [
+            (subdir, _scene_image_score(subdir))
+            for subdir in subdirs
+        ]
+        subdir_scores = [(path, count) for path, count in subdir_scores if count > 0]
+
+        if root_shallow > 0 and not subdir_scores:
             log.info(
                 "Using extraction root as image dataset (%d image(s))",
-                root_image_count,
+                root_shallow,
             )
             return extracted_dir
 
-        image_dirs = [(subdir, _scene_image_score(subdir)) for subdir in subdirs]
-        image_dirs = [(path, count) for path, count in image_dirs if count > 0]
-        if len(image_dirs) == 1:
-            chosen_path, image_count = image_dirs[0]
+        if root_shallow > 0 and subdir_scores:
+            log.warning(
+                "Images at extraction root (%d) and in subfolders %s; using root",
+                root_shallow,
+                [os.path.basename(path) for path, _ in subdir_scores],
+            )
+            return extracted_dir
+
+        if len(subdir_scores) == 1:
+            chosen_path, image_count = subdir_scores[0]
             log.info(
                 "Using image folder %s (%d image(s))",
                 os.path.basename(chosen_path),
                 image_count,
             )
             return chosen_path
-        if len(image_dirs) > 1:
-            chosen_path, image_count = max(image_dirs, key=lambda item: item[1])
+        if len(subdir_scores) > 1:
+            chosen_path, image_count = max(subdir_scores, key=lambda item: item[1])
             log.warning(
                 "Found multiple image folders %s; using %s (%d image(s))",
-                [os.path.basename(path) for path, _ in image_dirs],
+                [os.path.basename(path) for path, _ in subdir_scores],
                 os.path.basename(chosen_path),
                 image_count,
             )
@@ -3763,7 +3792,7 @@ def _test_colmap_helpers() -> None:
             f.write(b"x")
 
         found = _find_scene_directory(zip_root)
-        assert found == nested_scene
+        assert found == nested_scene, f"expected {nested_scene}, got {found}"
         count = _normalize_raw_image_scene(found)
         assert count == 2
         assert set(os.listdir(found)) == {"input"}
