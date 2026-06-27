@@ -142,6 +142,10 @@ export interface Scene {
   /** 0–100 while status is PROCESSING (updated by worker PATCH / heartbeat). */
   progressPercent?: number;
   progressPhase?: string;
+  /** COLMAP sub-step while progressPhase is COLMAP (e.g. COLMAP_FEATURE). */
+  progressSubPhase?: string;
+  /** Estimated seconds remaining for the current phase (worker-reported). */
+  progressEtaSeconds?: number;
 }
 
 export interface CreateSceneRequest {

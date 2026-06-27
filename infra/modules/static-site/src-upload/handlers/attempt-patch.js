@@ -2,6 +2,7 @@
 
 const { DynamoDBClient, GetItemCommand, UpdateItemCommand } = require("@aws-sdk/client-dynamodb");
 const response = require("../lib/response");
+const { applyProgressFields } = require("../lib/progress-fields");
 
 const dynamo = new DynamoDBClient({});
 const TABLE  = process.env.SCENES_TABLE_NAME;
@@ -21,8 +22,8 @@ const STATUS_MAP = {
  * stored in DynamoDB, sent as Bearer token.
  *
  * Body fields (all optional except when driving a status transition):
- *   status, progressPhase, progressPercent, ec2InstanceId, spotRequestId,
- *   reason, errorMessage, outputBucket, outputPrefix
+ *   status, progressPhase, progressPercent, progressSubPhase, progressEtaSeconds,
+ *   ec2InstanceId, spotRequestId, reason, errorMessage, outputBucket, outputPrefix
  */
 exports.handler = async (event) => {
   const attemptId = event.pathParameters?.attemptId;
@@ -46,7 +47,7 @@ exports.handler = async (event) => {
   }
 
   const {
-    status, progressPhase, progressPercent,
+    status,
     ec2InstanceId, spotRequestId,
     reason, errorMessage,
     outputBucket, outputPrefix,
@@ -74,14 +75,7 @@ exports.handler = async (event) => {
   const exprNames  = {};
   const exprValues = { ":now": { S: now } };
 
-  if (progressPhase) {
-    exprParts.push("progress_phase = :phase");
-    exprValues[":phase"] = { S: progressPhase };
-  }
-  if (typeof progressPercent === "number") {
-    exprParts.push("progress_percent = :pct");
-    exprValues[":pct"] = { N: String(progressPercent) };
-  }
+  applyProgressFields(body, exprParts, exprValues);
   if (ec2InstanceId) {
     exprParts.push("ec2_instance_id = :ec2");
     exprValues[":ec2"] = { S: ec2InstanceId };
@@ -134,14 +128,7 @@ exports.handler = async (event) => {
     const parentNames  = {};
     const parentValues = { ":now": { S: now } };
 
-    if (progressPhase) {
-      parentParts.push("progress_phase = :phase");
-      parentValues[":phase"] = { S: progressPhase };
-    }
-    if (typeof progressPercent === "number") {
-      parentParts.push("progress_percent = :pct");
-      parentValues[":pct"] = { N: String(progressPercent) };
-    }
+    applyProgressFields(body, parentParts, parentValues);
     if (mappedStatus) {
       parentParts.push("#s = :sceneStatus");
       parentNames["#s"] = "status";

@@ -2,6 +2,7 @@
 
 const { DynamoDBClient, GetItemCommand, UpdateItemCommand } = require("@aws-sdk/client-dynamodb");
 const response = require("../lib/response");
+const { applyProgressFields } = require("../lib/progress-fields");
 
 const dynamo = new DynamoDBClient({});
 const TABLE  = process.env.SCENES_TABLE_NAME;
@@ -12,7 +13,10 @@ const TABLE  = process.env.SCENES_TABLE_NAME;
  * Called by the EC2 worker to report liveness and progress. Auth via
  * per-job worker token sent as Bearer token.
  *
- * Body: { "progressPhase": "...", "progressPercent": 0-100 }
+ * Body: {
+ *   progressPhase, progressPercent,
+ *   progressSubPhase?, progressEtaSeconds?
+ * }
  */
 exports.handler = async (event) => {
   const attemptId = event.pathParameters?.attemptId;
@@ -35,20 +39,11 @@ exports.handler = async (event) => {
     return response(400, { error: "Invalid JSON body" });
   }
 
-  const { progressPhase, progressPercent } = body;
-
   const now        = new Date().toISOString();
   const exprParts  = ["updated_at = :now", "last_heartbeat_at = :now"];
   const exprValues = { ":now": { S: now } };
 
-  if (progressPhase) {
-    exprParts.push("progress_phase = :phase");
-    exprValues[":phase"] = { S: progressPhase };
-  }
-  if (typeof progressPercent === "number") {
-    exprParts.push("progress_percent = :pct");
-    exprValues[":pct"] = { N: String(progressPercent) };
-  }
+  applyProgressFields(body, exprParts, exprValues);
 
   await dynamo.send(
     new UpdateItemCommand({
@@ -61,18 +56,17 @@ exports.handler = async (event) => {
 
   // Cascade progress to parent scene (same as attempt-patch) so dashboard polling sees updates.
   const parentSceneId = Item.parent_scene_id?.S;
-  if (parentSceneId && (progressPhase || typeof progressPercent === "number")) {
+  const hasProgress = body && (
+    body.progressPhase
+    || typeof body.progressPercent === "number"
+    || body.progressSubPhase
+    || typeof body.progressEtaSeconds === "number"
+  );
+  if (parentSceneId && hasProgress) {
     const parentParts  = ["updated_at = :now", "last_heartbeat_at = :now"];
     const parentValues = { ":now": { S: now } };
 
-    if (progressPhase) {
-      parentParts.push("progress_phase = :phase");
-      parentValues[":phase"] = { S: progressPhase };
-    }
-    if (typeof progressPercent === "number") {
-      parentParts.push("progress_percent = :pct");
-      parentValues[":pct"] = { N: String(progressPercent) };
-    }
+    applyProgressFields(body, parentParts, parentValues);
 
     await dynamo.send(
       new UpdateItemCommand({

@@ -915,6 +915,25 @@ def _auth_headers(token: str) -> Dict[str, str]:
         "Accept": "application/json",
     }
 
+def build_progress_body(
+    phase: str,
+    percent: int,
+    *,
+    sub_phase: Optional[str] = None,
+    eta_seconds: Optional[float] = None,
+) -> Dict[str, Any]:
+    """Build PATCH/heartbeat JSON for worker progress reporting."""
+    body: Dict[str, Any] = {
+        "progressPhase": normalize_phase(phase),
+        "progressPercent": percent,
+    }
+    if sub_phase:
+        body["progressSubPhase"] = sub_phase
+    if eta_seconds is not None:
+        body["progressEtaSeconds"] = int(max(0, round(eta_seconds)))
+    return body
+
+
 def patch_attempt(attempt_id: str, token: str, body: Dict[str, Any], api_base_url: Optional[str] = None) -> ApiCallResult:
     """
     PATCH /api/attempts/:attemptId.
@@ -970,7 +989,16 @@ def patch_attempt_start_running(
         result = patch_attempt(attempt_id, token, body, api_base_url=api_base_url)
     return result
 
-def post_heartbeat(attempt_id: str, token: str, phase: str, percent: int, api_base_url: Optional[str] = None) -> ApiCallResult:
+def post_heartbeat(
+    attempt_id: str,
+    token: str,
+    phase: str,
+    percent: int,
+    api_base_url: Optional[str] = None,
+    *,
+    sub_phase: Optional[str] = None,
+    eta_seconds: Optional[float] = None,
+) -> ApiCallResult:
     """
     POST /api/attempts/:attemptId/heartbeat.
     Uses per-message api_base_url when provided, otherwise falls back to global API_BASE_URL.
@@ -978,11 +1006,14 @@ def post_heartbeat(attempt_id: str, token: str, phase: str, percent: int, api_ba
     """
     base = api_base_url or API_BASE_URL
     url = f"{base}/api/attempts/{attempt_id}/heartbeat"
-    
-    # Normalize phase
-    normalized_phase = normalize_phase(phase)
-    payload = {"progressPhase": normalized_phase, "progressPercent": percent}
-    
+
+    payload = build_progress_body(
+        phase,
+        percent,
+        sub_phase=sub_phase,
+        eta_seconds=eta_seconds,
+    )
+
     log.info("Sending heartbeat to %s with payload: %s", url, payload)
     
     try:
@@ -2586,12 +2617,27 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
 
     last_heartbeat = 0.0
 
-    def _send_heartbeat_if_due(phase: str, percent: int, *, force: bool = False) -> ApiCallResult:
+    def _send_heartbeat_if_due(
+        phase: str,
+        percent: int,
+        *,
+        force: bool = False,
+        sub_phase: Optional[str] = None,
+        eta_seconds: Optional[float] = None,
+    ) -> ApiCallResult:
         nonlocal last_heartbeat
         now = time.time()
         interval = HEARTBEAT_INTERVAL_SECONDS
         if force or now - last_heartbeat >= interval:
-            result = post_heartbeat(attempt_id, token, phase, percent, api_base_url=api_url)
+            result = post_heartbeat(
+                attempt_id,
+                token,
+                phase,
+                percent,
+                api_base_url=api_url,
+                sub_phase=sub_phase,
+                eta_seconds=eta_seconds,
+            )
             last_heartbeat = time.time()
             return result
         else:
@@ -2780,11 +2826,19 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
 
             def colmap_progress(local_pct: float, sub_step: str, eta_seconds: float) -> None:
                 global_pct = overall_percent("COLMAP", local_pct)
-                patch_attempt(attempt_id, token, {
-                    "progressPhase": "COLMAP",
-                    "progressPercent": global_pct,
-                }, api_base_url=api_url)
-                _send_heartbeat_if_due("COLMAP", global_pct)
+                progress_body = build_progress_body(
+                    "COLMAP",
+                    global_pct,
+                    sub_phase=sub_step,
+                    eta_seconds=eta_seconds,
+                )
+                patch_attempt(attempt_id, token, progress_body, api_base_url=api_url)
+                _send_heartbeat_if_due(
+                    "COLMAP",
+                    global_pct,
+                    sub_phase=sub_step,
+                    eta_seconds=eta_seconds,
+                )
                 log.debug(
                     "COLMAP heartbeat: %s local=%.1f%% global=%d%% ETA ~%s",
                     sub_step,

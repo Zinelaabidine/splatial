@@ -63,6 +63,8 @@ export type DashboardScene = {
   splatCount?: number;
   fileSizeMb?: number;
   progressPercent?: number;
+  progressPhase?: string;
+  progressSubPhase?: string;
   currentIter?: string;
   eta?: string;
   queuePosition?: number;

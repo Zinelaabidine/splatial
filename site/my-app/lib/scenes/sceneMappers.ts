@@ -1,6 +1,12 @@
 import type { MockScene, SortOption } from "@/types/dashboard";
 import type { Scene } from "@/types/api";
 import type { DashboardScene, SceneStatus } from "@/types/splatworks";
+import {
+  formatEtaSeconds,
+  formatProgressPhase,
+  formatProgressSubPhase,
+  processingStatusCaption,
+} from "@/lib/scenes/progressLabels";
 
 /** Deterministic pastel hue derived from a scene ID string. */
 export function hueFromId(id: string): number {
@@ -56,6 +62,15 @@ export function apiSceneToCard(scene: Scene): MockScene {
     ...(scene.progressPercent != null
       ? { processingProgress: scene.progressPercent }
       : {}),
+    ...(scene.progressPhase
+      ? { processingPhase: formatProgressPhase(scene.progressPhase) }
+      : {}),
+    ...(scene.progressSubPhase
+      ? { processingSubPhase: formatProgressSubPhase(scene.progressSubPhase) }
+      : {}),
+    ...(scene.progressEtaSeconds != null
+      ? { processingEta: formatEtaSeconds(scene.progressEtaSeconds) }
+      : {}),
     thumbnailHue:
       state === "complete" || state === "processing"
         ? hueFromId(scene.sceneId)
@@ -90,7 +105,7 @@ function dashboardCaption(scene: Scene, status: SceneStatus): string {
     case "completed":
       return created;
     case "training":
-      return "Processing";
+      return processingStatusCaption(scene.progressPhase, scene.progressSubPhase);
     case "queued":
       return "In queue";
     case "failed":
@@ -117,6 +132,10 @@ export function apiSceneToDashboardScene(scene: Scene): DashboardScene {
       ? { progressPercent: scene.progressPercent }
       : {}),
     ...(scene.progressPhase ? { progressPhase: scene.progressPhase } : {}),
+    ...(scene.progressSubPhase ? { progressSubPhase: scene.progressSubPhase } : {}),
+    ...(scene.progressEtaSeconds != null
+      ? { eta: formatEtaSeconds(scene.progressEtaSeconds) }
+      : {}),
   };
 
   if (status === "completed") {

@@ -2,6 +2,7 @@
 
 const { DynamoDBClient, ScanCommand } = require("@aws-sdk/client-dynamodb");
 const response = require("../lib/response");
+const { mapProgressFromItem } = require("../lib/progress-fields");
 
 const dynamo = new DynamoDBClient({});
 const TABLE = process.env.SCENES_TABLE_NAME;
@@ -42,10 +43,7 @@ exports.handler = async (event) => {
     status:    item.status?.S     ?? "",
     createdAt: item.created_at?.S ?? "",
     ...(item.ply_key ? { plyKey: item.ply_key.S } : {}),
-    ...(item.progress_percent?.N != null
-      ? { progressPercent: Number(item.progress_percent.N) }
-      : {}),
-    ...(item.progress_phase?.S ? { progressPhase: item.progress_phase.S } : {}),
+    ...mapProgressFromItem(item),
   }));
 
   // Sort newest-first by createdAt (ISO strings sort lexicographically).

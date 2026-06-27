@@ -6,6 +6,7 @@ import { MoreVertical, Send, Trash2, XCircle } from "lucide-react";
 import PointCloudThumbnail from "@/components/splatworks/PointCloudThumbnail";
 import StatusDot, { STATUS_LABELS } from "@/components/splatworks/StatusDot";
 import { Button } from "@/components/ui/button";
+import { formatProgressSubPhase } from "@/lib/scenes/progressLabels";
 import { isActiveGpuJobStatus } from "@/lib/scenes/sceneMappers";
 import { cn } from "@/lib/utils";
 import type { DashboardScene, SceneStatus } from "@/types/splatworks";
@@ -222,6 +223,14 @@ function StatusTile({
 
       {scene.status === "training" && scene.progressPercent != null && (
         <>
+          {scene.progressSubPhase && (
+            <p
+              className="mb-2 max-w-full truncate font-sw-mono text-[10px] uppercase tracking-wide opacity-80"
+              style={{ color: textColor }}
+            >
+              {formatProgressSubPhase(scene.progressSubPhase)}
+            </p>
+          )}
           <div
             className="my-3 font-sw-mono text-2xl font-semibold leading-none"
             style={{ color: textColor }}
@@ -234,6 +243,14 @@ function StatusTile({
               style={{ width: `${scene.progressPercent}%` }}
             />
           </div>
+          {scene.eta && (
+            <p
+              className="mt-2 font-sw-mono text-[11px] opacity-90"
+              style={{ color: textColor }}
+            >
+              ~{scene.eta} remaining
+            </p>
+          )}
         </>
       )}
 

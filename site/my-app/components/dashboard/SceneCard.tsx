@@ -135,8 +135,18 @@ function StatusIndicator({ scene }: { scene: MockScene }) {
           </div>
           <span className="inline-flex items-center gap-1.5 text-xs font-medium text-purple-600">
             <Loader2 className="h-3 w-3 animate-spin" />
-            {scene.processingProgress ?? 0}% Processing
+            {scene.processingProgress ?? 0}%
+            {scene.processingSubPhase
+              ? ` · ${scene.processingSubPhase}`
+              : scene.processingPhase
+                ? ` · ${scene.processingPhase}`
+                : " Processing"}
           </span>
+          {scene.processingEta && (
+            <span className="block text-[11px] text-purple-500/80">
+              ~{scene.processingEta} remaining
+            </span>
+          )}
         </div>
       );
     case "preprocessing":
