@@ -22,11 +22,43 @@ Features:
 Training Mode:
 When the SQS message references a ZIP file (inputPrefix/inputPrefixOrKey ends with .zip):
 1. Downloads and safely extracts the ZIP dataset
-2. Runs COLMAP via convert.py when the dataset is a raw image folder (no sparse/ yet)
+2. Runs COLMAP via convert.py (co-located in worker/) when the dataset is a raw image
+   folder (no sparse/ yet)
 3. Runs train.py with hardcoded parameters:
    --optimizer_type sparse_adam --disable_viewer
 4. Streams training logs to worker logger in real-time
 5. Uploads training outputs to S3 (point clouds, configs, etc.)
+
+COLMAP / convert.py (see worker/convert.py for full notes)
+----------------------------------------------------------
+convert.py wraps COLMAP feature extraction, matching, mapper, and undistortion.
+Requires COLMAP 4.x with CUDA. COLMAP 4.0+ renamed GPU flags:
+  SiftExtraction.use_gpu  -> FeatureExtraction.use_gpu
+  SiftMatching.use_gpu    -> FeatureMatching.use_gpu
+
+Performance (highest impact first):
+  1. Matcher: sequential (default, ordered video frames) | exhaustive (unordered,
+     best quality, O(n^2)) | vocab_tree (large unordered sets, needs .bin file)
+  2. GPU: leave COLMAP_NO_GPU unset on CUDA builds
+  3. --max_image_size 1600, --max_num_features 4096 (convert.py defaults)
+  4. Drop near-duplicate frames before running to cut matching cost
+
+Manual examples:
+    python convert.py -s /path/to/scene
+    python convert.py -s /path/to/scene --matcher exhaustive
+    python convert.py -s /path/to/scene --matcher vocab_tree \\
+        --vocab_tree_path /opt/colmap/vocab_tree_flickr100K_words256K.bin
+    python convert.py -s /path/to/scene --skip_matching
+
+Worker env vars (passed through to convert.py):
+    COLMAP_EXECUTABLE          Path to colmap binary (default: colmap on PATH)
+    COLMAP_NO_GPU              Set true to force CPU (very slow)
+    COLMAP_MATCHER             sequential | exhaustive | vocab_tree (default: sequential)
+    COLMAP_MAX_IMAGE_SIZE      Default 1600
+    COLMAP_MAX_NUM_FEATURES    Default 4096
+    COLMAP_SEQUENTIAL_OVERLAP  Default 10
+    COLMAP_BA_TOLERANCE        Default 0.0001
+    COLMAP_VOCAB_TREE_PATH     Required when COLMAP_MATCHER=vocab_tree
 
 Usage:
     # Run with defaults (RUN_ENV=local, AWS_PROFILE=default, AWS_REGION=us-east-1)
@@ -411,6 +443,12 @@ TRAINING_LOG_TAIL_LINES = 50
 COLMAP_LOG_TAIL_LINES = 50
 COLMAP_EXECUTABLE = os.getenv("COLMAP_EXECUTABLE", "").strip()
 COLMAP_NO_GPU = getenv_bool("COLMAP_NO_GPU", False)
+COLMAP_MATCHER = os.getenv("COLMAP_MATCHER", "sequential").strip()
+COLMAP_MAX_IMAGE_SIZE = os.getenv("COLMAP_MAX_IMAGE_SIZE", "1600").strip()
+COLMAP_MAX_NUM_FEATURES = os.getenv("COLMAP_MAX_NUM_FEATURES", "4096").strip()
+COLMAP_SEQUENTIAL_OVERLAP = os.getenv("COLMAP_SEQUENTIAL_OVERLAP", "10").strip()
+COLMAP_BA_TOLERANCE = os.getenv("COLMAP_BA_TOLERANCE", "0.0001").strip()
+COLMAP_VOCAB_TREE_PATH = os.getenv("COLMAP_VOCAB_TREE_PATH", "").strip()
 
 
 def _gaussian_splatting_root() -> str:
@@ -1752,6 +1790,18 @@ def run_colmap_subprocess(
         cmd.extend(["--colmap_executable", COLMAP_EXECUTABLE])
     if COLMAP_NO_GPU:
         cmd.append("--no_gpu")
+    if COLMAP_MATCHER:
+        cmd.extend(["--matcher", COLMAP_MATCHER])
+    if COLMAP_MAX_IMAGE_SIZE:
+        cmd.extend(["--max_image_size", COLMAP_MAX_IMAGE_SIZE])
+    if COLMAP_MAX_NUM_FEATURES:
+        cmd.extend(["--max_num_features", COLMAP_MAX_NUM_FEATURES])
+    if COLMAP_SEQUENTIAL_OVERLAP:
+        cmd.extend(["--sequential_overlap", COLMAP_SEQUENTIAL_OVERLAP])
+    if COLMAP_BA_TOLERANCE:
+        cmd.extend(["--ba_tolerance", COLMAP_BA_TOLERANCE])
+    if COLMAP_VOCAB_TREE_PATH:
+        cmd.extend(["--vocab_tree_path", COLMAP_VOCAB_TREE_PATH])
 
     log.info("=" * 60)
     log.info("Starting COLMAP Conversion")
