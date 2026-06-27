@@ -22,9 +22,10 @@ Features:
 Training Mode:
 When the SQS message references a ZIP file (inputPrefix/inputPrefixOrKey ends with .zip):
 1. Downloads and safely extracts the ZIP dataset
-2. Runs COLMAP via convert.py (co-located in worker/) when the dataset is a raw image
-   folder (no sparse/ yet)
-3. Runs train.py with hardcoded parameters:
+2. Prepares scene_dir/input/ for convert.py when the dataset is a raw image folder
+3. Runs COLMAP via convert.py (co-located in worker/) with step-weighted progress heartbeats
+   and image-count-based ETA (feature → match → mapper → undistort)
+4. Runs train.py with hardcoded parameters:
    --optimizer_type sparse_adam --disable_viewer
 4. Streams training logs to worker logger in real-time
 5. Uploads training outputs to S3 (point clouds, configs, etc.)
@@ -108,7 +109,7 @@ import time
 import zipfile
 from collections import deque
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import requests
 from botocore.exceptions import ClientError
@@ -1767,13 +1768,249 @@ def run_training_subprocess(
         return False, output_folder, list(log_tail) + [f"Exception: {e}"]
 
 
+# COLMAP sub-steps (mapped to API phase "COLMAP" via normalize_phase)
+COLMAP_SUBSTEPS = (
+    "COLMAP_FEATURE",
+    "COLMAP_MATCH",
+    "COLMAP_SPARSE",
+    "COLMAP_UNDISTORT",
+)
+
+_COLMAP_STEP_WEIGHTS: Dict[str, Tuple[float, float, float, float]] = {
+    "sequential": (0.35, 0.25, 0.30, 0.10),
+    "exhaustive": (0.20, 0.45, 0.25, 0.10),
+    "vocab_tree": (0.25, 0.35, 0.30, 0.10),
+}
+
+_RE_COLMAP_PROCESSED = re.compile(r"Processed file \[(\d+)/(\d+)\]", re.IGNORECASE)
+_RE_COLMAP_UNDISTORT = re.compile(r"Undistorting image \[(\d+)/(\d+)\]", re.IGNORECASE)
+_RE_COLMAP_REGISTER = re.compile(r"Registering image #(\d+)", re.IGNORECASE)
+_RE_COLMAP_MATCHING = re.compile(
+    r"(?:Matching block|Matching image pair) \[(\d+)/(\d+)\]",
+    re.IGNORECASE,
+)
+
+
+def _colmap_step_weights(matcher: str) -> Tuple[float, float, float, float]:
+    return _COLMAP_STEP_WEIGHTS.get(matcher, _COLMAP_STEP_WEIGHTS["sequential"])
+
+
+def estimate_colmap_duration_seconds(
+    image_count: int,
+    matcher: Optional[str] = None,
+    *,
+    no_gpu: bool = False,
+    sequential_overlap: Optional[int] = None,
+) -> float:
+    """
+    Estimate total COLMAP runtime from image count and matcher type.
+
+    Calibrated for g4dn.xlarge + CUDA COLMAP with max_image_size=1600 defaults.
+    """
+    n = max(1, image_count)
+    matcher_name = (matcher or COLMAP_MATCHER or "sequential").strip().lower()
+    overlap = sequential_overlap
+    if overlap is None:
+        try:
+            overlap = int(COLMAP_SEQUENTIAL_OVERLAP or 10)
+        except ValueError:
+            overlap = 10
+    overlap = max(1, overlap)
+
+    feature_s = 6.0 * n
+    undistort_s = 1.5 * n
+    mapper_s = 30.0 + 8.0 * (n ** 0.65)
+
+    if matcher_name == "exhaustive":
+        match_s = min(5400.0, 0.12 * n * n)
+    elif matcher_name == "vocab_tree":
+        match_s = 60.0 + 1.8 * n
+    else:
+        match_s = 0.45 * n * min(overlap, n)
+
+    total = feature_s + match_s + mapper_s + undistort_s
+    if no_gpu:
+        total *= 10.0
+    return max(90.0, min(total, 10800.0))
+
+
+def _format_duration_seconds(seconds: float) -> str:
+    s = max(0, int(seconds))
+    if s < 60:
+        return f"{s}s"
+    minutes, sec = divmod(s, 60)
+    if minutes < 60:
+        return f"{minutes}m {sec}s"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}h {minutes}m"
+
+
+class ColmapProgressTracker:
+    """Track COLMAP step progress using logs, filesystem milestones, and time estimates."""
+
+    def __init__(
+        self,
+        image_count: int,
+        matcher: Optional[str] = None,
+        *,
+        no_gpu: bool = False,
+    ) -> None:
+        self.image_count = max(1, image_count)
+        matcher_name = (matcher or COLMAP_MATCHER or "sequential").strip().lower()
+        self.matcher = matcher_name
+        self.weights = _colmap_step_weights(matcher_name)
+        self.total_seconds = estimate_colmap_duration_seconds(
+            self.image_count,
+            matcher_name,
+            no_gpu=no_gpu,
+        )
+        self.step_seconds = [
+            self.total_seconds * weight for weight in self.weights
+        ]
+        self._step_idx = 0
+        self._step_intra_progress = 0.0
+        self._started = time.time()
+        self._step_started = self._started
+
+    def _advance_to_step(self, step_idx: int) -> None:
+        step_idx = max(0, min(step_idx, len(COLMAP_SUBSTEPS) - 1))
+        if step_idx > self._step_idx:
+            self._step_idx = step_idx
+            self._step_started = time.time()
+            self._step_intra_progress = 0.0
+
+    def _set_step_progress(self, step_idx: int, intra_progress: float) -> None:
+        step_idx = max(0, min(step_idx, len(COLMAP_SUBSTEPS) - 1))
+        intra = max(0.0, min(1.0, float(intra_progress)))
+        if step_idx > self._step_idx:
+            self._step_idx = step_idx
+            self._step_started = time.time()
+        self._step_intra_progress = max(self._step_intra_progress, intra)
+
+    def on_log_line(self, line: str) -> None:
+        match = _RE_COLMAP_PROCESSED.search(line)
+        if match:
+            current, total = int(match.group(1)), max(int(match.group(2)), 1)
+            self._set_step_progress(0, current / total)
+            return
+
+        match = _RE_COLMAP_MATCHING.search(line)
+        if match:
+            current, total = int(match.group(1)), max(int(match.group(2)), 1)
+            self._set_step_progress(1, current / total)
+            return
+
+        if _RE_COLMAP_REGISTER.search(line):
+            self._set_step_progress(2, min(self._step_intra_progress + 0.05, 0.92))
+            return
+
+        match = _RE_COLMAP_UNDISTORT.search(line)
+        if match:
+            current, total = int(match.group(1)), max(int(match.group(2)), 1)
+            self._set_step_progress(3, current / total)
+            return
+
+        if "Feature extraction failed" in line:
+            return
+        if "Feature matching failed" in line:
+            self._advance_to_step(1)
+        elif "Mapper failed" in line:
+            self._advance_to_step(2)
+        elif "Image undistortion failed" in line:
+            self._advance_to_step(3)
+
+    def update_from_filesystem(self, scene_dir: str) -> None:
+        """Infer completed COLMAP stages from on-disk artifacts."""
+        distorted_sparse0 = os.path.join(scene_dir, "distorted", "sparse", "0")
+        scene_sparse0 = os.path.join(scene_dir, "sparse", "0")
+        images_dir = os.path.join(scene_dir, "images")
+        database_path = os.path.join(scene_dir, "distorted", "database.db")
+
+        if os.path.isdir(scene_sparse0) and os.path.isdir(images_dir):
+            self._advance_to_step(3)
+            if _count_images_in_directory(images_dir) > 0:
+                self._step_intra_progress = 0.95
+            return
+
+        if os.path.isdir(distorted_sparse0):
+            self._advance_to_step(2)
+            elapsed = time.time() - self._step_started
+            budget = self.step_seconds[2] if self.step_seconds[2] > 0 else 1.0
+            self._step_intra_progress = max(
+                self._step_intra_progress,
+                min(0.92, elapsed / budget),
+            )
+            return
+
+        if os.path.isfile(database_path):
+            elapsed = time.time() - self._started
+            feature_budget = self.step_seconds[0]
+            match_budget = self.step_seconds[1]
+            if elapsed > feature_budget + match_budget * 0.5:
+                self._advance_to_step(1)
+            elif elapsed > feature_budget * 0.85:
+                self._advance_to_step(1)
+                self._step_intra_progress = max(
+                    self._step_intra_progress,
+                    min(0.5, (elapsed - feature_budget) / max(match_budget, 1.0)),
+                )
+
+    def local_percent(self) -> float:
+        completed_weight = sum(self.weights[: self._step_idx])
+        current_weight = self.weights[self._step_idx]
+        step_budget = self.step_seconds[self._step_idx]
+        elapsed_in_step = time.time() - self._step_started
+        time_progress = min(0.92, elapsed_in_step / step_budget) if step_budget > 0 else 0.0
+        intra = max(self._step_intra_progress, time_progress)
+        done_weight = completed_weight + current_weight * intra
+        total_weight = sum(self.weights)
+        return min(99.0, 100.0 * done_weight / total_weight)
+
+    def eta_seconds(self) -> float:
+        local = self.local_percent()
+        if local <= 0.5:
+            return self.total_seconds
+        return max(0.0, self.total_seconds * (100.0 - local) / 100.0)
+
+    @property
+    def current_step(self) -> str:
+        return COLMAP_SUBSTEPS[self._step_idx]
+
+    def snapshot(self) -> Tuple[float, str, float]:
+        return self.local_percent(), self.current_step, self.eta_seconds()
+
+
+def resolve_colmap_image_count(
+    scene_dir: str,
+    fallback_count: int = 0,
+) -> int:
+    """Count source images for COLMAP duration estimates."""
+    input_dir = os.path.join(scene_dir, "input")
+    count = _count_images_in_directory(input_dir)
+    if count > 0:
+        return count
+    count = _count_images_in_directory(scene_dir)
+    if count > 0:
+        return count
+    return max(0, fallback_count)
+
+
 def run_colmap_subprocess(
     scene_dir: str,
     interrupt_event: threading.Event,
+    image_count: int = 0,
+    progress_callback: Optional[Callable[[float, str, float], None]] = None,
     heartbeat_callback: Optional[callable] = None,
 ) -> Tuple[bool, List[str]]:
     """
     Run gaussian-splatting convert.py to produce COLMAP sparse reconstruction in scene_dir.
+
+    Args:
+        scene_dir: Scene root passed to convert.py -s
+        interrupt_event: Set to terminate the subprocess on Spot/global stop
+        image_count: Number of source images (for step-weighted progress / ETA)
+        progress_callback: Called with (local_colmap_percent, sub_step, eta_seconds)
+        heartbeat_callback: Deprecated alias; ignored when progress_callback is set
 
     Returns:
         Tuple[bool, List[str]]: (success, log_tail)
@@ -1810,7 +2047,21 @@ def run_colmap_subprocess(
     log.info("Script: %s", os.path.basename(convert_script))
     log.info("Source: %s", scene_dir)
     log.info("Full command: %s", " ".join(cmd))
+
+    resolved_images = resolve_colmap_image_count(scene_dir, image_count)
+    tracker = ColmapProgressTracker(resolved_images, COLMAP_MATCHER, no_gpu=COLMAP_NO_GPU)
+    log.info(
+        "COLMAP estimate: %d image(s), matcher=%s, ~%s total (%ds)",
+        resolved_images,
+        tracker.matcher,
+        _format_duration_seconds(tracker.total_seconds),
+        int(tracker.total_seconds),
+    )
     log.info("=" * 60)
+
+    on_progress = progress_callback
+    if on_progress is None and heartbeat_callback is not None:
+        on_progress = lambda _local, _step, _eta: heartbeat_callback()
 
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
@@ -1830,8 +2081,14 @@ def run_colmap_subprocess(
         log.error("Failed to start COLMAP subprocess: %s", e)
         return False, [f"Failed to start COLMAP: {e}"]
 
-    last_heartbeat_time = time.time()
+    last_heartbeat_time = 0.0
+    last_fs_poll_time = 0.0
     heartbeat_interval = HEARTBEAT_INTERVAL_SECONDS
+    fs_poll_interval = 5.0
+
+    if on_progress:
+        local_pct, step, eta = tracker.snapshot()
+        on_progress(local_pct, step, eta)
 
     try:
         while True:
@@ -1851,13 +2108,25 @@ def run_colmap_subprocess(
                 line = line.rstrip()
                 log_tail.append(line)
                 print(line, flush=True)
+                tracker.on_log_line(line)
 
             if proc.poll() is not None and not line:
                 break
 
             now = time.time()
-            if heartbeat_callback and (now - last_heartbeat_time) >= heartbeat_interval:
-                heartbeat_callback()
+            if now - last_fs_poll_time >= fs_poll_interval:
+                tracker.update_from_filesystem(scene_dir)
+                last_fs_poll_time = now
+
+            if on_progress and (now - last_heartbeat_time) >= heartbeat_interval:
+                local_pct, step, eta = tracker.snapshot()
+                on_progress(local_pct, step, eta)
+                log.info(
+                    "COLMAP progress: step=%s local=%.1f%% ETA ~%s",
+                    step,
+                    local_pct,
+                    _format_duration_seconds(eta),
+                )
                 last_heartbeat_time = now
 
         exit_code = proc.returncode
@@ -1869,6 +2138,9 @@ def run_colmap_subprocess(
             msg = f"COLMAP finished but sparse reconstruction missing in {scene_dir}"
             log.error(msg)
             return False, list(log_tail) + [msg]
+
+        if on_progress:
+            on_progress(100.0, COLMAP_SUBSTEPS[-1], 0.0)
 
         return True, list(log_tail)
 
@@ -2491,18 +2763,41 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
         _send_heartbeat_if_due("COLMAP", overall_percent("COLMAP", 0))
 
         if needs_colmap:
-            def colmap_heartbeat():
-                pct = overall_percent("COLMAP", 50)
+            colmap_image_count = resolve_colmap_image_count(
+                extracted_folder,
+                item.input_file_count,
+            )
+            colmap_estimate_s = estimate_colmap_duration_seconds(
+                colmap_image_count,
+                COLMAP_MATCHER,
+                no_gpu=COLMAP_NO_GPU,
+            )
+            log.info(
+                "COLMAP phase: %d image(s), estimated duration ~%s",
+                colmap_image_count,
+                _format_duration_seconds(colmap_estimate_s),
+            )
+
+            def colmap_progress(local_pct: float, sub_step: str, eta_seconds: float) -> None:
+                global_pct = overall_percent("COLMAP", local_pct)
                 patch_attempt(attempt_id, token, {
                     "progressPhase": "COLMAP",
-                    "progressPercent": pct,
+                    "progressPercent": global_pct,
                 }, api_base_url=api_url)
-                _send_heartbeat_if_due("COLMAP", pct)
+                _send_heartbeat_if_due("COLMAP", global_pct)
+                log.debug(
+                    "COLMAP heartbeat: %s local=%.1f%% global=%d%% ETA ~%s",
+                    sub_step,
+                    local_pct,
+                    global_pct,
+                    _format_duration_seconds(eta_seconds),
+                )
 
             colmap_ok, colmap_log_tail = run_colmap_subprocess(
                 scene_dir=extracted_folder,
                 interrupt_event=interrupt_event,
-                heartbeat_callback=colmap_heartbeat,
+                image_count=colmap_image_count,
+                progress_callback=colmap_progress,
             )
 
             if interrupt_event.is_set() or global_stop.is_set():
