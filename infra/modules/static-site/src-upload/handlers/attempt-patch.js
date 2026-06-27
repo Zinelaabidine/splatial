@@ -53,6 +53,15 @@ exports.handler = async (event) => {
     viewKey, plyKey,
   } = body;
 
+  if (Item.status?.S === "CANCELLED" && status === "RUNNING") {
+    return response(200, {
+      attemptId,
+      updated: false,
+      skipped: true,
+      reason: "CANCELLED",
+    });
+  }
+
   const resolvedViewKey =
     (typeof viewKey === "string" && viewKey.trim() !== "")
       ? viewKey.trim()

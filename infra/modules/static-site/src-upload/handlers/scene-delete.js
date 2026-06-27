@@ -32,11 +32,11 @@ const ACTIVE_STATUSES = new Set(["QUEUED", "PROCESSING", "PENDING_UPLOAD", "UPLO
  *   - Marks in-flight jobs CANCELLED (worker skips / SQS message becomes a no-op)
  *   - Aborts incomplete multipart uploads
  *   - Deletes raw input objects and all output artifacts from S3
- *   - Deletes related attempt records from DynamoDB
+ *   - Marks related attempt records CANCELLED (rows kept so workers can PATCH and exit)
  *   - Deletes the scene record from DynamoDB
  *
- * SQS messages already in flight cannot be removed directly; cancelling + deleting
- * attempt/scene records ensures workers exit without writing new artifacts.
+ * SQS messages already in flight cannot be removed directly; cancelling attempt rows
+ * ensures workers skip the job instead of retrying against a missing record.
  *
  * Success response (200):
  *   { "sceneId": "...", "deleted": true, "cancelledJob": boolean }
@@ -157,16 +157,23 @@ exports.handler = async (event) => {
     scanStartKey = scanResult.LastEvaluatedKey;
   } while (scanStartKey);
 
+  const cancelNow = new Date().toISOString();
   for (const attemptId of attemptIds) {
     try {
       await dynamo.send(
-        new DeleteItemCommand({
+        new UpdateItemCommand({
           TableName: TABLE,
           Key: { scene_id: { S: attemptId } },
+          UpdateExpression: "SET #s = :cancelled, updated_at = :now",
+          ExpressionAttributeNames: { "#s": "status" },
+          ExpressionAttributeValues: {
+            ":cancelled": { S: "CANCELLED" },
+            ":now": { S: cancelNow },
+          },
         })
       );
     } catch (err) {
-      console.warn("attempt delete skipped", { ...logContext, attemptId, err: err.message });
+      console.warn("attempt cancel before delete skipped", { ...logContext, attemptId, err: err.message });
     }
   }
 

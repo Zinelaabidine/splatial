@@ -1979,7 +1979,7 @@ def find_point_cloud_ply_dirs(output_folder: str) -> List[str]:
     """
     Recursively find all directories containing point_cloud.ply files.
     
-    Args:
+    Args:P
         output_folder: Root folder to search
     
     Returns:
