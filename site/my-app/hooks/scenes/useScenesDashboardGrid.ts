@@ -8,7 +8,7 @@ import {
   isActiveSceneStatus,
   POLL_INTERVAL_MS,
 } from "@/lib/scenes/sceneMappers";
-import { submitJob } from "@/server/services/jobsService";
+import { cancelJob, submitJob } from "@/server/services/jobsService";
 import { deleteScene, listScenes } from "@/server/services/scenesService";
 import type { DashboardScene } from "@/types/splatworks";
 
@@ -18,7 +18,10 @@ export function useScenesDashboardGrid(search: string) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submittingId, setSubmittingId] = useState<string | null>(null);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [modalCancelling, setModalCancelling] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DashboardScene | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -80,6 +83,7 @@ export function useScenesDashboardGrid(search: string) {
       if (!scene.sceneId || submittingId) return;
       setSubmittingId(scene.sceneId);
       setActionError(null);
+      setActionMessage(null);
       setScenes((prev) =>
         prev.map((s) =>
           s.sceneId === scene.sceneId
@@ -106,6 +110,51 @@ export function useScenesDashboardGrid(search: string) {
     [fetchScenes, submittingId],
   );
 
+  const runCancelJob = useCallback(
+    async (sceneId: string, closeModalOnSuccess: boolean) => {
+      setCancellingId(sceneId);
+      setModalCancelling(closeModalOnSuccess);
+      setDeleteError(null);
+      setActionError(null);
+      setActionMessage(null);
+      try {
+        await cancelJob(sceneId);
+        setActionMessage("Processing cancelled. You can submit again or delete the scene.");
+        await fetchScenes(true);
+        if (closeModalOnSuccess) {
+          setDeleteTarget(null);
+        }
+      } catch (err) {
+        console.error("[useScenesDashboardGrid] cancel failed", err);
+        const msg =
+          err instanceof Error ? err.message : "Failed to cancel processing. Please try again.";
+        if (closeModalOnSuccess) {
+          setDeleteError(msg);
+        } else {
+          setActionError(msg);
+        }
+        await fetchScenes(true);
+      } finally {
+        setCancellingId(null);
+        setModalCancelling(false);
+      }
+    },
+    [fetchScenes],
+  );
+
+  const cancelScene = useCallback(
+    (scene: DashboardScene) => {
+      if (!scene.sceneId || cancellingId) return;
+      void runCancelJob(scene.sceneId, false);
+    },
+    [cancellingId, runCancelJob],
+  );
+
+  const handleCancelFromModal = useCallback(() => {
+    if (!deleteTarget?.sceneId || modalCancelling) return;
+    void runCancelJob(deleteTarget.sceneId, true);
+  }, [deleteTarget, modalCancelling, runCancelJob]);
+
   const createScene = () => {
     router.push("/scenes/create");
   };
@@ -116,11 +165,11 @@ export function useScenesDashboardGrid(search: string) {
   }, []);
 
   const dismissDeleteModal = useCallback(() => {
-    if (!deleting) {
+    if (!deleting && !modalCancelling) {
       setDeleteTarget(null);
       setDeleteError(null);
     }
-  }, [deleting]);
+  }, [deleting, modalCancelling]);
 
   const confirmDelete = useCallback(async () => {
     if (!deleteTarget) return;
@@ -128,31 +177,44 @@ export function useScenesDashboardGrid(search: string) {
 
     setDeleting(true);
     setDeleteError(null);
+    setActionMessage(null);
     try {
-      await deleteScene(sceneId);
+      const result = await deleteScene(sceneId);
       setScenes((prev) => prev.filter((s) => s.id !== deleteTarget.id));
       setDeleteTarget(null);
+      setActionMessage(
+        result.cancelledJob
+          ? "Processing was stopped and the scene was deleted."
+          : "Scene deleted.",
+      );
     } catch (err) {
       console.error("[useScenesDashboardGrid] delete failed", err);
       setDeleteError(
         err instanceof Error ? err.message : "Failed to delete scene. Please try again.",
       );
+      await fetchScenes(true);
     } finally {
       setDeleting(false);
     }
-  }, [deleteTarget]);
+  }, [deleteTarget, fetchScenes]);
 
   return {
     scenes: filteredScenes,
     loading,
     error,
     actionError,
+    actionMessage,
     submittingId,
+    cancellingId,
+    modalCancelling,
     fetchScenes,
     openScene,
     submitScene,
+    cancelScene,
+    handleCancelFromModal,
     createScene,
     clearActionError: () => setActionError(null),
+    clearActionMessage: () => setActionMessage(null),
     deleteTarget,
     deleting,
     deleteError,

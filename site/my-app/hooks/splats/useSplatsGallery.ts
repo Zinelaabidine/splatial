@@ -38,6 +38,7 @@ export function useSplatsGallery(search: string) {
   const [deleteTarget, setDeleteTarget] = useState<Splat | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   const fetchSplats = useCallback(async () => {
     setLoading(true);
@@ -124,10 +125,14 @@ export function useSplatsGallery(search: string) {
 
     setDeleting(true);
     setDeleteError(null);
+    setActionMessage(null);
     try {
-      await deleteScene(sceneId);
+      const result = await deleteScene(sceneId);
       setSplats((prev) => prev.filter((s) => s.id !== splatId));
       setDeleteTarget(null);
+      if (result.cancelledJob) {
+        setActionMessage("Processing was stopped and the splat was deleted.");
+      }
     } catch (err) {
       console.error("[useSplatsGallery] delete failed", err);
       setDeleteError(
@@ -154,6 +159,8 @@ export function useSplatsGallery(search: string) {
     deleteTarget,
     deleting,
     deleteError,
+    actionMessage,
+    clearActionMessage: () => setActionMessage(null),
     fetchSplats,
     open3D,
     startTour,

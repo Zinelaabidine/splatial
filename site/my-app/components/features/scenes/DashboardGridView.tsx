@@ -16,7 +16,9 @@ type DashboardGridViewProps = {
   onRetry: () => void;
   onViewScene: (scene: MockScene) => void;
   onSubmitScene: (scene: MockScene) => void;
+  onCancelScene?: (scene: MockScene) => void;
   onDeleteScene: (scene: MockScene) => void;
+  cancellingId?: string | null;
 };
 
 export default function DashboardGridView({
@@ -31,7 +33,9 @@ export default function DashboardGridView({
   onRetry,
   onViewScene,
   onSubmitScene,
+  onCancelScene,
   onDeleteScene,
+  cancellingId = null,
 }: DashboardGridViewProps) {
   return (
     <div className="mx-auto w-full max-w-7xl px-6 py-8">
@@ -108,7 +112,9 @@ export default function DashboardGridView({
               scene={scene}
               onViewScene={onViewScene}
               onSubmitScene={onSubmitScene}
+              onCancelScene={onCancelScene}
               onDeleteScene={onDeleteScene}
+              cancelling={cancellingId === scene.sceneId}
             />
           ))}
         </div>

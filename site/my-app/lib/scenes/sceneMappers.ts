@@ -21,6 +21,13 @@ export function formatSceneDate(iso: string): string {
   }
 }
 
+const ACTIVE_GPU_JOB_STATUSES = new Set<Scene["status"]>(["QUEUED", "PROCESSING"]);
+
+/** Scene is waiting on or running GPU training. */
+export function isActiveGpuJobStatus(status: Scene["status"] | undefined): boolean {
+  return status != null && ACTIVE_GPU_JOB_STATUSES.has(status);
+}
+
 /** Map API Scene → UI card model. */
 export function apiSceneToCard(scene: Scene): MockScene {
   const state =
@@ -31,20 +38,24 @@ export function apiSceneToCard(scene: Scene): MockScene {
         : scene.status === "FAILED"
           ? "failed"
           : scene.status === "CANCELLED"
-            ? "draft"
+            ? "cancelled"
             : scene.status === "UPLOADED"
               ? "uploaded"
               : scene.status === "QUEUED" || scene.status === "PENDING_UPLOAD"
-              ? "preprocessing"
-              : "draft";
+                ? "preprocessing"
+                : "draft";
 
   return {
     id: scene.sceneId,
     sceneId: scene.sceneId,
     title: scene.name,
     state,
+    apiStatus: scene.status,
     createdAt: formatSceneDate(scene.createdAt),
     lastModified: formatSceneDate(scene.createdAt),
+    ...(scene.progressPercent != null
+      ? { processingProgress: scene.progressPercent }
+      : {}),
     thumbnailHue:
       state === "complete" || state === "processing"
         ? hueFromId(scene.sceneId)
@@ -85,6 +96,7 @@ function dashboardCaption(scene: Scene, status: SceneStatus): string {
     case "failed":
       return "Processing failed";
     case "draft":
+      if (scene.status === "CANCELLED") return "Cancelled";
       if (scene.status === "UPLOADED") return "Ready to submit";
       if (scene.status === "PENDING_UPLOAD") return "Importing…";
       return created;

@@ -160,6 +160,19 @@ export interface DeleteSceneResponse {
   cancelledJob?: boolean;
 }
 
+/** Worker callback: PATCH /api/attempts/:attemptId */
+export interface AttemptPatchResponse {
+  attemptId: string;
+  updated: boolean;
+  skipped?: boolean;
+  reason?: "CANCELLED";
+}
+
+export interface CancelJobResponse {
+  sceneId: string;
+  status: "CANCELLED";
+}
+
 // ---------------------------------------------------------------------------
 // Seed a READY scene for a manually-uploaded PLY file
 // ---------------------------------------------------------------------------

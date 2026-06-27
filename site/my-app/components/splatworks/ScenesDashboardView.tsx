@@ -19,9 +19,11 @@ function dashboardSceneToModalScene(scene: DashboardScene): MockScene {
           ? "preprocessing"
           : scene.status === "failed"
             ? "failed"
-            : scene.apiStatus === "UPLOADED"
-              ? "uploaded"
-              : "draft";
+            : scene.apiStatus === "CANCELLED"
+              ? "cancelled"
+              : scene.apiStatus === "UPLOADED"
+                ? "uploaded"
+                : "draft";
 
   const date = scene.caption;
   return {
@@ -29,6 +31,7 @@ function dashboardSceneToModalScene(scene: DashboardScene): MockScene {
     sceneId: scene.sceneId ?? scene.id,
     title: scene.title,
     state,
+    apiStatus: scene.apiStatus,
     createdAt: date,
     lastModified: date,
   };
@@ -41,11 +44,17 @@ export default function ScenesDashboardView() {
     loading,
     error,
     actionError,
+    actionMessage,
     submittingId,
+    cancellingId,
+    modalCancelling,
     fetchScenes,
     openScene,
     submitScene,
+    cancelScene,
+    handleCancelFromModal,
     clearActionError,
+    clearActionMessage,
     deleteTarget,
     deleting,
     deleteError,
@@ -64,6 +73,19 @@ export default function ScenesDashboardView() {
         Splatworks: Scenes
         {loading && <RefreshCw className="h-5 w-5 animate-spin text-[#909090]" />}
       </h1>
+
+      {actionMessage ? (
+        <div className="mb-4 rounded-xl border border-emerald-900/50 bg-emerald-950/40 px-5 py-4 text-sm text-emerald-200">
+          {actionMessage}{" "}
+          <button
+            type="button"
+            onClick={clearActionMessage}
+            className="font-medium underline underline-offset-2 hover:text-emerald-100"
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
 
       {error ? (
         <div className="rounded-xl border border-red-900/50 bg-red-950/40 px-5 py-4 text-sm text-red-300">
@@ -99,8 +121,10 @@ export default function ScenesDashboardView() {
               scene={scene}
               onClick={openScene}
               onSubmitScene={submitScene}
+              onCancelScene={cancelScene}
               onDeleteScene={remove}
               submitting={submittingId === scene.sceneId}
+              cancelling={cancellingId === scene.sceneId}
             />
           ))}
         </div>
@@ -110,9 +134,11 @@ export default function ScenesDashboardView() {
         <DeleteSceneModal
           scene={dashboardSceneToModalScene(deleteTarget)}
           deleting={deleting}
+          cancelling={modalCancelling}
           error={deleteError}
-          onCancel={dismissDeleteModal}
-          onConfirm={confirmDelete}
+          onDismiss={dismissDeleteModal}
+          onConfirmDelete={confirmDelete}
+          onCancelProcessing={handleCancelFromModal}
         />
       )}
     </div>

@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { MoreVertical, Send, Trash2 } from "lucide-react";
+import { MoreVertical, Send, Trash2, XCircle } from "lucide-react";
 
 import PointCloudThumbnail from "@/components/splatworks/PointCloudThumbnail";
 import StatusDot, { STATUS_LABELS } from "@/components/splatworks/StatusDot";
 import { Button } from "@/components/ui/button";
+import { isActiveGpuJobStatus } from "@/lib/scenes/sceneMappers";
 import { cn } from "@/lib/utils";
 import type { DashboardScene, SceneStatus } from "@/types/splatworks";
 
@@ -24,26 +25,35 @@ type DashboardSceneCardProps = {
   scene: DashboardScene;
   onClick: (scene: DashboardScene) => void;
   onSubmitScene?: (scene: DashboardScene) => void;
+  onCancelScene?: (scene: DashboardScene) => void;
   onDeleteScene?: (scene: DashboardScene) => void;
   submitting?: boolean;
+  cancelling?: boolean;
 };
 
 function canSubmitScene(scene: DashboardScene): boolean {
-  return scene.apiStatus === "UPLOADED" || scene.apiStatus === "FAILED";
+  return (
+    scene.apiStatus === "UPLOADED" ||
+    scene.apiStatus === "FAILED" ||
+    scene.apiStatus === "CANCELLED"
+  );
 }
 
 export default function DashboardSceneCard({
   scene,
   onClick,
   onSubmitScene,
+  onCancelScene,
   onDeleteScene,
   submitting = false,
+  cancelling = false,
 }: DashboardSceneCardProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const styles = DARK_STATUS[scene.status];
   const isViewable = scene.status === "completed";
   const showSubmit = canSubmitScene(scene);
+  const showCancel = isActiveGpuJobStatus(scene.apiStatus);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -142,6 +152,21 @@ export default function DashboardSceneCard({
           </div>
         </div>
         <p className="mt-1 font-sw-mono text-xs text-[#909090]">{scene.caption}</p>
+        {showCancel && (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={cancelling}
+            onClick={(e) => {
+              e.stopPropagation();
+              onCancelScene?.(scene);
+            }}
+            className="mt-3 w-full border-amber-700/50 bg-transparent text-amber-400 hover:bg-amber-950/40 hover:text-amber-300"
+          >
+            <XCircle data-icon="inline-start" />
+            {cancelling ? "Cancelling…" : "Cancel processing"}
+          </Button>
+        )}
         {showSubmit && (
           <Button
             size="sm"
@@ -190,7 +215,9 @@ function StatusTile({
           ? "Ready to submit"
           : scene.apiStatus === "PENDING_UPLOAD"
             ? "Importing"
-            : STATUS_LABELS[scene.status]}
+            : scene.apiStatus === "CANCELLED"
+              ? "Cancelled"
+              : STATUS_LABELS[scene.status]}
       </span>
 
       {scene.status === "training" && scene.progressPercent != null && (

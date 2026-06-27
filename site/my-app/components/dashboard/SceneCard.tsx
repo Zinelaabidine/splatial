@@ -21,7 +21,9 @@ type SceneCardProps = {
   scene: MockScene;
   onViewScene?: (scene: MockScene) => void;
   onSubmitScene?: (scene: MockScene) => void;
+  onCancelScene?: (scene: MockScene) => void;
   onDeleteScene?: (scene: MockScene) => void;
+  cancelling?: boolean;
 };
 
 function CompleteThumbnail({ hue = 260 }: { hue?: number }) {
@@ -161,6 +163,12 @@ function StatusIndicator({ scene }: { scene: MockScene }) {
           Failed
         </span>
       );
+    case "cancelled":
+      return (
+        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500">
+          Cancelled
+        </span>
+      );
   }
 }
 
@@ -168,10 +176,14 @@ function PrimaryAction({
   scene,
   onViewScene,
   onSubmitScene,
+  onCancelScene,
+  cancelling = false,
 }: {
   scene: MockScene;
   onViewScene?: (scene: MockScene) => void;
   onSubmitScene?: (scene: MockScene) => void;
+  onCancelScene?: (scene: MockScene) => void;
+  cancelling?: boolean;
 }) {
   switch (scene.state) {
     case "complete":
@@ -203,26 +215,60 @@ function PrimaryAction({
       );
     case "processing":
       return (
-        <Button size="sm" className="bg-purple-600 text-white hover:bg-purple-700">
-          Cancel
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={cancelling}
+          className="border-amber-200 text-amber-700 hover:bg-amber-50"
+          onClick={() => onCancelScene?.(scene)}
+        >
+          {cancelling ? "Cancelling…" : "Cancel processing"}
         </Button>
       );
     case "preprocessing":
       return (
-        <Button size="sm" className="bg-purple-600 text-white hover:bg-purple-700">
-          Cancel Preprocessing
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={cancelling}
+          className="border-amber-200 text-amber-700 hover:bg-amber-50"
+          onClick={() => onCancelScene?.(scene)}
+        >
+          {cancelling ? "Cancelling…" : "Cancel processing"}
         </Button>
       );
     case "failed":
       return (
-        <Button size="sm" className="border border-red-200 bg-red-50 text-red-600 hover:bg-red-100">
+        <Button
+          size="sm"
+          className="border border-red-200 bg-red-50 text-red-600 hover:bg-red-100"
+          onClick={() => onSubmitScene?.(scene)}
+        >
           Retry
+        </Button>
+      );
+    case "cancelled":
+      return (
+        <Button
+          size="sm"
+          className="bg-emerald-600 text-white hover:bg-emerald-700"
+          onClick={() => onSubmitScene?.(scene)}
+        >
+          <Send className="mr-1.5 h-3.5 w-3.5" />
+          Submit
         </Button>
       );
   }
 }
 
-export default function SceneCard({ scene, onViewScene, onSubmitScene, onDeleteScene }: SceneCardProps) {
+export default function SceneCard({
+  scene,
+  onViewScene,
+  onSubmitScene,
+  onCancelScene,
+  onDeleteScene,
+  cancelling = false,
+}: SceneCardProps) {
   const shareDisabled = scene.state === "processing" || scene.state === "uploaded" || scene.state === "failed";
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -250,6 +296,7 @@ export default function SceneCard({ scene, onViewScene, onSubmitScene, onDeleteS
           {scene.state === "preprocessing" && <PreprocessingThumbnail />}
           {scene.state === "uploaded" && <UploadedThumbnail />}
           {scene.state === "failed" && <PreprocessingThumbnail />}
+          {scene.state === "cancelled" && <DraftThumbnail />}
         </div>
 
         <div className="flex min-w-0 flex-1 flex-col gap-2">
@@ -261,7 +308,13 @@ export default function SceneCard({ scene, onViewScene, onSubmitScene, onDeleteS
           </div>
 
           <div className="mt-auto flex flex-wrap items-center gap-1.5">
-            <PrimaryAction scene={scene} onViewScene={onViewScene} onSubmitScene={onSubmitScene} />
+            <PrimaryAction
+              scene={scene}
+              onViewScene={onViewScene}
+              onSubmitScene={onSubmitScene}
+              onCancelScene={onCancelScene}
+              cancelling={cancelling}
+            />
             <Button
               variant="outline"
               size="sm"

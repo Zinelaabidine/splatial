@@ -1,4 +1,13 @@
-export type SceneCardState = "complete" | "draft" | "processing" | "preprocessing" | "uploaded" | "failed";
+import type { SceneManagementStatus } from "@/types/api";
+
+export type SceneCardState =
+  | "complete"
+  | "draft"
+  | "processing"
+  | "preprocessing"
+  | "uploaded"
+  | "failed"
+  | "cancelled";
 
 export type SortOption = "newest" | "oldest" | "name";
 
@@ -16,4 +25,6 @@ export type MockScene = {
   processingProgress?: number;
   /** Thumbnail accent for complete/processing cards. */
   thumbnailHue?: number;
+  /** Original API status when mapped from listScenes. */
+  apiStatus?: SceneManagementStatus;
 };

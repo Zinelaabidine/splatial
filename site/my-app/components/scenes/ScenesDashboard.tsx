@@ -77,6 +77,7 @@ export default function ScenesDashboard() {
     submittingId,
     cancellingId,
     actionError,
+    actionMessage,
     fileInputRef,
     isUploading,
     openModal,
@@ -91,6 +92,7 @@ export default function ScenesDashboard() {
     handleFilePickerClick,
     handleModalBackdropClick,
     clearActionError,
+    clearActionMessage,
   } = useScenesDashboard();
 
   return (
@@ -114,6 +116,15 @@ export default function ScenesDashboard() {
           <div className="mb-4 flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700">
             <span>{actionError}</span>
             <button type="button" onClick={clearActionError} className="ml-3 text-red-400 hover:text-red-600">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+
+        {actionMessage && (
+          <div className="mb-4 flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800">
+            <span>{actionMessage}</span>
+            <button type="button" onClick={clearActionMessage} className="ml-3 text-emerald-600 hover:text-emerald-800">
               <X className="h-4 w-4" />
             </button>
           </div>

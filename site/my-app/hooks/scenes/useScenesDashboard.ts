@@ -25,6 +25,7 @@ export function useScenesDashboard() {
   const [submittingId, setSubmittingId] = useState<string | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -114,13 +115,18 @@ export function useScenesDashboard() {
   const handleCancel = async (sceneId: string) => {
     if (cancellingId) return;
     setCancellingId(sceneId);
+    setActionError(null);
+    setActionMessage(null);
     try {
       await cancelJob(sceneId);
       setScenes((prev) =>
-        prev.map((s) => (s.sceneId === sceneId ? { ...s, status: "CANCELLED" } : s))
+        prev.map((s) => (s.sceneId === sceneId ? { ...s, status: "CANCELLED" } : s)),
       );
+      setActionMessage("Processing cancelled. You can submit again or delete the scene.");
+      await fetchScenes();
     } catch (err) {
       console.error("[scenes] cancel failed", err);
+      setActionError("Failed to cancel processing. Please try again.");
       await fetchScenes();
     } finally {
       setCancellingId(null);
@@ -131,9 +137,15 @@ export function useScenesDashboard() {
     if (deletingId) return;
     setDeletingId(sceneId);
     setActionError(null);
+    setActionMessage(null);
     try {
-      await deleteScene(sceneId);
+      const result = await deleteScene(sceneId);
       setScenes((prev) => prev.filter((s) => s.sceneId !== sceneId));
+      setActionMessage(
+        result.cancelledJob
+          ? "Processing was stopped and the scene was deleted."
+          : "Scene deleted.",
+      );
     } catch (err) {
       console.error("[scenes] delete failed", err);
       const msg = err instanceof Error ? err.message : "Delete failed";
@@ -169,6 +181,7 @@ export function useScenesDashboard() {
   };
 
   const clearActionError = () => setActionError(null);
+  const clearActionMessage = () => setActionMessage(null);
 
   return {
     scenes,
@@ -184,6 +197,7 @@ export function useScenesDashboard() {
     submittingId,
     cancellingId,
     actionError,
+    actionMessage,
     fileInputRef,
     isUploading,
     openModal,
@@ -198,5 +212,6 @@ export function useScenesDashboard() {
     handleFilePickerClick,
     handleModalBackdropClick,
     clearActionError,
+    clearActionMessage,
   };
 }

@@ -10,11 +10,14 @@ export default function ScenesLibraryContainer() {
     sorted,
     loading,
     error,
+    actionMessage,
     sortBy,
     sortOpen,
     deleteTarget,
     deleting,
     deleteError,
+    cancellingId,
+    modalCancelling,
     sceneCount,
     setSortBy,
     setSortOpen,
@@ -22,12 +25,28 @@ export default function ScenesLibraryContainer() {
     handleViewScene,
     handleDeleteScene,
     handleSubmitScene,
+    handleCancelScene,
+    handleCancelFromModal,
     dismissDeleteModal,
     confirmDelete,
+    clearActionMessage,
   } = useDashboardScenes();
 
   return (
     <>
+      {actionMessage ? (
+        <div className="mx-auto mb-4 flex max-w-7xl items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800">
+          <span>{actionMessage}</span>
+          <button
+            type="button"
+            onClick={clearActionMessage}
+            className="ml-3 font-medium text-emerald-600 hover:text-emerald-800"
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
+
       <DashboardGridView
         scenes={sorted}
         loading={loading}
@@ -35,6 +54,7 @@ export default function ScenesLibraryContainer() {
         sortBy={sortBy}
         sortOpen={sortOpen}
         sceneCount={sceneCount}
+        cancellingId={cancellingId}
         onSortToggle={() => setSortOpen((o) => !o)}
         onSortSelect={(option) => {
           setSortBy(option);
@@ -43,6 +63,7 @@ export default function ScenesLibraryContainer() {
         onRetry={() => fetchScenes()}
         onViewScene={handleViewScene}
         onSubmitScene={handleSubmitScene}
+        onCancelScene={handleCancelScene}
         onDeleteScene={handleDeleteScene}
       />
 
@@ -50,9 +71,11 @@ export default function ScenesLibraryContainer() {
         <DeleteSceneModal
           scene={deleteTarget}
           deleting={deleting}
+          cancelling={modalCancelling}
           error={deleteError}
-          onCancel={dismissDeleteModal}
-          onConfirm={confirmDelete}
+          onDismiss={dismissDeleteModal}
+          onConfirmDelete={confirmDelete}
+          onCancelProcessing={handleCancelFromModal}
         />
       )}
     </>

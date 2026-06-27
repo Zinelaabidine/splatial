@@ -30,6 +30,8 @@ export default function SplatsGalleryView() {
     deleteTarget,
     deleting,
     deleteError,
+    actionMessage,
+    clearActionMessage,
     fetchSplats,
     open3D,
     startTour,
@@ -91,6 +93,19 @@ export default function SplatsGalleryView() {
         </div>
       </div>
 
+      {actionMessage ? (
+        <div className="mb-4 rounded-xl border border-emerald-900/50 bg-emerald-950/40 px-5 py-4 text-sm text-emerald-200">
+          {actionMessage}{" "}
+          <button
+            type="button"
+            onClick={clearActionMessage}
+            className="font-medium underline underline-offset-2 hover:text-emerald-100"
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
+
       {error ? (
         <div className="rounded-xl border border-red-900/50 bg-red-950/40 px-5 py-4 text-sm text-red-300">
           {error}{" "}
@@ -143,8 +158,8 @@ export default function SplatsGalleryView() {
           }}
           deleting={deleting}
           error={deleteError}
-          onCancel={dismissDeleteModal}
-          onConfirm={confirmDelete}
+          onDismiss={dismissDeleteModal}
+          onConfirmDelete={confirmDelete}
         />
       )}
     </div>

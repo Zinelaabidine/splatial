@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation";
 
 import {
   apiSceneToCard,
+  isActiveSceneStatus,
   POLL_INTERVAL_MS,
 } from "@/lib/scenes/sceneMappers";
-import { submitJob } from "@/server/services/jobsService";
+import { cancelJob, submitJob } from "@/server/services/jobsService";
 import { deleteScene, listScenes } from "@/server/services/scenesService";
 import type { MockScene, SortOption } from "@/types/dashboard";
 
@@ -19,6 +20,9 @@ export function useDashboardScenes() {
   const [deleteTarget, setDeleteTarget] = useState<MockScene | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [modalCancelling, setModalCancelling] = useState(false);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>("newest");
   const [sortOpen, setSortOpen] = useState(false);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -52,7 +56,7 @@ export function useDashboardScenes() {
   useEffect(() => {
     if (pollTimer.current) clearTimeout(pollTimer.current);
     const hasActive = scenes.some(
-      (s) => s.state === "processing" || s.state === "preprocessing",
+      (s) => s.apiStatus != null && isActiveSceneStatus(s.apiStatus),
     );
     if (hasActive) {
       pollTimer.current = setTimeout(() => fetchScenes(true), POLL_INTERVAL_MS);
@@ -89,20 +93,71 @@ export function useDashboardScenes() {
   }, []);
 
   const dismissDeleteModal = useCallback(() => {
-    if (!deleting) {
+    if (!deleting && !modalCancelling) {
       setDeleteTarget(null);
       setDeleteError(null);
     }
-  }, [deleting]);
+  }, [deleting, modalCancelling]);
+
+  const runCancelJob = useCallback(
+    async (sceneId: string, closeModalOnSuccess: boolean) => {
+      setCancellingId(sceneId);
+      setModalCancelling(closeModalOnSuccess);
+      setDeleteError(null);
+      setActionMessage(null);
+      try {
+        await cancelJob(sceneId);
+        setActionMessage("Processing cancelled. You can submit again or delete the scene.");
+        await fetchScenes(true);
+        if (closeModalOnSuccess) {
+          setDeleteTarget(null);
+        }
+      } catch (err) {
+        console.error("[useDashboardScenes] cancel failed", err);
+        const msg =
+          err instanceof Error ? err.message : "Failed to cancel processing. Please try again.";
+        if (closeModalOnSuccess) {
+          setDeleteError(msg);
+        } else {
+          setActionMessage(null);
+          setError(msg);
+        }
+        await fetchScenes(true);
+      } finally {
+        setCancellingId(null);
+        setModalCancelling(false);
+      }
+    },
+    [fetchScenes],
+  );
+
+  const handleCancelScene = useCallback(
+    (scene: MockScene) => {
+      if (!scene.sceneId || cancellingId) return;
+      void runCancelJob(scene.sceneId, false);
+    },
+    [cancellingId, runCancelJob],
+  );
+
+  const handleCancelFromModal = useCallback(() => {
+    if (!deleteTarget?.sceneId || modalCancelling) return;
+    void runCancelJob(deleteTarget.sceneId, true);
+  }, [deleteTarget, modalCancelling, runCancelJob]);
 
   const confirmDelete = useCallback(async () => {
     if (!deleteTarget?.sceneId) return;
     setDeleting(true);
     setDeleteError(null);
+    setActionMessage(null);
     try {
-      await deleteScene(deleteTarget.sceneId);
+      const result = await deleteScene(deleteTarget.sceneId);
       setScenes((prev) => prev.filter((s) => s.id !== deleteTarget.id));
       setDeleteTarget(null);
+      setActionMessage(
+        result.cancelledJob
+          ? "Processing was stopped and the scene was deleted."
+          : "Scene deleted.",
+      );
     } catch (err) {
       console.error("[useDashboardScenes] delete failed", err);
       setDeleteError(
@@ -119,33 +174,36 @@ export function useDashboardScenes() {
       if (!scene.sceneId) return;
       setScenes((prev) =>
         prev.map((s) =>
-          s.id === scene.id ? { ...s, state: "preprocessing" as const } : s,
+          s.id === scene.id
+            ? { ...s, state: "preprocessing" as const, apiStatus: "QUEUED" as const }
+            : s,
         ),
       );
       try {
         await submitJob(scene.sceneId);
-        fetchScenes(true);
+        await fetchScenes(true);
       } catch (err) {
         console.error("[useDashboardScenes] submit failed", err);
-        setScenes((prev) =>
-          prev.map((s) =>
-            s.id === scene.id ? { ...s, state: "uploaded" as const } : s,
-          ),
-        );
+        await fetchScenes(true);
       }
     },
     [fetchScenes],
   );
 
+  const clearActionMessage = useCallback(() => setActionMessage(null), []);
+
   return {
     sorted,
     loading,
     error,
+    actionMessage,
     sortBy,
     sortOpen,
     deleteTarget,
     deleting,
     deleteError,
+    cancellingId,
+    modalCancelling,
     sceneCount: scenes.length,
     setSortBy,
     setSortOpen,
@@ -153,7 +211,10 @@ export function useDashboardScenes() {
     handleViewScene,
     handleDeleteScene,
     handleSubmitScene,
+    handleCancelScene,
+    handleCancelFromModal,
     dismissDeleteModal,
     confirmDelete,
+    clearActionMessage,
   };
 }
