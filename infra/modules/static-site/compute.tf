@@ -39,6 +39,9 @@ resource "aws_launch_template" "worker" {
 
   instance_type = var.worker_instance_type
 
+  # OS shutdown (shutdown -h now) terminates the instance instead of stopping it.
+  instance_initiated_shutdown_behavior = "terminate"
+
   iam_instance_profile {
     name = aws_iam_instance_profile.worker_instance_profile.name
   }

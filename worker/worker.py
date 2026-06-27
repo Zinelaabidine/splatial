@@ -55,6 +55,8 @@ Environment Variables:
     SUCCESS_RATE (default: 1.0) - Probability of success (0.0-1.0)
     IDLE_EXIT_SECONDS (default: 120) - Terminate after idle period with no messages
     DELETE_MESSAGE_MAX_RETRIES (default: 5) - Max retries for SQS DeleteMessage
+    SELF_TERMINATE (default: true) - Enable instance self-termination after job/idle exit
+    SELF_TERMINATE_METHOD (default: api) - Termination method: api (ASG/EC2 API) or shutdown (OS poweroff)
     LOG_LEVEL (default: INFO)
 """
 
@@ -120,6 +122,7 @@ DEFAULTS = {
     "IDLE_EXIT_SECONDS": "120",  # DEFAULT CHANGED: 120s for scale-to-zero
     "DELETE_MESSAGE_MAX_RETRIES": "5",  # Max retries for robust delete
     "SELF_TERMINATE": "true",
+    "SELF_TERMINATE_METHOD": "api",
 }
 
 for key, val in DEFAULTS.items():
@@ -168,9 +171,35 @@ def _instance_in_autoscaling_group(instance_id: str) -> bool:
         return False
 
 
+def _self_terminate_method() -> str:
+    method = os.getenv("SELF_TERMINATE_METHOD", "api").strip().lower()
+    if method not in ("api", "shutdown"):
+        log.warning("Unknown SELF_TERMINATE_METHOD=%r; using api", method)
+        return "api"
+    return method
+
+
+def _terminate_via_shutdown(reason: str) -> None:
+    """
+    OS-level shutdown. Requires InstanceInitiatedShutdownBehavior=terminate on the launch template.
+    Does not decrement ASG desired capacity — use api method for scale-to-zero.
+    """
+    log.warning("Initiating OS shutdown for self-termination (reason: %s)", reason)
+    for cmd in (["/usr/sbin/shutdown", "-h", "now"], ["shutdown", "-h", "now"], ["/usr/sbin/poweroff"]):
+        try:
+            subprocess.Popen(cmd)
+            log.warning("OS shutdown invoked via: %s", " ".join(cmd))
+            return
+        except FileNotFoundError:
+            continue
+        except Exception as e:
+            log.warning("Shutdown command %s failed: %s", cmd, e)
+    log.error("All OS shutdown commands failed for reason: %s", reason)
+
+
 def terminate_self(reason: str, decrement_desired: bool = True) -> None:
     """
-    Terminate this instance via Auto Scaling API (preferred) or EC2 API (fallback).
+    Terminate this instance via Auto Scaling API (preferred), EC2 API, or OS shutdown.
     
     Args:
         reason: Human-readable termination reason for logging
@@ -178,10 +207,12 @@ def terminate_self(reason: str, decrement_desired: bool = True) -> None:
             - True: Normal completion/idle exit - enables scale-to-zero
             - False: Spot interruption - ASG launches replacement immediately
     
-    Preferred: terminate_instance_in_auto_scaling_group() with configurable ShouldDecrementDesiredCapacity
-    Fallback: ec2.terminate_instances() if not in ASG or ASG call fails
+    SELF_TERMINATE_METHOD:
+    - api (default): terminate_instance_in_auto_scaling_group, then ec2.terminate_instances,
+      then OS shutdown as last resort
+    - shutdown: skip API calls and issue shutdown -h now (requires launch template terminate behavior)
     
-    IAM Requirements:
+    IAM Requirements (api method):
     - autoscaling:TerminateInstanceInAutoScalingGroup (for ASG method)
     - ec2:TerminateInstances (for fallback method)
     """
@@ -205,6 +236,15 @@ def terminate_self(reason: str, decrement_desired: bool = True) -> None:
             instance_id,
             reason,
         )
+        return
+
+    if _self_terminate_method() == "shutdown":
+        if decrement_desired and _instance_in_autoscaling_group(instance_id):
+            log.warning(
+                "SELF_TERMINATE_METHOD=shutdown may not decrement ASG desired capacity; "
+                "use api (default) for scale-to-zero"
+            )
+        _terminate_via_shutdown(reason)
         return
     
     # Try ASG termination first (preferred for clean scale-down)
@@ -251,6 +291,8 @@ def terminate_self(reason: str, decrement_desired: bool = True) -> None:
         log.warning("EC2 TerminateInstances invoked for %s (reason: %s)", instance_id, reason)
     except Exception as e:
         log.error("Failed to terminate self via EC2: %s", e)
+        log.warning("Falling back to OS shutdown")
+        _terminate_via_shutdown(reason)
 
 
 # ----------------------------
@@ -616,6 +658,7 @@ class WorkItem:
     api_auth_token: str
     api_base_url: Optional[str] = None  # Optional override
     train_config: Optional[Dict[str, Any]] = None  # Optional training parameters
+    delete_poison_message: bool = False  # True when SQS body references a deleted attempt/scene
 
 def parse_message_body(body: str) -> Optional[WorkItem]:
     """
@@ -859,6 +902,34 @@ def patch_attempt(attempt_id: str, token: str, body: Dict[str, Any], api_base_ur
     except Exception as e:
         log.error("PATCH request failed: %s", e, exc_info=True)
         return ApiCallResult(ok=False, status_code=None, body_preview=None)
+
+def patch_attempt_start_running(
+    attempt_id: str,
+    token: str,
+    body: Dict[str, Any],
+    api_base_url: Optional[str] = None,
+) -> ApiCallResult:
+    """
+    PATCH RUNNING/INIT with brief retries on 404/403 to absorb submit-job → SQS races.
+    After retries, a 404/403 means the attempt or scene was deleted — message is poison.
+    """
+    max_retries = int(os.getenv("ATTEMPT_PATCH_404_MAX_RETRIES", "3"))
+    retry_delay = float(os.getenv("ATTEMPT_PATCH_404_RETRY_DELAY", "2"))
+
+    result = patch_attempt(attempt_id, token, body, api_base_url=api_base_url)
+    for attempt in range(1, max_retries + 1):
+        if result.ok or result.status_code not in (404, 403):
+            return result
+        log.warning(
+            "Attempt PATCH returned %s; retrying in %.1fs (%d/%d)",
+            result.status_code,
+            retry_delay,
+            attempt,
+            max_retries,
+        )
+        time.sleep(retry_delay)
+        result = patch_attempt(attempt_id, token, body, api_base_url=api_base_url)
+    return result
 
 def post_heartbeat(attempt_id: str, token: str, phase: str, percent: int, api_base_url: Optional[str] = None) -> ApiCallResult:
     """
@@ -2234,12 +2305,22 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
         if SPOT_REQUEST_ID:
             start_patch["spotRequestId"] = SPOT_REQUEST_ID
         
-        start_result = patch_attempt(attempt_id, token, start_patch, api_base_url=api_url)
+        start_result = patch_attempt_start_running(
+            attempt_id, token, start_patch, api_base_url=api_url
+        )
         if not start_result.ok:
-            if start_result.status_code == 404:
-                log.error("Attempt not found (404); aborting without processing so message can retry/DLQ")
+            if start_result.status_code in (404, 403):
+                log.error(
+                    "Attempt not found or worker token rejected (%s); "
+                    "message is poison (deleted scene/attempt or stale queue entry)",
+                    start_result.status_code,
+                )
+                item.delete_poison_message = True
             else:
-                log.error("Initial RUNNING patch failed (status=%s); aborting", start_result.status_code)
+                log.error(
+                    "Initial RUNNING patch failed (status=%s); aborting",
+                    start_result.status_code,
+                )
             return False, False
 
         _send_heartbeat_if_due("INIT", 0, force=True)
@@ -2948,6 +3029,7 @@ def main() -> None:
             if extender:
                 extender.join(timeout=2)
 
+        poison_deleted = False
         # Delete message only on success, using robust retry mechanism
         if ok and receipt:
             delete_ok = delete_message_with_retries(sqs, qurl, receipt, msg_id)
@@ -2959,6 +3041,19 @@ def main() -> None:
                 )
                 # Still terminate instance to maintain one-message-per-instance
                 # Message will retry but outputs are already uploaded (idempotent)
+        elif not ok and item.delete_poison_message and DELETE_INVALID_MESSAGES and receipt:
+            delete_ok = delete_message_with_retries(sqs, qurl, receipt, msg_id)
+            if delete_ok:
+                poison_deleted = True
+                log.info(
+                    "Deleted poison message for attemptId=%s (attempt/scene missing or cancelled)",
+                    item.attempt_id,
+                )
+            else:
+                log.error(
+                    "Failed to delete poison message for attemptId=%s after retries",
+                    item.attempt_id,
+                )
         elif not ok:
             log.info("Processing failed for attemptId=%s; message will retry", item.attempt_id)
         
@@ -2972,6 +3067,9 @@ def main() -> None:
         elif was_interrupted:
             log.info("Message processing interrupted (Spot/signal); terminating self without decrementing ASG desired capacity")
             terminate_self("spot_interruption", decrement_desired=False)
+        elif poison_deleted:
+            log.info("Orphan SQS message removed; terminating self (one-message-per-instance policy)")
+            terminate_self("orphan_attempt", decrement_desired=True)
         else:
             log.info("Message processing failed; terminating self (one-message-per-instance policy)")
             terminate_self("job_failure", decrement_desired=True)
