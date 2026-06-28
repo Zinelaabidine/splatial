@@ -23,6 +23,9 @@ export function useScenesDashboardGrid(search: string) {
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DashboardScene | null>(null);
+  const [editTarget, setEditTarget] = useState<DashboardScene | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -164,6 +167,41 @@ export function useScenesDashboardGrid(search: string) {
     setDeleteTarget(scene);
   }, []);
 
+  const handleEditRequest = useCallback((scene: DashboardScene) => {
+    setEditError(null);
+    setEditTarget(scene);
+  }, []);
+
+  const dismissEditModal = useCallback(() => {
+    if (!editSaving) {
+      setEditTarget(null);
+      setEditError(null);
+    }
+  }, [editSaving]);
+
+  const handleSceneEdited = useCallback(
+    (updated: { title: string; thumbnailUrl?: string }) => {
+      if (!editTarget) return;
+      setScenes((prev) =>
+        prev.map((s) =>
+          s.id === editTarget.id
+            ? {
+                ...s,
+                title: updated.title,
+                ...(updated.thumbnailUrl
+                  ? { thumbnailUrl: updated.thumbnailUrl, preview: undefined }
+                  : {}),
+              }
+            : s,
+        ),
+      );
+      setEditTarget(null);
+      setEditError(null);
+      setActionMessage("Scene updated.");
+    },
+    [editTarget],
+  );
+
   const dismissDeleteModal = useCallback(() => {
     if (!deleting && !modalCancelling) {
       setDeleteTarget(null);
@@ -219,6 +257,14 @@ export function useScenesDashboardGrid(search: string) {
     deleting,
     deleteError,
     remove: handleDeleteRequest,
+    edit: handleEditRequest,
+    editTarget,
+    editSaving,
+    editError,
+    setEditSaving,
+    setEditError,
+    dismissEditModal,
+    handleSceneEdited,
     dismissDeleteModal,
     confirmDelete,
   };

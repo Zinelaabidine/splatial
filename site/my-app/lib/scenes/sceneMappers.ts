@@ -128,6 +128,7 @@ export function apiSceneToDashboardScene(scene: Scene): DashboardScene {
     status,
     apiStatus: scene.status,
     caption: dashboardCaption(scene, status),
+    ...(scene.thumbnailUrl ? { thumbnailUrl: scene.thumbnailUrl } : {}),
     ...(scene.progressPercent != null
       ? { progressPercent: scene.progressPercent }
       : {}),
@@ -140,10 +141,12 @@ export function apiSceneToDashboardScene(scene: Scene): DashboardScene {
 
   if (status === "completed") {
     const hue = hueFromId(scene.sceneId);
-    card.preview = {
-      tintLayers: [`hsla(${hue}, 70%, 65%, 0.55)`],
-      dotSize: 5,
-    };
+    if (!scene.thumbnailUrl) {
+      card.preview = {
+        tintLayers: [`hsla(${hue}, 70%, 65%, 0.55)`],
+        dotSize: 5,
+      };
+    }
   }
 
   return card;

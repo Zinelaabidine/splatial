@@ -3,6 +3,7 @@
 import { RefreshCw } from "lucide-react";
 
 import DeleteSceneModal from "@/components/features/scenes/DeleteSceneModal";
+import EditSceneModal from "@/components/features/scenes/EditSceneModal";
 import DashboardSceneCard from "@/components/splatworks/DashboardSceneCard";
 import { usePageSearch } from "@/components/layout/AppShellContext";
 import { useScenesDashboardGrid } from "@/hooks/scenes/useScenesDashboardGrid";
@@ -59,6 +60,14 @@ export default function ScenesDashboardView() {
     deleting,
     deleteError,
     remove,
+    edit,
+    editTarget,
+    editSaving,
+    editError,
+    setEditSaving,
+    setEditError,
+    dismissEditModal,
+    handleSceneEdited,
     dismissDeleteModal,
     confirmDelete,
   } = useScenesDashboardGrid(search);
@@ -123,12 +132,25 @@ export default function ScenesDashboardView() {
               onSubmitScene={submitScene}
               onCancelScene={cancelScene}
               onDeleteScene={remove}
+              onEditScene={edit}
               submitting={submittingId === scene.sceneId}
               cancelling={cancellingId === scene.sceneId}
             />
           ))}
         </div>
       ) : null}
+
+      {editTarget && (
+        <EditSceneModal
+          scene={editTarget}
+          saving={editSaving}
+          error={editError}
+          onDismiss={dismissEditModal}
+          onSaved={handleSceneEdited}
+          onSavingChange={setEditSaving}
+          onError={setEditError}
+        />
+      )}
 
       {deleteTarget && (
         <DeleteSceneModal

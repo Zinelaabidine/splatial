@@ -323,6 +323,26 @@ resource "aws_apigatewayv2_route" "scenes_view_url" {
   target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
 }
 
+resource "aws_apigatewayv2_route" "scenes_update" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "PATCH /api/v1/scenes/{sceneId}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
+resource "aws_apigatewayv2_route" "scenes_thumbnail_presign" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "POST /api/v1/scenes/{sceneId}/thumbnail/presign"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
 # ── Job Management ────────────────────────────────────────────────────────────
 
 resource "aws_apigatewayv2_route" "job_submit" {

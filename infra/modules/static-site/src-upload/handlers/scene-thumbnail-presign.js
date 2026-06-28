@@ -1,10 +1,13 @@
 "use strict";
 
-const { S3Client, GetObjectCommand } = require("@aws-sdk/client-s3");
+const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { DynamoDBClient, GetItemCommand } = require("@aws-sdk/client-dynamodb");
 const response = require("../lib/response");
-const { resolveSceneViewObject } = require("../lib/scene-view-key");
+const {
+  resolveSceneViewObject,
+  thumbnailKeyForViewKey,
+} = require("../lib/scene-view-key");
 
 const s3 = new S3Client({});
 const dynamo = new DynamoDBClient({});
@@ -12,15 +15,14 @@ const dynamo = new DynamoDBClient({});
 const TABLE = process.env.SCENES_TABLE_NAME;
 const SPLAT_BUCKET = process.env.SPLAT_SCENES_BUCKET_NAME;
 const URL_TTL_S = 3600;
+const THUMBNAIL_CONTENT_TYPE = "image/jpeg";
 
 /**
- * GET /api/v1/scenes/{sceneId}/view-url
+ * POST /api/v1/scenes/{sceneId}/thumbnail/presign
  *
- * Generates a presigned S3 GET URL for the scene's .splat or .ply file, valid for 1 hour.
- * The browser-side Gaussian Splat viewer fetches the asset directly from S3.
- *
- * Success response (200):
- *   { "sceneId": "...", "url": "https://s3.amazonaws.com/...", "expiresIn": 3600 }
+ * Returns a presigned PUT URL for uploading a JPEG thumbnail next to the
+ * scene's splat artifact. After upload, call PATCH /api/v1/scenes/{sceneId}
+ * with { thumbnailKey } to persist the reference in DynamoDB.
  */
 exports.handler = async (event) => {
   const claims = event.requestContext?.authorizer?.jwt?.claims;
@@ -28,7 +30,9 @@ exports.handler = async (event) => {
   if (!userId) return response(401, { error: "Unauthorized: missing user identity" });
 
   const sceneId = event.pathParameters?.sceneId;
-  if (!sceneId) return response(400, { error: "Missing path parameter: sceneId" });
+  if (!sceneId || typeof sceneId !== "string" || sceneId.trim() === "") {
+    return response(400, { error: "Missing path parameter: sceneId" });
+  }
 
   const result = await dynamo.send(
     new GetItemCommand({
@@ -53,11 +57,22 @@ exports.handler = async (event) => {
     return response(409, { error: "Scene has no viewable splat file associated" });
   }
 
-  const url = await getSignedUrl(
+  const key = thumbnailKeyForViewKey(viewObject.key);
+  const uploadUrl = await getSignedUrl(
     s3,
-    new GetObjectCommand({ Bucket: viewObject.bucket, Key: viewObject.key }),
+    new PutObjectCommand({
+      Bucket: viewObject.bucket,
+      Key: key,
+      ContentType: THUMBNAIL_CONTENT_TYPE,
+    }),
     { expiresIn: URL_TTL_S }
   );
 
-  return response(200, { sceneId, url, expiresIn: URL_TTL_S });
+  return response(200, {
+    sceneId,
+    key,
+    uploadUrl,
+    contentType: THUMBNAIL_CONTENT_TYPE,
+    expiresIn: URL_TTL_S,
+  });
 };

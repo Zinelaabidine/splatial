@@ -139,6 +139,10 @@ export interface Scene {
   createdAt: string;
   /** S3 key in the splat-scenes bucket — present when the scene is READY. */
   plyKey?: string;
+  /** S3 key for a user-set JPEG thumbnail alongside the splat output. */
+  thumbnailKey?: string;
+  /** Presigned GET URL for thumbnailKey (refreshed on each list/update). */
+  thumbnailUrl?: string;
   /** 0–100 while status is PROCESSING (updated by worker PATCH / heartbeat). */
   progressPercent?: number;
   progressPhase?: string;
@@ -175,6 +179,21 @@ export interface AttemptPatchResponse {
 export interface CancelJobResponse {
   sceneId: string;
   status: "CANCELLED";
+}
+
+export interface UpdateSceneRequest {
+  name?: string;
+  thumbnailKey?: string;
+}
+
+export interface UpdateSceneResponse extends Scene {}
+
+export interface ThumbnailPresignResponse {
+  sceneId: string;
+  key: string;
+  uploadUrl: string;
+  contentType: string;
+  expiresIn: number;
 }
 
 // ---------------------------------------------------------------------------

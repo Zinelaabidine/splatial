@@ -8,6 +8,7 @@ import { getProjectionMatrix } from "@/math/matrix4x4";
 export function createViewerEngine(canvas) {
   const gl = canvas.getContext("webgl2", {
     antialias: false,
+    preserveDrawingBuffer: true,
   });
 
   const vertexShader = gl.createShader(gl.VERTEX_SHADER);

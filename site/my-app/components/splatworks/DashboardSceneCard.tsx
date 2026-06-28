@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { MoreVertical, Send, Trash2, XCircle } from "lucide-react";
+import { MoreVertical, Pencil, Send, Trash2, XCircle } from "lucide-react";
 
 import PointCloudThumbnail from "@/components/splatworks/PointCloudThumbnail";
 import StatusDot, { STATUS_LABELS } from "@/components/splatworks/StatusDot";
@@ -28,6 +28,7 @@ type DashboardSceneCardProps = {
   onSubmitScene?: (scene: DashboardScene) => void;
   onCancelScene?: (scene: DashboardScene) => void;
   onDeleteScene?: (scene: DashboardScene) => void;
+  onEditScene?: (scene: DashboardScene) => void;
   submitting?: boolean;
   cancelling?: boolean;
 };
@@ -46,6 +47,7 @@ export default function DashboardSceneCard({
   onSubmitScene,
   onCancelScene,
   onDeleteScene,
+  onEditScene,
   submitting = false,
   cancelling = false,
 }: DashboardSceneCardProps) {
@@ -88,7 +90,13 @@ export default function DashboardSceneCard({
         menuOpen && "z-50",
       )}
     >
-      {scene.status === "completed" && scene.preview ? (
+      {scene.status === "completed" && scene.thumbnailUrl ? (
+        <img
+          src={scene.thumbnailUrl}
+          alt=""
+          className="h-[180px] w-full rounded-t-xl object-cover"
+        />
+      ) : scene.status === "completed" && scene.preview ? (
         <PointCloudThumbnail
           preview={scene.preview}
           height={180}
@@ -135,6 +143,21 @@ export default function DashboardSceneCard({
                 className="absolute bottom-full right-0 z-50 mb-2 min-w-[140px] overflow-hidden rounded-lg border border-[#404040] bg-[#1a1a1a] py-1.5 shadow-2xl ring-1 ring-black/50"
                 onClick={(e) => e.stopPropagation()}
               >
+                {scene.status === "completed" && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMenuOpen(false);
+                      onEditScene?.(scene);
+                    }}
+                    className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm font-medium text-[#f0f0f0] transition-colors hover:bg-[#2a2a2a]"
+                  >
+                    <Pencil className="h-3.5 w-3.5" strokeWidth={1.5} />
+                    Edit
+                  </button>
+                )}
                 <button
                   type="button"
                   role="menuitem"

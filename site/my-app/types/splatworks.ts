@@ -60,6 +60,8 @@ export type DashboardScene = {
   /** Bottom caption line (mono, muted). */
   caption: string;
   preview?: SplatPreviewTint;
+  /** Presigned thumbnail image when the user has set one. */
+  thumbnailUrl?: string;
   splatCount?: number;
   fileSizeMb?: number;
   progressPercent?: number;

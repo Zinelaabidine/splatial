@@ -10,6 +10,8 @@ const sceneCreate = require("./handlers/scene-create");
 const scenesList  = require("./handlers/scenes-list");
 const sceneSeed   = require("./handlers/scene-seed");
 const sceneViewUrl = require("./handlers/scene-view-url");
+const sceneUpdate = require("./handlers/scene-update");
+const sceneThumbnailPresign = require("./handlers/scene-thumbnail-presign");
 const submitJob        = require("./handlers/submit-job");
 const cancelJob        = require("./handlers/cancel-job");
 const attemptPatch     = require("./handlers/attempt-patch");
@@ -58,6 +60,10 @@ exports.handler = async (event) => {
         return await sceneSeed.handler(event);
       case "GET /api/v1/scenes/{sceneId}/view-url":
         return await sceneViewUrl.handler(event);
+      case "PATCH /api/v1/scenes/{sceneId}":
+        return await sceneUpdate.handler(event);
+      case "POST /api/v1/scenes/{sceneId}/thumbnail/presign":
+        return await sceneThumbnailPresign.handler(event);
 
       default:
         return response(404, { error: "Not found" });

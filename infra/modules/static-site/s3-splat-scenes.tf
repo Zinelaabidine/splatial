@@ -75,10 +75,18 @@ resource "aws_s3_bucket_cors_configuration" "splat_scenes" {
   bucket = aws_s3_bucket.splat_scenes.id
 
   cors_rule {
-    allowed_headers = ["Authorization", "Range"]
-    allowed_methods = ["GET"]
+    allowed_headers = [
+      "Authorization",
+      "Range",
+      "Content-Type",
+      "Content-Length",
+      "x-amz-date",
+      "x-amz-security-token",
+      "x-amz-content-sha256",
+    ]
+    allowed_methods = ["GET", "PUT", "HEAD"]
     allowed_origins = concat(["https://${var.domain_name}"], var.cors_extra_origins)
-    expose_headers  = ["Content-Length", "Content-Range", "ETag"]
-    max_age_seconds = 3000
+    expose_headers  = ["Content-Length", "Content-Range", "ETag", "x-amz-request-id"]
+    max_age_seconds = 3600
   }
 }
