@@ -24,7 +24,8 @@ const nextConfig: NextConfig = {
         },
       }),
   turbopack: {
-    // Pin Turbopack root to this package directory.
+    // Pin workspace root to frontend/. A sibling site/package-lock.json (now removed)
+    // previously caused Turbopack to resolve "Next.js package not found" on HMR.
     root: path.resolve(__dirname),
   },
   devIndicators: false,
