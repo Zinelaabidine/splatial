@@ -29,6 +29,10 @@ out/
 .env.test.local
 .env.production.local
 
+# SSH / TLS private keys (never commit)
+*.pem
+.gaussian_worker.pem
+
 # ----------------------------------------------------------------------
 # OS / IDE
 # ----------------------------------------------------------------------

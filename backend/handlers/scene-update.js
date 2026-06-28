@@ -97,17 +97,18 @@ exports.handler = async (event) => {
     return response(403, { error: "Forbidden: scene does not belong to this user" });
   }
 
+  let resolvedViewObject = null;
   if (hasThumbnailKey) {
     if (item.status?.S !== "READY") {
       return response(409, { error: "Scene is not ready", status: item.status?.S ?? "UNKNOWN" });
     }
 
-    const viewObject = await resolveSceneViewObject(item, SPLAT_BUCKET);
-    if (!viewObject) {
+    resolvedViewObject = await resolveSceneViewObject(item, SPLAT_BUCKET);
+    if (!resolvedViewObject) {
       return response(409, { error: "Scene has no viewable splat file associated" });
     }
 
-    const expectedKey = thumbnailKeyForViewKey(viewObject.key);
+    const expectedKey = thumbnailKeyForViewKey(resolvedViewObject.key);
     if (thumbnailKey !== expectedKey) {
       return response(400, { error: "thumbnailKey does not match the scene output directory" });
     }
@@ -127,9 +128,8 @@ exports.handler = async (event) => {
   if (hasThumbnailKey) {
     exprParts.push("thumbnail_key = :thumbKey");
     exprParts.push("thumbnail_bucket = :thumbBucket");
-    const viewObject = await resolveSceneViewObject(item, SPLAT_BUCKET);
     exprValues[":thumbKey"] = { S: thumbnailKey };
-    exprValues[":thumbBucket"] = { S: viewObject.bucket };
+    exprValues[":thumbBucket"] = { S: resolvedViewObject.bucket };
   }
 
   const updateResult = await dynamo.send(
