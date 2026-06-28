@@ -8,15 +8,17 @@ import {
   Home,
   Plus,
   Settings,
+  ShieldCheck,
   TrendingUp,
 } from "lucide-react";
 
 import SplatworksLogo from "@/components/splatworks/SplatworksLogo";
 import { UserAvatar } from "@/components/splatworks/SplatworksLogo";
 import { useAppAccount } from "@/hooks/layout/useAppAccount";
+import { useIsAdmin } from "@/lib/auth/useIsAdmin";
 import { cn } from "@/lib/utils";
 
-type NavId = "home" | "splats" | "training" | "activity";
+type NavId = "home" | "splats" | "training" | "activity" | "admin";
 
 const NAV: {
   id: NavId;
@@ -61,13 +63,27 @@ export default function AppSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const account = useAppAccount();
+  const isAdmin = useIsAdmin();
+
+  const navItems = isAdmin
+    ? [
+        ...NAV,
+        {
+          id: "admin" as const,
+          label: "Admin",
+          href: "/admin",
+          icon: ShieldCheck,
+          match: (p: string) => p === "/admin" || p.startsWith("/admin/"),
+        },
+      ]
+    : NAV;
 
   return (
     <aside className="flex h-full w-[240px] shrink-0 flex-col overflow-y-auto border-r border-[#303030] bg-[#0f0f0f] px-3 py-4">
       <SplatworksLogo variant="dark" className="mb-5 px-1" />
 
       <nav className="flex flex-col gap-0.5">
-        {NAV.map(({ id, label, href, icon: Icon, match, badge }) => {
+        {navItems.map(({ id, label, href, icon: Icon, match, badge }) => {
           const isActive = match(pathname);
           const inner = (
             <>

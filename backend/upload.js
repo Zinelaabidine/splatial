@@ -16,6 +16,7 @@ const submitJob        = require("./handlers/submit-job");
 const cancelJob        = require("./handlers/cancel-job");
 const attemptPatch     = require("./handlers/attempt-patch");
 const attemptHeartbeat = require("./handlers/attempt-heartbeat");
+const adminAttemptsList = require("./handlers/admin-attempts-list");
 const response    = require("./lib/response");
 
 exports.handler = async (event) => {
@@ -64,6 +65,10 @@ exports.handler = async (event) => {
         return await sceneUpdate.handler(event);
       case "POST /api/v1/scenes/{sceneId}/thumbnail/presign":
         return await sceneThumbnailPresign.handler(event);
+
+      // ── Admin (admin-group gated inside the handler) ─────────────────────
+      case "GET /admin/attempts":
+        return await adminAttemptsList.handler(event);
 
       default:
         return response(404, { error: "Not found" });
