@@ -55,6 +55,11 @@ data "aws_iam_policy_document" "github_deploy_policy" {
       "cognito-idp:TagResource",
       "cognito-idp:UntagResource",
       "cognito-idp:ListTagsForResource",
+      "cognito-idp:CreateGroup",
+      "cognito-idp:GetGroup",
+      "cognito-idp:UpdateGroup",
+      "cognito-idp:DeleteGroup",
+      "cognito-idp:ListGroups",
     ]
     resources = [
       "arn:aws:cognito-idp:${var.aws_region}:886601940523:userpool/*",
