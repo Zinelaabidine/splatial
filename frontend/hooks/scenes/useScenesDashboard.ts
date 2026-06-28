@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { cancelJob, submitJob } from "@/server/services/jobsService";
-import { deleteScene, listScenes } from "@/server/services/scenesService";
-import { multipartUpload } from "@/server/services/uploadService";
+import { cancelJob, submitJob } from "@/services/jobsService";
+import { deleteScene, listScenes } from "@/services/scenesService";
+import { multipartUpload } from "@/services/uploadService";
 import type { InputType, Scene } from "@/types/api";
 
 const CONCURRENCY = 4;

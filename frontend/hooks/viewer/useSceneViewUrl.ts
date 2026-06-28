@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 import { isExpectedSceneConflict } from "@/lib/api/apiErrors";
 import { mapViewUrlError } from "@/lib/viewer/viewUrlErrors";
-import { getSceneStatus, getSceneViewUrl } from "@/server/services/scenesService";
+import { getSceneStatus, getSceneViewUrl } from "@/services/scenesService";
 
 function formatPendingStatus(status: string): string {
   return status.toLowerCase().replace(/_/g, " ");

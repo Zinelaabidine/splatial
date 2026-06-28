@@ -4,15 +4,15 @@ import { fetchAuthSession } from "aws-amplify/auth";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { getApiBaseUrl } from "@/api/baseUrl";
-import { submitJob as submitSceneJob } from "@/server/services/jobsService";
+import { submitJob as submitSceneJob } from "@/services/jobsService";
 import {
   deleteSceneLegacy,
   getSceneStatus,
-} from "@/server/services/scenesService";
+} from "@/services/scenesService";
 import {
   DEFAULT_PART_SIZE,
   multipartUpload,
-} from "@/server/services/uploadService";
+} from "@/services/uploadService";
 import type {
   CompleteResponse,
   SceneStatusResponse,

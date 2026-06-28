@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { useAppAccount } from "@/hooks/layout/useAppAccount";
 import { apiSceneToSplat } from "@/lib/splatworks/splatMappers";
-import { deleteScene, listScenes } from "@/server/services/scenesService";
+import { deleteScene, listScenes } from "@/services/scenesService";
 import type { Splat, SplatsSortOption, SplatsViewMode } from "@/types/splatworks";
 
 const SORT_OPTIONS: SplatsSortOption[] = ["newest", "oldest", "name"];

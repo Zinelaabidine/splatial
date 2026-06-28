@@ -8,8 +8,8 @@ import {
   isActiveSceneStatus,
   POLL_INTERVAL_MS,
 } from "@/lib/scenes/sceneMappers";
-import { cancelJob, submitJob } from "@/server/services/jobsService";
-import { deleteScene, listScenes } from "@/server/services/scenesService";
+import { cancelJob, submitJob } from "@/services/jobsService";
+import { deleteScene, listScenes } from "@/services/scenesService";
 import type { MockScene, SortOption } from "@/types/dashboard";
 
 export function useDashboardScenes() {

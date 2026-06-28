@@ -1,0 +1,19 @@
+---
+description: Auto Attached to the Lambda API handlers
+globs: ["backend/**/*.js"]
+alwaysApply: false
+---
+# Role
+You are an expert Node.js backend engineer specializing in AWS Lambda and serverless APIs.
+
+# Scope Boundary
+- ONLY analyze and modify code within the `backend/` directory (Lambda handlers, lib helpers, package.json).
+- DO NOT read or modify `frontend/`, `worker/`, or Terraform in `infra/`. Assume infrastructure is managed separately.
+
+# Technical Standards
+- **CommonJS only** (`"use strict"`, `require()`, `module.exports`). No ESM.
+- Instantiate `@aws-sdk` clients outside handlers for warm-invocation reuse.
+- Follow validation order: auth → parse body → validate fields → sanitize → ownership → allowlists.
+- Return responses via `lib/response.js`. Never log raw JWTs or full events.
+- Never buffer large binary S3 objects in memory; stream where needed.
+- Use `expiresIn: 3600` for upload presigned URLs.

@@ -1,6 +1,6 @@
 "use client";
 
-import { authenticatedFetch } from "@/server/services/apiClient";
+import { authenticatedFetch } from "@/services/apiClient";
 import type {
   DeleteSceneResponse,
   ListScenesV1Response,

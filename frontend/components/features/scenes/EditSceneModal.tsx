@@ -14,7 +14,7 @@ import {
   presignSceneThumbnail,
   updateScene,
   uploadThumbnailToS3,
-} from "@/server/services/scenesService";
+} from "@/services/scenesService";
 import type { DashboardScene } from "@/types/splatworks";
 
 const LegacySplatViewer = dynamic(

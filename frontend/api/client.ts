@@ -1,1 +1,1 @@
-export { authenticatedFetch } from "@/server/services/apiClient";
+export { authenticatedFetch } from "@/services/apiClient";

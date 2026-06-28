@@ -75,7 +75,8 @@ splatial/
 │   └── lib/                        #   Shared helpers (response.js)
 ├── frontend/                       # <- ALL frontend lives here (Next.js / TypeScript)
 │   ├── app/                    #   App Router pages and layouts
-│   ├── api/                    #   HTTP client and API base URL
+│   ├── api/                    #   HTTP client re-export and API base URL
+│   ├── services/               #   Client-side API helpers (authenticated fetch)
 │   ├── components/             #   React UI (ui/, layout/, upload/, viewer/, dashboard/)
 │   ├── hooks/                  #   Custom React hooks (upload/, viewer/)
 │   ├── lib/                    #   Auth bootstrap, cn() helper
@@ -274,7 +275,7 @@ Every handler entry point must follow this exact sequence:
 
 ### Authentication & API Calls
 
-- All authenticated API calls must go through `api/client.ts` (`authenticatedFetch`). Never call `fetch` directly with raw tokens.
+- All authenticated API calls must go through `api/client.ts` (`authenticatedFetch`) or `services/` helpers built on it.
 - Read the API base URL exclusively from `api/baseUrl.ts` (`getApiBaseUrl()`). Do not hardcode stage URLs.
 - Do not store JWTs or Cognito tokens in `localStorage` or `sessionStorage`. Rely on Amplify's managed session storage.
 - Wrap Amplify-dependent components in `<AmplifyProvider>` and gate authenticated routes with `<AuthGate>`.

@@ -140,31 +140,32 @@ splatial/
 │       │   ├── sqs.tf                Processing queue + DLQ
 │       │   ├── variables.tf          All module inputs with validation
 │       │   ├── versions.tf           Terraform + provider version constraints
-│       │   └── src-upload/           Lambda source code (Node.js 18.x, CommonJS)
-│       │       ├── upload.js         Router: maps API Gateway routeKey → handler
-│       │       ├── package.json      @aws-sdk v3 dependencies
-│       │       ├── handlers/
-│       │       │   ├── init.js              POST /upload/init
-│       │       │   ├── presign.js           POST /upload/presign
-│       │       │   ├── complete.js          POST /upload/complete
-│       │       │   ├── submit-job.js        POST /jobs/submit
-│       │       │   ├── cancel-job.js        POST /jobs/{sceneId}/cancel
-│       │       │   ├── attempt-patch.js     PATCH /api/attempts/{attemptId}
-│       │       │   ├── attempt-heartbeat.js POST /api/attempts/{attemptId}/heartbeat
-│       │       │   ├── scene-create.js      POST /api/v1/scenes
-│       │       │   ├── scenes-list.js       GET /api/v1/scenes
-│       │       │   ├── scene-status.js      GET /scenes/{sceneId}
-│       │       │   ├── scene-delete.js      DELETE /scenes/{sceneId}
-│       │       │   ├── scene-view-url.js    GET /api/v1/scenes/{sceneId}/view-url
-│       │       │   └── scene-seed.js        POST /api/v1/scenes/seed (dev seeding)
-│       │       └── lib/
-│       │           └── response.js          Shared HTTP response builder
+│       │   └── *.tf                Terraform resources (Lambda zip sourced from backend/)
 │       │
 │       └── api-gateway-domain/       Custom domain + Route53 wiring for API GW
 │                                     Produces: api-<env>.openspacenexus.store
 │
-├── site/
-│   └── my-app/                       ALL frontend (Next.js App Router)
+├── backend/                          Lambda source code (Node.js, CommonJS)
+│   ├── upload.js                     Router: maps API Gateway routeKey → handler
+│   ├── package.json                  @aws-sdk v3 dependencies
+│   ├── handlers/
+│   │   ├── init.js                   POST /upload/init
+│   │   ├── presign.js                POST /upload/presign
+│   │   ├── complete.js               POST /upload/complete
+│   │   ├── submit-job.js             POST /jobs/submit
+│   │   ├── cancel-job.js             POST /jobs/{sceneId}/cancel
+│   │   ├── attempt-patch.js          PATCH /api/attempts/{attemptId}
+│   │   ├── attempt-heartbeat.js      POST /api/attempts/{attemptId}/heartbeat
+│   │   ├── scene-create.js           POST /api/v1/scenes
+│   │   ├── scenes-list.js            GET /api/v1/scenes
+│   │   ├── scene-status.js           GET /scenes/{sceneId}
+│   │   ├── scene-delete.js           DELETE /scenes/{sceneId}
+│   │   ├── scene-view-url.js         GET /api/v1/scenes/{sceneId}/view-url
+│   │   └── scene-seed.js             POST /api/v1/scenes/seed (dev seeding)
+│   └── lib/
+│       └── response.js               Shared HTTP response builder
+│
+├── frontend/                         ALL frontend (Next.js App Router)
 │       ├── app/
 │       │   ├── layout.tsx            Root layout + AmplifyProvider
 │       │   ├── page.tsx              Landing page
@@ -444,7 +445,7 @@ infra/
 │   └── outputs.tf
 │
 └── modules/static-site  Monolithic primary module
-    └── src-upload/      Lambda source (bundled inside module)
+    (Lambda source lives at repo-root backend/, zipped by lambda-upload.tf)
 ```
 
 **Provider injection pattern:** `aws.this` is aliased everywhere. The env root passes `providers = { aws.this = aws.us_east_1 }`. No implicit default provider exists within the module — region is always injected explicitly.
@@ -466,7 +467,7 @@ infra/
 | `auth.tf` | Cognito User Pool + App Client | Email auto-verified; password: 8+ chars upper/lower/num/symbol; auth flows: SRP, password, refresh, custom; no client secret (public SPA) |
 | `dynamodb.tf` | ScenesTable | PK: `scene_id` (S); GSI: `user_id-status-index` (user_id PK, status SK, KEYS_ONLY projection); TTL: `expires_at`; PITR: enabled; SSE: enabled |
 | `sqs.tf` | Processing queue + DLQ | Standard queue (NOT FIFO despite naming); visibility 2700s (45 min); KMS `alias/aws/sqs`; DLQ: 14-day retention; redrive: maxReceiveCount=3 |
-| `lambda-upload.tf` | null_resource (npm install), archive_file (zip), Lambda function, exec IAM role, role policy attachment (BasicExecutionRole), inline data policy, API GW integration, Lambda permission | Triggers: SHA256 of `package.json` + all `**/*.js`; zips `src-upload/` including `node_modules/`; Lambda policy: S3 multipart on raw-scenes, DynamoDB full CRUD on ScenesTable+GSI, SQS SendMessage, S3 read/write on splat-scenes |
+| `lambda-upload.tf` | null_resource (npm install), archive_file (zip), Lambda function, exec IAM role, role policy attachment (BasicExecutionRole), inline data policy, API GW integration, Lambda permission | Triggers: SHA256 of `package.json` + all `**/*.js`; zips `backend/` including `node_modules/`; Lambda policy: S3 multipart on raw-scenes, DynamoDB full CRUD on ScenesTable+GSI, SQS SendMessage, S3 read/write on splat-scenes |
 | `lambdas.tf` | Legacy `myfunc` Lambda + basic exec role + API GW integration + route (`GET /helloFromLambda`) | Scaffold/placeholder — should be removed |
 | `compute.tf` | Security Group (egress-only), Launch Template | **ASG + Target Tracking Policy: fully commented out**; SG: no inbound, egress all; LT: `g4dn.xlarge` Spot one-time, 100 GiB gp3, private subnets, IMDSv2 required, `user_data` writes env file + starts `splat-worker.service` |
 | `iam-worker.tf` | Worker instance role + instance profile + inline policy | SQS: receive/delete/change-visibility/get (main queue + DLQ); S3 raw-scenes: get+put; S3 splat-scenes: put; DynamoDB: get+update; ASG self-terminate (scoped by name); EC2 self-terminate (scoped by tag) |
@@ -501,13 +502,13 @@ terraform plan / apply
   │
   ├─ null_resource.upload_lambda_deps
   │   Triggers (content-addressed):
-  │     SHA256(src-upload/package.json)
-  │     SHA256(concat all src-upload/**/*.js sorted)
+  │     SHA256(backend/package.json)
+  │     SHA256(concat all backend/**/*.js sorted)
   │   Action: npm install --omit=dev
-  │   Working dir: infra/modules/static-site/src-upload/
+  │   Working dir: backend/
   │
   └─ data.archive_file.upload_zip
-       source_dir:  src-upload/          (includes node_modules/)
+       source_dir:  backend/             (includes node_modules/)
        output_path: upload_payload.zip
          └─► aws_lambda_function.upload_handler
                runtime: nodejs18.x
@@ -951,7 +952,7 @@ This diagram combines the frontend, Lambda API, data stores, compute plane, and 
                ▼                                  │
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │  LAMBDA  (Node.js 18.x, CommonJS, no build step)                            │
-│  infra/modules/static-site/src-upload/                                       │
+│  backend/                                                                    │
 │                                                                              │
 │  upload.js (router) → handlers/                                              │
 │  ┌─────────────────────────────────────────────────────────────────────┐    │
@@ -1197,7 +1198,7 @@ resource "aws_sqs_queue" "processing_dlq" {
 }
 ```
 
-**`infra/modules/static-site/src-upload/handlers/complete.js`** — add required FIFO parameters to `SendMessage`:
+**`backend/handlers/complete.js`** — add required FIFO parameters to `SendMessage`:
 ```javascript
 const sendParams = {
   QueueUrl: process.env.PROCESSING_QUEUE_URL,

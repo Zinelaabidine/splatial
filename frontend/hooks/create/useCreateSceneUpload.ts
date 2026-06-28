@@ -11,8 +11,8 @@ import {
   type UploadTab,
   type Visibility,
 } from "@/lib/create/createSceneConstants";
-import { importFromGdrive } from "@/server/services/gdriveService";
-import { multipartUpload } from "@/server/services/uploadService";
+import { importFromGdrive } from "@/services/gdriveService";
+import { multipartUpload } from "@/services/uploadService";
 
 export function useCreateSceneUpload() {
   const router = useRouter();

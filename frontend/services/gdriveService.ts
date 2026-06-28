@@ -1,6 +1,6 @@
 "use client";
 
-import { authenticatedFetch } from "@/server/services/apiClient";
+import { authenticatedFetch } from "@/services/apiClient";
 import type { GdriveImportRequest, GdriveImportResponse } from "@/types/api";
 
 export async function importFromGdrive(
