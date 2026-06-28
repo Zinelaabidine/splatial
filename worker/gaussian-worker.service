@@ -1,0 +1,20 @@
+[Unit]
+Description=Gaussian Splatting Worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/gaussian-splatting
+
+ExecStart=/home/ubuntu/miniconda3/bin/conda run --no-capture-output -n gaussian_splatting python worker.py
+
+Restart=always
+RestartSec=5
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

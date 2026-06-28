@@ -51,6 +51,34 @@ def _imds_get(path: str, token: str) -> Optional[str]:
     return None
 
 
+def spot_interruption_notice() -> bool:
+    """
+    Return True when EC2 Spot has posted a termination/stop notice via IMDSv2.
+
+    Polls GET /latest/meta-data/spot/instance-action (404 when no notice pending).
+    Safe to call frequently from worker monitor threads; not cached.
+    """
+    token = _imds_token()
+    if not token:
+        return False
+
+    try:
+        resp = _http.get(
+            f"{_IMDS_BASE}/meta-data/spot/instance-action",
+            headers={"X-aws-ec2-metadata-token": token},
+            timeout=_IMDS_TIMEOUT,
+        )
+    except Exception:
+        return False
+
+    if resp.status_code == 404:
+        return False
+    if resp.status_code == 200:
+        action = resp.text.strip().lower()
+        return action in ("terminate", "stop")
+    return False
+
+
 @lru_cache(maxsize=1)
 def get_instance_metadata() -> Dict[str, str]:
     default_region = os.getenv("AWS_REGION", "us-east-1")

@@ -371,13 +371,11 @@ def print_runtime_discovery(qurl: str, dlqurl: str) -> None:
 # 8. Spot Interruption Check
 # ----------------------------
 def spot_interruption_notice() -> bool:
-    """Check for spot interruption notice."""
+    """Check for Spot interruption via IMDSv2 (or FORCE_SPOT_INTERRUPT for local testing)."""
     if FORCE_SPOT_INTERRUPT:
         log.warning("FORCE_SPOT_INTERRUPT is enabled - simulating spot interruption")
         return True
-    # TODO: Implement actual spot interruption check using IMDSv2
-    # For now, only support FORCE_SPOT_INTERRUPT flag
-    return False
+    return aws_config.spot_interruption_notice()
 
 # ----------------------------
 # 9. Processing Logic
