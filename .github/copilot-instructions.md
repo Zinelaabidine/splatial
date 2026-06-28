@@ -7,7 +7,7 @@
 | Layer | Technology | Location |
 |---|---|---|
 | Frontend | Next.js 14, TypeScript, Tailwind, shadcn/ui, AWS Amplify | `site/my-app/` |
-| API & Upload | Node.js 18.x Lambda handlers, AWS SDK v3, multipart S3 | `infra/modules/static-site/src-upload/` |
+| API & Upload | Node.js 18.x Lambda handlers, AWS SDK v3, multipart S3 | `backend/` |
 | Infrastructure | Terraform 1.5+, AWS Provider v5.x, modular design | `infra/modules/`, `infra/envs/` |
 | Auth | Cognito User Pool, JWT via API Gateway native authorizer | — |
 | Storage | S3 (raw scenes + Transfer Acceleration), DynamoDB (scene state) | — |

@@ -252,8 +252,8 @@ splatial/
 │   ├── envs/                       # Per-environment roots (dev / staging / prod)
 │   └── modules/
 │       ├── static-site/            # Primary module: VPC, S3, Lambda, SQS, EC2, Cognito…
-│       │   └── src-upload/         # Lambda handler source (Node.js 18, CommonJS)
 │       └── api-gateway-domain/     # Custom API domain + ACM + Route 53
+├── backend/                        # Lambda handler source (Node.js, CommonJS)
 ├── site/my-app/                    # Next.js 16 frontend (TypeScript, Amplify, splat viewer)
 ├── worker/                         # Python SQS GPU worker (EC2 Spot)
 ├── docs/                           # Architecture reference, Postman collections

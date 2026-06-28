@@ -1,10 +1,10 @@
 resource "null_resource" "upload_lambda_deps" {
   triggers = {
     # Re-run npm install whenever package.json or any handler/lib source changes.
-    package_json = filesha256("${path.module}/src-upload/package.json")
+    package_json = filesha256("${local.backend_source_dir}/package.json")
     handlers = sha256(join("", [
-      for f in sort(fileset("${path.module}/src-upload", "**/*.js")) :
-      filesha256("${path.module}/src-upload/${f}")
+      for f in sort(fileset(local.backend_source_dir, "**/*.js")) :
+      filesha256("${local.backend_source_dir}/${f}")
     ]))
   }
 
@@ -12,13 +12,13 @@ resource "null_resource" "upload_lambda_deps" {
     # npm install generates package-lock.json on first run; subsequent runs use
     # the lockfile for reproducibility. --omit=dev keeps node_modules lean.
     command     = "npm install --omit=dev"
-    working_dir = "${path.module}/src-upload"
+    working_dir = local.backend_source_dir
   }
 }
 
 data "archive_file" "upload_zip" {
   type        = "zip"
-  source_dir  = "${path.module}/src-upload"
+  source_dir  = local.backend_source_dir
   output_path = "${path.module}/upload_payload.zip"
 
   depends_on = [null_resource.upload_lambda_deps]

@@ -1,6 +1,6 @@
 # Splatial — Infrastructure & Backend Lambda Copilot Instructions
 
-> Scope: `infra/` — Terraform 1.5+ HCL (`infra/modules/`, `infra/envs/`) and Node.js 18.x Lambda handlers (`infra/modules/static-site/src-upload/`).
+> Scope: `infra/` — Terraform 1.5+ HCL (`infra/modules/`, `infra/envs/`) and Node.js Lambda handlers (`backend/`).
 
 ---
 
@@ -109,7 +109,7 @@ cors_rule {
 
 ---
 
-## Part 2 — Node.js Lambda Handlers (`src-upload/`)
+## Part 2 — Node.js Lambda Handlers (`backend/`)
 
 ### Runtime & Style
 
@@ -165,5 +165,5 @@ chore(infra): <subject>        # terraform fmt, version bump, comment update
 ### Verification Checklist
 - [ ] Terraform: cd infra/envs/<env> && terraform fmt -recursive && terraform validate && terraform plan
 - [ ] Terraform: Confirm plan diff contains only expected changes — treat any unexpected destroy as a blocker.
-- [ ] Lambda: node -e "require('./upload')" in src-upload/ for syntax/require errors; check IAM policy for wildcards.
+- [ ] Lambda: node -e "require('./upload')" in backend/ for syntax/require errors; check IAM policy for wildcards.
 ```

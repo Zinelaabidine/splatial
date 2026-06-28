@@ -14,7 +14,7 @@ Splatial is a **3D Gaussian Splatting (3DGS) platform** that lets authenticated 
 Browser (Next.js)
   |  Cognito JWT auth  (AWS Amplify)
   v
-API Gateway  -->  Lambda (Node.js 18 / CommonJS, src-upload/)
+API Gateway  -->  Lambda (Node.js 18 / CommonJS, backend/)
                       |  writes metadata
                       v
                   DynamoDB  (scene records, job status)
@@ -67,12 +67,12 @@ splatial/
 │   │   └── prod/
 │   └── modules/
 │       ├── static-site/            #   Primary Terraform module (all AWS resources)
-│       │   ├── src-upload/         #   <- Lambda handler source (Node.js 18, CommonJS)
-│       │   │   ├── upload.js       #     Router / entry point
-│       │   │   ├── handlers/       #     One file per API route
-│       │   │   └── lib/            #     Shared helpers (response.js)
 │       │   └── *.tf                #   One .tf file per AWS service
 │       └── api-gateway-domain/     #   Custom domain + Route53 wiring
+├── backend/                        # <- Lambda handler source (Node.js, CommonJS)
+│   ├── upload.js                   #   Router / entry point
+│   ├── handlers/                   #   One file per API route
+│   └── lib/                        #   Shared helpers (response.js)
 ├── site/
 │   └── my-app/                     # <- ALL frontend lives here (Next.js / TypeScript)
 │       ├── app/                    #   App Router pages and layouts
@@ -91,7 +91,7 @@ splatial/
 ### Hard Boundary Rules
 
 - **Infrastructure changes belong exclusively in `infra/`.** Never modify `.tf` files to work around application bugs — fix the application.
-- **Application logic belongs exclusively in `site/my-app/` (frontend) and `infra/modules/static-site/src-upload/` (Lambda).** Never embed business logic in `user_data`, `aws_lambda_function` inline code, or Terraform `local-exec` provisioners.
+- **Application logic belongs exclusively in `site/my-app/` (frontend) and `backend/` (Lambda).** Never embed business logic in `user_data`, `aws_lambda_function` inline code, or Terraform `local-exec` provisioners.
 - **The worker (`worker/`) is deployed as a pre-baked AMI** (`ami-0512a845e4b778621` in us-east-1). Changes to `worker.py` require a new AMI bake and an update to `locals.worker_ami_id` in `compute.tf`. Do not auto-update the AMI reference without a tested build.
 
 ---
@@ -112,7 +112,7 @@ splatial/
 | Class Utilities | `clsx`, `tailwind-merge`, `class-variance-authority` |
 | Linting | `eslint ^9`, `eslint-config-next 16.2.6` |
 
-### Lambda Handlers — `infra/modules/static-site/src-upload/`
+### Lambda Handlers — `backend/`
 
 | Item | Version / Detail |
 |---|---|
@@ -169,7 +169,7 @@ npm run lint
 
 ```bash
 # Install dependencies
-cd infra/modules/static-site/src-upload
+cd backend
 npm install
 
 # Syntax / require sanity check (no test framework configured)
@@ -446,7 +446,7 @@ When writing backend logic, database schemas, or worker services for the Gaussia
 
 ### Lambda Handler Changes
 ```
-- [ ] node -e "require('./upload')" in src-upload/ — no syntax or require errors
+- [ ] node -e "require('./upload')" in backend/ — no syntax or require errors
 - [ ] Input validation order (auth -> parse -> validate -> sanitize -> ownership) upheld
 - [ ] No raw event objects logged
 - [ ] No aws-sdk v2 imports

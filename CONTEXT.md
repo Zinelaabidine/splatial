@@ -93,24 +93,26 @@ splatial/
 │       │   │                         #   expire noncurrent versions)
 │       │   ├── variables.tf          # All module inputs with validation (environment enum)
 │       │   ├── versions.tf           # Terraform + AWS provider version constraints
-│       │   └── src-upload/           # Lambda source code (Node.js 18.x, CommonJS)
-│       │       ├── upload.js         # Router: maps API Gateway routeKey → handler
-│       │       ├── package.json      # Dependencies: @aws-sdk v3 (s3, dynamodb, presigner)
-│       │       ├── handlers/
-│       │       │   ├── init.js       # POST /upload/init — CreateMultipartUpload + DynamoDB PutItem
-│       │       │   ├── presign.js    # POST /upload/presign — batch UploadPartCommand presign
-│       │       │   ├── complete.js   # POST /upload/complete — CompleteMultipartUpload + DynamoDB UpdateItem
-│       │       │   ├── scene-create.js  # POST /api/v1/scenes — DynamoDB PutItem (named scene record)
-│       │       │   ├── scene-delete.js  # DELETE /scenes/{sceneId} + /api/v1/scenes/{sceneId}
-│       │       │   ├── scene-status.js  # GET /scenes/{sceneId} — DynamoDB GetItem
-│       │       │   └── scenes-list.js   # GET /api/v1/scenes — DynamoDB Scan + filter by user_id
-│       │       └── lib/
-│       │           └── response.js   # Shared HTTP response envelope helper
+│       │   └── *.tf                # Terraform resources (Lambda zip sourced from backend/)
 │       └── api-gateway-domain/       # Custom domain binding module
 │           ├── apigateway.tf         # aws_apigatewayv2_domain_name + api_mapping ($default stage)
 │           ├── acm.tf                # Regional ACM cert for API subdomain
 │           ├── route53.tf            # Alias record → API GW regional endpoint
 │           └── variables.tf          # api_gateway_id, domain_name, environment
+│
+├── backend/                          # Lambda source code (Node.js, CommonJS)
+│   ├── upload.js                     # Router: maps API Gateway routeKey → handler
+│   ├── package.json                  # Dependencies: @aws-sdk v3 (s3, dynamodb, presigner)
+│   ├── handlers/
+│   │   ├── init.js                   # POST /upload/init — CreateMultipartUpload + DynamoDB PutItem
+│   │   ├── presign.js                # POST /upload/presign — batch UploadPartCommand presign
+│   │   ├── complete.js               # POST /upload/complete — CompleteMultipartUpload + DynamoDB UpdateItem
+│   │   ├── scene-create.js           # POST /api/v1/scenes — DynamoDB PutItem (named scene record)
+│   │   ├── scene-delete.js           # DELETE /scenes/{sceneId} + /api/v1/scenes/{sceneId}
+│   │   ├── scene-status.js           # GET /scenes/{sceneId} — DynamoDB GetItem
+│   │   └── scenes-list.js            # GET /api/v1/scenes — DynamoDB Scan + filter by user_id
+│   └── lib/
+│       └── response.js               # Shared HTTP response envelope helper
 │
 └── site/                             # Frontend application
     ├── copilot-instructions.md       # Scoped AI rules: Next.js, TypeScript, Amplify, upload hook
