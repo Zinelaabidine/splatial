@@ -215,4 +215,53 @@ resource "aws_cloudwatch_metric_alarm" "sqs_scale_out" {
   }
 }
 
-# Scale-in is handled by worker self-termination (terminate_self decrement_desired).
+# ── Step Scaling — Scale In ───────────────────────────────────────────────────
+# Scale-out sets desired=1 but nothing previously reset it to 0 when the queue
+# drained. Worker self-terminate is a backstop; this policy handles empty queue.
+
+resource "aws_autoscaling_policy" "sqs_step_scale_in" {
+  provider = aws.this
+
+  name                      = "${local.name_prefix}-sqs-step-scale-in"
+  autoscaling_group_name    = aws_autoscaling_group.worker.name
+  policy_type               = "StepScaling"
+  adjustment_type           = "ExactCapacity"
+  metric_aggregation_type   = "Maximum"
+  estimated_instance_warmup = 0
+
+  step_adjustment {
+    metric_interval_upper_bound = 0
+    scaling_adjustment          = 0
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "sqs_scale_in" {
+  provider = aws.this
+
+  alarm_name          = "${local.name_prefix}-sqs-scale-in"
+  alarm_description   = "Scale in GPU workers when the processing queue is fully empty."
+  comparison_operator = "LessThanOrEqualToThreshold"
+  evaluation_periods  = 2
+  metric_name         = "ApproximateNumberOfMessages"
+  namespace           = "AWS/SQS"
+  period              = 60
+  statistic           = "Maximum"
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    QueueName = aws_sqs_queue.processing_queue.name
+  }
+
+  alarm_actions = [aws_autoscaling_policy.sqs_step_scale_in.arn]
+
+  tags = {
+    Name        = "${local.name_prefix}-sqs-scale-in"
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+  }
+}
+
+# Worker self-termination remains a backstop if the queue is empty but the
+# instance is still running after the scale-in alarm evaluation window.

@@ -859,6 +859,7 @@ data "aws_iam_policy_document" "github_deploy_cdn_policy" {
     ]
     resources = [
       "arn:aws:cloudwatch:${var.aws_region}:886601940523:alarm:${local.name_prefix}-sqs-scale-out",
+      "arn:aws:cloudwatch:${var.aws_region}:886601940523:alarm:${local.name_prefix}-sqs-scale-in",
       "arn:aws:cloudwatch:${var.aws_region}:886601940523:alarm:TargetTracking-${local.name_prefix}-splat-worker-asg-*",
     ]
   }
