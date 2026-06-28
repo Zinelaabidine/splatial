@@ -186,7 +186,7 @@ export interface UpdateSceneRequest {
   thumbnailKey?: string;
 }
 
-export interface UpdateSceneResponse extends Scene {}
+export type UpdateSceneResponse = Scene;
 
 export interface ThumbnailPresignResponse {
   sceneId: string;

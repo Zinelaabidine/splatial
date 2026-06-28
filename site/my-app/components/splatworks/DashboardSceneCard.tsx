@@ -91,11 +91,15 @@ export default function DashboardSceneCard({
       )}
     >
       {scene.status === "completed" && scene.thumbnailUrl ? (
-        <img
+        <>
+          {/* Presigned S3 URLs — not compatible with next/image */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
           src={scene.thumbnailUrl}
           alt=""
           className="h-[180px] w-full rounded-t-xl object-cover"
         />
+        </>
       ) : scene.status === "completed" && scene.preview ? (
         <PointCloudThumbnail
           preview={scene.preview}

@@ -234,6 +234,8 @@ export default function EditSceneModal({
 
           {thumbnailPreview && (
             <div className="flex items-center gap-3 rounded-lg border border-[#303030] bg-[#212121] p-3">
+              {/* Presigned S3 / blob URLs — not compatible with next/image */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={thumbnailPreview}
                 alt="Selected thumbnail preview"
