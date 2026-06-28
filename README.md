@@ -223,7 +223,7 @@ Repeat for `infra/envs/staging/` and `infra/envs/prod/` as environments mature.
 ### Local Frontend Development
 
 ```bash
-cd site/my-app
+cd frontend
 npm install
 cp .env.local.example .env.local   # Populate from Terraform outputs
 npm run dev                        # http://localhost:3000
@@ -254,7 +254,7 @@ splatial/
 │       ├── static-site/            # Primary module: VPC, S3, Lambda, SQS, EC2, Cognito…
 │       └── api-gateway-domain/     # Custom API domain + ACM + Route 53
 ├── backend/                        # Lambda handler source (Node.js, CommonJS)
-├── site/my-app/                    # Next.js 16 frontend (TypeScript, Amplify, splat viewer)
+├── frontend/                    # Next.js 16 frontend (TypeScript, Amplify, splat viewer)
 ├── worker/                         # Python SQS GPU worker (EC2 Spot)
 ├── docs/                           # Architecture reference, Postman collections
 └── .github/workflows/              # CI/CD (deploy.yml, bootstrap.yml)

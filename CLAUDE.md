@@ -73,16 +73,15 @@ splatial/
 │   ├── upload.js                   #   Router / entry point
 │   ├── handlers/                   #   One file per API route
 │   └── lib/                        #   Shared helpers (response.js)
-├── site/
-│   └── my-app/                     # <- ALL frontend lives here (Next.js / TypeScript)
-│       ├── app/                    #   App Router pages and layouts
-│       ├── api/                    #   HTTP client and API base URL
-│       ├── components/             #   React UI (ui/, layout/, upload/, viewer/, dashboard/)
-│       ├── hooks/                  #   Custom React hooks (upload/, viewer/)
-│       ├── lib/                    #   Auth bootstrap, cn() helper
-│       ├── types/                  #   Shared TypeScript types
-│       ├── viewer/                 #   WebGL engine and trajectory math (non-React)
-│       └── fixtures/               #   Dev/mock data
+├── frontend/                       # <- ALL frontend lives here (Next.js / TypeScript)
+│   ├── app/                    #   App Router pages and layouts
+│   ├── api/                    #   HTTP client and API base URL
+│   ├── components/             #   React UI (ui/, layout/, upload/, viewer/, dashboard/)
+│   ├── hooks/                  #   Custom React hooks (upload/, viewer/)
+│   ├── lib/                    #   Auth bootstrap, cn() helper
+│   ├── types/                  #   Shared TypeScript types
+│   ├── viewer/                 #   WebGL engine and trajectory math (non-React)
+│   └── fixtures/               #   Dev/mock data
 └── worker/
     ├── worker.py                   # <- Python SQS worker (runs on EC2 Spot)
     └── imds_extract.py             #   IMDSv2 metadata helper
@@ -91,14 +90,14 @@ splatial/
 ### Hard Boundary Rules
 
 - **Infrastructure changes belong exclusively in `infra/`.** Never modify `.tf` files to work around application bugs — fix the application.
-- **Application logic belongs exclusively in `site/my-app/` (frontend) and `backend/` (Lambda).** Never embed business logic in `user_data`, `aws_lambda_function` inline code, or Terraform `local-exec` provisioners.
+- **Application logic belongs exclusively in `frontend/` (frontend) and `backend/` (Lambda).** Never embed business logic in `user_data`, `aws_lambda_function` inline code, or Terraform `local-exec` provisioners.
 - **The worker (`worker/`) is deployed as a pre-baked AMI** (`ami-0512a845e4b778621` in us-east-1). Changes to `worker.py` require a new AMI bake and an update to `locals.worker_ami_id` in `compute.tf`. Do not auto-update the AMI reference without a tested build.
 
 ---
 
 ## 3. Tech Stack & Tooling
 
-### Frontend — `site/my-app/`
+### Frontend — `frontend/`
 
 | Item | Version / Detail |
 |---|---|
@@ -152,7 +151,7 @@ S3 (static site + raw scenes + output), CloudFront, API Gateway (REST), Lambda, 
 
 ```bash
 # Install dependencies
-cd site/my-app
+cd frontend
 npm install
 
 # Start dev server (proxies to dev API endpoint)
@@ -258,7 +257,7 @@ Every handler entry point must follow this exact sequence:
 
 ---
 
-## 6. TypeScript / Frontend Coding Standards (`site/my-app/`)
+## 6. TypeScript / Frontend Coding Standards (`frontend/`)
 
 ### TypeScript Rules
 
@@ -454,7 +453,7 @@ When writing backend logic, database schemas, or worker services for the Gaussia
 
 ### Frontend Changes
 ```
-- [ ] cd site/my-app && npm run build — zero TypeScript errors
+- [ ] cd frontend && npm run build — zero TypeScript errors
 - [ ] No direct fetch calls with raw tokens (all calls via authenticatedFetch)
 - [ ] No hardcoded API URLs (all via getApiBaseUrl())
 - [ ] No JWT/token storage in localStorage or sessionStorage

@@ -1,13 +1,13 @@
 ---
 description: Auto Attached to the frontend web application
-globs: ["site/**/*.ts", "site/**/*.tsx", "site/**/*.css"]
+globs: ["frontend/**/*.ts", "frontend/**/*.tsx", "frontend/**/*.css", "frontend/**/*.js"]
 alwaysApply: false
 ---
 # Role
 You are an expert Frontend Developer specializing in high-performance web applications.
 
 # Scope Boundary
-- ONLY analyze and modify UI, component, and styling files within the `site/` directory.
+- ONLY analyze and modify UI, component, and styling files within the `frontend/` directory.
 - DO NOT read `worker/` or `infra/` files. Assume backend APIs and 3D processing pipelines are handled externally.
 
 # Technical Standards

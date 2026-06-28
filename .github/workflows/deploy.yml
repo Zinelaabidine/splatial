@@ -29,15 +29,15 @@ jobs:
         with:
           node-version: 24
           cache: "npm"
-          cache-dependency-path: site/my-app/package-lock.json
+          cache-dependency-path: frontend/package-lock.json
       - name: Install Frontend Dependencies
-        working-directory: site/my-app
+        working-directory: frontend
         run: npm ci
       - name: Run Lint
-        working-directory: site/my-app
+        working-directory: frontend
         run: npm run lint 
       # - name: Run Tests
-      #   working-directory: site/my-app
+      #   working-directory: frontend
       #   run: npm test
       - name: terraform setup
         uses: hashicorp/setup-terraform@v3
@@ -105,12 +105,12 @@ jobs:
         with:
           node-version: 24
           cache: "npm"
-          cache-dependency-path: site/my-app/package-lock.json
+          cache-dependency-path: frontend/package-lock.json
       - name: Install Frontend Dependencies
-        working-directory: site/my-app
+        working-directory: frontend
         run: npm ci
       - name: Build the Frontend artifacts
-        working-directory: site/my-app
+        working-directory: frontend
         run: npm run build
         env:
           NEXT_PUBLIC_AWS_REGION: us-east-1
@@ -120,7 +120,7 @@ jobs:
           NEXT_PUBLIC_RAW_SCENES_BUCKET: ${{ steps.tf.outputs.raw_scenes_bucket_name }}
           NEXT_PUBLIC_SCENES_TABLE: ${{ steps.tf.outputs.scenes_table_name }}
       - name: Sync Static Assets to S3
-        working-directory: site/my-app
+        working-directory: frontend
         run: |
           aws s3 sync ./out s3://${{ steps.tf.outputs.s3_bucket_name }} \
             --delete \

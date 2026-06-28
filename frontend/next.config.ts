@@ -24,8 +24,7 @@ const nextConfig: NextConfig = {
         },
       }),
   turbopack: {
-    // The monorepo has a package-lock.json in site/ which confuses Turbopack
-    // into using the wrong workspace root. Pin it explicitly to this package.
+    // Pin Turbopack root to this package directory.
     root: path.resolve(__dirname),
   },
   devIndicators: false,

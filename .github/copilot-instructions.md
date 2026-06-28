@@ -6,7 +6,7 @@
 
 | Layer | Technology | Location |
 |---|---|---|
-| Frontend | Next.js 14, TypeScript, Tailwind, shadcn/ui, AWS Amplify | `site/my-app/` |
+| Frontend | Next.js 14, TypeScript, Tailwind, shadcn/ui, AWS Amplify | `frontend/` |
 | API & Upload | Node.js 18.x Lambda handlers, AWS SDK v3, multipart S3 | `backend/` |
 | Infrastructure | Terraform 1.5+, AWS Provider v5.x, modular design | `infra/modules/`, `infra/envs/` |
 | Auth | Cognito User Pool, JWT via API Gateway native authorizer | — |
@@ -73,7 +73,7 @@ After **every** code generation or modification, append the following section:
 
 The checklist must be **tailored to the change**, not generic. Examples by domain:
 - **Lambda handler change:** `node -e "require('./upload')"` for syntax check + `aws logs tail /aws/lambda/<name> --follow`
-- **Frontend change:** `cd site/my-app && npm run build` → zero TypeScript errors + visual check in browser
+- **Frontend change:** `cd frontend && npm run build` → zero TypeScript errors + visual check in browser
 - **Terraform change:** `cd infra/envs/<env> && terraform fmt -recursive && terraform validate && terraform plan`
 - **IAM policy change:** Review `plan` output for any `"*"` in `actions` or `resources`; run `aws iam simulate-principal-policy` on critical paths
 

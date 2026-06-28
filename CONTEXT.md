@@ -114,10 +114,7 @@ splatial/
 │   └── lib/
 │       └── response.js               # Shared HTTP response envelope helper
 │
-└── site/                             # Frontend application
-    ├── copilot-instructions.md       # Scoped AI rules: Next.js, TypeScript, Amplify, upload hook
-    ├── index.html / error.html       # CloudFront fallback pages (served from S3 root)
-    └── my-app/                       # Next.js 16 application root
+└── frontend/                         # Next.js 16 application root
         ├── app/
         │   ├── layout.tsx            # Root layout: AmplifyProvider wrapper, global CSS
         │   ├── page.tsx              # Route "/" — upload entry point (Dropzone + RightSidebar)

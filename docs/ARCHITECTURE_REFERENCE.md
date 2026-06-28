@@ -651,7 +651,7 @@ NEXT_PUBLIC_API_URL                = https://api-<env>.openspacenexus.store
 ### Build & Dev Commands
 
 ```bash
-cd site/my-app
+cd frontend
 npm install
 npm run dev       # http://localhost:3000 (proxies to dev API; CORS allows localhost)
 npm run build     # Static export; must pass before any merge
@@ -741,7 +741,7 @@ GitHub Actions workflow:
   trigger: push to branch / environment deploy
   │
   ├─ Frontend deploy:
-  │   cd site/my-app && npm ci && npm run build
+  │   cd frontend && npm ci && npm run build
   │   aws s3 sync out/ s3://<static-site-bucket>/ --delete
   │   aws cloudfront create-invalidation --distribution-id <id> --paths "/*"
   │
