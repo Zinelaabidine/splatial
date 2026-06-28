@@ -178,7 +178,6 @@ resource "aws_autoscaling_policy" "sqs_step_scale_out" {
   adjustment_type           = "ExactCapacity"
   metric_aggregation_type   = "Maximum"
   estimated_instance_warmup = 120
-  cooldown                  = 60
 
   # Set capacity to exactly 1 when any message is visible — do not stack +1 on
   # top of an instance already launched manually or by a prior alarm evaluation.
