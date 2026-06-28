@@ -220,96 +220,6 @@ data "aws_iam_policy_document" "github_deploy_policy" {
     ]
   }
 
-  # ─── DynamoDB ─────────────────────────────────────────────────────────────────
-
-  statement {
-    sid    = "DynamoDBListGlobal"
-    effect = "Allow"
-    actions = [
-      "dynamodb:ListTables",
-    ]
-    resources = ["*"]
-  }
-
-  statement {
-    sid    = "DynamoDBScenesTableManage"
-    effect = "Allow"
-    actions = [
-      "dynamodb:CreateTable",
-      "dynamodb:DeleteTable",
-      "dynamodb:DescribeTable",
-      "dynamodb:UpdateTable",
-      "dynamodb:DescribeTimeToLive",
-      "dynamodb:UpdateTimeToLive",
-      "dynamodb:DescribeContinuousBackups",
-      "dynamodb:UpdateContinuousBackups",
-      "dynamodb:ListTagsOfResource",
-      "dynamodb:TagResource",
-      "dynamodb:UntagResource",
-    ]
-    resources = [
-      # Constructed ARNs — table does not exist yet on first apply.
-      "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-scenes",
-      "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-scenes/index/*",
-    ]
-  }
-
-  # ─── EC2 / VPC ────────────────────────────────────────────────────────────────
-
-  statement {
-    sid    = "EC2DescribeGlobal"
-    effect = "Allow"
-    actions = [
-      "ec2:DescribeVpcs",
-      "ec2:DescribeVpcAttribute",
-      "ec2:DescribeSubnets",
-      "ec2:DescribeInternetGateways",
-      "ec2:DescribeRouteTables",
-      "ec2:DescribeAvailabilityZones",
-      "ec2:DescribeTags",
-      "ec2:DescribeNetworkInterfaces",
-      "ec2:DescribeSecurityGroups",
-    ]
-    resources = ["*"]
-  }
-
-  statement {
-    sid    = "EC2VPCManage"
-    effect = "Allow"
-    actions = [
-      "ec2:CreateVpc",
-      "ec2:ModifyVpcAttribute",
-      "ec2:DeleteVpc",
-      "ec2:CreateSubnet",
-      "ec2:ModifySubnetAttribute",
-      "ec2:DeleteSubnet",
-      "ec2:CreateInternetGateway",
-      "ec2:AttachInternetGateway",
-      "ec2:DetachInternetGateway",
-      "ec2:DeleteInternetGateway",
-      "ec2:CreateRouteTable",
-      "ec2:DeleteRouteTable",
-      "ec2:CreateRoute",
-      "ec2:DeleteRoute",
-      "ec2:AssociateRouteTable",
-      "ec2:DisassociateRouteTable",
-      "ec2:ReplaceRoute",
-      "ec2:AllocateAddress",
-      "ec2:ReleaseAddress",
-      "ec2:CreateNatGateway",
-      "ec2:DeleteNatGateway",
-      "ec2:DescribeNatGateways",
-      "ec2:DescribeAddresses",
-      "ec2:CreateVpcEndpoint",
-      "ec2:DeleteVpcEndpoints",
-      "ec2:ModifyVpcEndpoint",
-      "ec2:DescribeVpcEndpoints",
-      "ec2:CreateTags",
-      "ec2:DeleteTags",
-    ]
-    resources = ["*"]
-  }
-
   # ─── API Gateway v2 ───────────────────────────────────────────────────────────
 
   statement {
@@ -345,36 +255,6 @@ data "aws_iam_policy_document" "github_deploy_policy" {
     resources = [
       "arn:aws:apigateway:${var.aws_region}::/domainnames",
       "arn:aws:apigateway:${var.aws_region}::/domainnames/*",
-    ]
-  }
-
-  # ─── Lambda ───────────────────────────────────────────────────────────────────
-
-  statement {
-    sid    = "LambdaFunctionManage"
-    effect = "Allow"
-    actions = [
-      "lambda:CreateFunction",
-      "lambda:GetFunction",
-      "lambda:GetFunctionConfiguration",
-      "lambda:UpdateFunctionCode",
-      "lambda:UpdateFunctionConfiguration",
-      "lambda:DeleteFunction",
-      "lambda:AddPermission",
-      "lambda:RemovePermission",
-      "lambda:GetPolicy",
-      "lambda:ListTags",
-      "lambda:TagResource",
-      "lambda:UntagResource",
-      "lambda:GetFunctionCodeSigningConfig",
-      "lambda:ListVersionsByFunction",
-    ]
-    resources = [
-      aws_lambda_function.myfunc.arn,
-      # Constructed ARN for the upload Lambda (does not exist yet on first apply).
-      "arn:aws:lambda:${var.aws_region}:886601940523:function:${var.name}-upload-lambda",
-      # Constructed ARN for the Google Drive import Lambda.
-      "arn:aws:lambda:${var.aws_region}:886601940523:function:${var.name}-gdrive-import-lambda",
     ]
   }
 
@@ -462,25 +342,29 @@ data "aws_iam_policy_document" "github_deploy_policy" {
 }
 
 
-resource "aws_iam_role_policy" "github_deploy_policy" {
+# Managed policy — inline policies on splatial-local-dev-role are shared across
+# all envs and hit the 10 240-byte cumulative inline quota after two env applies.
+resource "aws_iam_policy" "github_deploy_core_policy" {
   provider = aws.this
 
-  name   = "${local.name_prefix}-github-deploy-policy"
-  role   = data.aws_iam_role.github_oidc_deploy_role.id
-  policy = data.aws_iam_policy_document.github_deploy_policy.json
+  name        = "${local.name_prefix}-github-deploy-core-policy"
+  description = "Core deploy permissions (Cognito, S3, API Gateway, IAM) for GitHub and local-dev roles"
+  policy      = data.aws_iam_policy_document.github_deploy_policy.json
 }
 
-resource "aws_iam_role_policy" "local_dev_deploy_policy" {
-  provider = aws.this
+resource "aws_iam_role_policy_attachment" "github_deploy_core" {
+  role       = data.aws_iam_role.github_oidc_deploy_role.name
+  policy_arn = aws_iam_policy.github_deploy_core_policy.arn
+}
 
-  name   = "${local.name_prefix}-local-dev-deploy-policy"
-  role   = data.aws_iam_role.local_dev_role.id
-  policy = data.aws_iam_policy_document.github_deploy_policy.json
+resource "aws_iam_role_policy_attachment" "local_dev_core" {
+  role       = data.aws_iam_role.local_dev_role.name
+  policy_arn = aws_iam_policy.github_deploy_core_policy.arn
 }
 
 # IAM inline-policy changes take a few seconds to propagate before subsequent
 # AWS API calls from the same session will see the updated permissions. Any
-# resource whose creation permission was added to github_deploy_policy must
+# resource whose creation permission was added to github_deploy_core_policy must
 # gate on this sleep so it is not attempted before IAM has propagated.
 #
 # The `triggers` map causes this resource to be replaced (destroy + recreate,
@@ -492,10 +376,10 @@ resource "time_sleep" "iam_propagation" {
   create_duration = "15s"
 
   triggers = {
-    policy_hash = sha256(data.aws_iam_policy_document.github_deploy_policy.json)
+    policy_hash = sha256(aws_iam_policy.github_deploy_core_policy.policy)
   }
 
-  depends_on = [aws_iam_role_policy.github_deploy_policy]
+  depends_on = [aws_iam_role_policy_attachment.github_deploy_core]
 }
 
 # ── Compute pipeline permissions (separate policy to stay under 10 240-byte limit) ──
@@ -527,6 +411,126 @@ data "aws_iam_policy_document" "github_deploy_compute_policy" {
     resources = [
       "arn:aws:sqs:${var.aws_region}:886601940523:${local.name_prefix}-splat-processing-queue",
       "arn:aws:sqs:${var.aws_region}:886601940523:${local.name_prefix}-splat-processing-dlq",
+    ]
+  }
+
+  # ─── DynamoDB ──────────────────────────────────────────────────────────────
+
+  statement {
+    sid    = "DynamoDBListGlobal"
+    effect = "Allow"
+    actions = [
+      "dynamodb:ListTables",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "DynamoDBScenesTableManage"
+    effect = "Allow"
+    actions = [
+      "dynamodb:CreateTable",
+      "dynamodb:DeleteTable",
+      "dynamodb:DescribeTable",
+      "dynamodb:UpdateTable",
+      "dynamodb:DescribeTimeToLive",
+      "dynamodb:UpdateTimeToLive",
+      "dynamodb:DescribeContinuousBackups",
+      "dynamodb:UpdateContinuousBackups",
+      "dynamodb:ListTagsOfResource",
+      "dynamodb:TagResource",
+      "dynamodb:UntagResource",
+    ]
+    resources = [
+      # Constructed ARNs — table does not exist yet on first apply.
+      "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-scenes",
+      "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-scenes/index/*",
+    ]
+  }
+
+  # ─── EC2 / VPC ─────────────────────────────────────────────────────────────
+
+  statement {
+    sid    = "EC2DescribeGlobal"
+    effect = "Allow"
+    actions = [
+      "ec2:DescribeVpcs",
+      "ec2:DescribeVpcAttribute",
+      "ec2:DescribeSubnets",
+      "ec2:DescribeInternetGateways",
+      "ec2:DescribeRouteTables",
+      "ec2:DescribeAvailabilityZones",
+      "ec2:DescribeTags",
+      "ec2:DescribeNetworkInterfaces",
+      "ec2:DescribeSecurityGroups",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "EC2VPCManage"
+    effect = "Allow"
+    actions = [
+      "ec2:CreateVpc",
+      "ec2:ModifyVpcAttribute",
+      "ec2:DeleteVpc",
+      "ec2:CreateSubnet",
+      "ec2:ModifySubnetAttribute",
+      "ec2:DeleteSubnet",
+      "ec2:CreateInternetGateway",
+      "ec2:AttachInternetGateway",
+      "ec2:DetachInternetGateway",
+      "ec2:DeleteInternetGateway",
+      "ec2:CreateRouteTable",
+      "ec2:DeleteRouteTable",
+      "ec2:CreateRoute",
+      "ec2:DeleteRoute",
+      "ec2:AssociateRouteTable",
+      "ec2:DisassociateRouteTable",
+      "ec2:ReplaceRoute",
+      "ec2:AllocateAddress",
+      "ec2:ReleaseAddress",
+      "ec2:CreateNatGateway",
+      "ec2:DeleteNatGateway",
+      "ec2:DescribeNatGateways",
+      "ec2:DescribeAddresses",
+      "ec2:CreateVpcEndpoint",
+      "ec2:DeleteVpcEndpoints",
+      "ec2:ModifyVpcEndpoint",
+      "ec2:DescribeVpcEndpoints",
+      "ec2:CreateTags",
+      "ec2:DeleteTags",
+    ]
+    resources = ["*"]
+  }
+
+  # ─── Lambda ────────────────────────────────────────────────────────────────
+
+  statement {
+    sid    = "LambdaFunctionManage"
+    effect = "Allow"
+    actions = [
+      "lambda:CreateFunction",
+      "lambda:GetFunction",
+      "lambda:GetFunctionConfiguration",
+      "lambda:UpdateFunctionCode",
+      "lambda:UpdateFunctionConfiguration",
+      "lambda:DeleteFunction",
+      "lambda:AddPermission",
+      "lambda:RemovePermission",
+      "lambda:GetPolicy",
+      "lambda:ListTags",
+      "lambda:TagResource",
+      "lambda:UntagResource",
+      "lambda:GetFunctionCodeSigningConfig",
+      "lambda:ListVersionsByFunction",
+    ]
+    resources = [
+      aws_lambda_function.myfunc.arn,
+      # Constructed ARN for the upload Lambda (does not exist yet on first apply).
+      "arn:aws:lambda:${var.aws_region}:886601940523:function:${var.name}-upload-lambda",
+      # Constructed ARN for the Google Drive import Lambda.
+      "arn:aws:lambda:${var.aws_region}:886601940523:function:${var.name}-gdrive-import-lambda",
     ]
   }
 
@@ -650,6 +654,7 @@ data "aws_iam_policy_document" "github_deploy_compute_policy" {
       "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore",
       "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy",
       # Terraform needs to read these customer-managed policies to manage them.
+      "arn:aws:iam::886601940523:policy/${local.name_prefix}-github-deploy-core-policy",
       "arn:aws:iam::886601940523:policy/${local.name_prefix}-github-deploy-compute-policy",
       "arn:aws:iam::886601940523:policy/${local.name_prefix}-github-deploy-cdn-policy",
     ]
@@ -666,6 +671,7 @@ data "aws_iam_policy_document" "github_deploy_compute_policy" {
       "iam:SetDefaultPolicyVersion",
     ]
     resources = [
+      "arn:aws:iam::886601940523:policy/${local.name_prefix}-github-deploy-core-policy",
       "arn:aws:iam::886601940523:policy/${local.name_prefix}-github-deploy-compute-policy",
       "arn:aws:iam::886601940523:policy/${local.name_prefix}-github-deploy-cdn-policy",
     ]
