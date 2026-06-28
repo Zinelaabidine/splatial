@@ -15,6 +15,9 @@ override.tf.json
 # Lambda build artifacts
 **/function_payload.zip
 
+# Review packaging (zip-source.sh output at repo root)
+/*.zip
+
 # ----------------------------------------------------------------------
 # Frontend (Next.js & Node)
 # ----------------------------------------------------------------------
