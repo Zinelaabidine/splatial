@@ -2,6 +2,7 @@
 
 const { DynamoDBClient, GetItemCommand, UpdateItemCommand } = require("@aws-sdk/client-dynamodb");
 const response = require("../lib/response");
+const logger = require("../lib/logger");
 
 const dynamo = new DynamoDBClient({});
 const TABLE = process.env.SCENES_TABLE_NAME;
@@ -16,6 +17,7 @@ const TABLE = process.env.SCENES_TABLE_NAME;
  * Success response (200): { "sceneId": "...", "attemptId": "...", "status": "CANCELLED" }
  */
 exports.handler = async (event) => {
+  const log = logger.forEvent(event, "cancel-job");
   const claims = event.requestContext?.authorizer?.jwt?.claims;
   const userId = claims?.sub;
   if (!userId) return response(401, { error: "Unauthorized: missing user identity" });
@@ -81,6 +83,11 @@ exports.handler = async (event) => {
       if (err.name !== "ConditionalCheckFailedException") throw err;
     }
   }
+
+  log.event("job.cancelled", {
+    sceneId,
+    data: { attempt_id: lastAttemptId },
+  });
 
   return response(200, { sceneId, attemptId: lastAttemptId, status: "CANCELLED" });
 };

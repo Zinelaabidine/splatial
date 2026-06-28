@@ -3,6 +3,7 @@
 const { DynamoDBClient, GetItemCommand, UpdateItemCommand } = require("@aws-sdk/client-dynamodb");
 const response = require("../lib/response");
 const { applyProgressFields } = require("../lib/progress-fields");
+const logger = require("../lib/logger");
 
 const dynamo = new DynamoDBClient({});
 const TABLE  = process.env.SCENES_TABLE_NAME;
@@ -19,6 +20,7 @@ const TABLE  = process.env.SCENES_TABLE_NAME;
  * }
  */
 exports.handler = async (event) => {
+  const log = logger.forEvent(event, "attempt-heartbeat");
   const attemptId = event.pathParameters?.attemptId;
   if (!attemptId) return response(400, { error: "Missing attemptId" });
 
@@ -44,6 +46,15 @@ exports.handler = async (event) => {
   const exprValues = { ":now": { S: now } };
 
   applyProgressFields(body, exprParts, exprValues);
+
+  log.event("attempt.heartbeat", {
+    attemptId,
+    data: {
+      phase: body.progressPhase,
+      percent: body.progressPercent,
+      eta_seconds: body.progressEtaSeconds,
+    },
+  });
 
   await dynamo.send(
     new UpdateItemCommand({

@@ -82,6 +82,9 @@ resource "aws_launch_template" "worker" {
     cat > /etc/splatial-worker.env <<'ENVFILE'
     QUEUE_NAME=${aws_sqs_queue.processing_queue.name}
     DLQ_NAME=${aws_sqs_queue.processing_dlq.name}
+    SPLATIAL_ENV=${var.environment}
+    WORKER_LOG_GROUP=${aws_cloudwatch_log_group.worker.name}
+    LOG_TO_CLOUDWATCH=true
     ENVFILE
     mkdir -p /etc/systemd/system/gaussian-worker.service.d
     cat > /etc/systemd/system/gaussian-worker.service.d/env.conf <<'DROPIN'

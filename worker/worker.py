@@ -167,16 +167,18 @@ for key, val in DEFAULTS.items():
 # 2. Logging Setup
 # ----------------------------
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
-logging.basicConfig(
-    level=getattr(logging, LOG_LEVEL, logging.INFO),
-    format="%(asctime)s %(levelname)s %(message)s",
-)
-log = logging.getLogger("sqs-worker")
 
 # ----------------------------
 # 3. AWS Configuration (Import after logging setup)
 # ----------------------------
 import aws_config
+import log_envelope
+
+log = log_envelope.init_logging(ctx_provider=aws_config.get_instance_metadata)
+
+
+def _event(name, level=logging.INFO, **data):
+    log_envelope.log_event(log, name, level=level, data=data)
 
 # ----------------------------
 # 4. HTTP Client for API Requests
@@ -259,6 +261,10 @@ def terminate_self(reason: str, decrement_desired: bool = True) -> None:
         decrement_msg,
         instance_id or "(unknown)"
     )
+
+    if reason == "spot_interruption":
+        _event("spot.interrupted", level=logging.WARNING, phase="unknown", percent=0)
+        log_envelope.flush_logs()
     
     if not instance_id or instance_id in ("local", "unknown"):
         log.error("Cannot terminate self: instance-id unavailable or not on EC2")
@@ -1625,6 +1631,7 @@ def download_and_extract_zip_input(
     if not item.input_bucket or not item.input_prefix_or_key:
         raise ValueError("Missing inputBucket/inputPrefixOrKey for zip download")
 
+    dl_start = time.time()
     inputs_dir = os.path.join(workspace, "inputs")
     os.makedirs(inputs_dir, exist_ok=True)
 
@@ -1682,6 +1689,17 @@ def download_and_extract_zip_input(
             scene_dir,
         )
 
+    zip_bytes = os.path.getsize(zip_local_path) if os.path.isfile(zip_local_path) else 0
+    image_count = _count_images_in_directory(os.path.join(scene_dir, "input"))
+    if image_count <= 0:
+        image_count = _count_images_in_directory(scene_dir)
+    _event(
+        "input.downloaded",
+        duration_s=round(time.time() - dl_start, 2),
+        image_count=image_count,
+        bytes=zip_bytes,
+    )
+
     return scene_dir
 
 def download_s3_objects(
@@ -1700,6 +1718,9 @@ def download_s3_objects(
     if not input_bucket or not input_key:
         return False, "INVALID_INPUT"
 
+    dl_start = time.time()
+    total_bytes = 0
+
     # Defensive: if key looks like a video file, treat as video regardless of file_type
     if input_key.lower().endswith((".mp4", ".mov", ".mkv", ".avi")) and not input_key.endswith("/"):
         log.info("Input key ends with video extension; treating as video: %s", input_key)
@@ -1713,7 +1734,13 @@ def download_s3_objects(
             s3.download_file(input_bucket, input_key, local_path)
             if not os.path.exists(local_path):
                 return False, "INVALID_INPUT"
+            total_bytes = os.path.getsize(local_path)
             log.info("Downloaded video: %s", local_path)
+            _event(
+                "input.downloaded",
+                duration_s=round(time.time() - dl_start, 2),
+                bytes=total_bytes,
+            )
             return True, ""
 
         else:  # images
@@ -1760,6 +1787,8 @@ def download_s3_objects(
 
                     log.info("Downloading image: %s", rel_key)
                     s3.download_file(input_bucket, obj_key, local_path)
+                    if os.path.isfile(local_path):
+                        total_bytes += os.path.getsize(local_path)
                     count += 1
 
             if count == 0:
@@ -1769,10 +1798,22 @@ def download_s3_objects(
                     local_path = os.path.join(workspace, "inputs/video/input.mp4")
                     s3.download_file(input_bucket, input_key, local_path)
                     if os.path.exists(local_path):
+                        total_bytes = os.path.getsize(local_path)
+                        _event(
+                            "input.downloaded",
+                            duration_s=round(time.time() - dl_start, 2),
+                            bytes=total_bytes,
+                        )
                         return True, ""
                 return False, "INVALID_INPUT"
 
             log.info("Downloaded %d image(s)", count)
+            _event(
+                "input.downloaded",
+                duration_s=round(time.time() - dl_start, 2),
+                image_count=count,
+                bytes=total_bytes or item.input_size_bytes,
+            )
             return True, ""
 
     except Exception as e:
@@ -1791,6 +1832,7 @@ def upload_outputs(
         log.warning("No output bucket/prefix; skipping upload")
         return True
 
+    upload_start = time.time()
     try:
         # Create and upload manifest
         manifest = {
@@ -1816,6 +1858,16 @@ def upload_outputs(
         log.info("Uploading output to s3://%s/%s", output_bucket, output_key)
         s3.upload_file(output_file, output_bucket, output_key)
 
+        output_bytes = 0
+        for path in (manifest_path, output_file):
+            if os.path.isfile(path):
+                output_bytes += os.path.getsize(path)
+        _event(
+            "output.uploaded",
+            duration_s=round(time.time() - upload_start, 2),
+            bytes=output_bytes,
+            ply_key=output_key,
+        )
         log.info("Outputs uploaded successfully")
         return True
 
@@ -1896,6 +1948,18 @@ def run_training_subprocess(
     
     # Get training working directory for path resolution
     train_cwd = os.path.dirname(train_script)
+
+    train_start = time.time()
+    _event(
+        "train.started",
+        iterations=iter_total,
+        resolution=effective_config.get("resolution"),
+        sh_degree=effective_config.get("sh_degree"),
+    )
+    last_train_progress_event = 0.0
+    last_train_iter = 0
+    last_train_percent: Optional[float] = None
+    last_train_eta: Optional[float] = None
     
     try:
         proc = subprocess.Popen(
@@ -1943,6 +2007,12 @@ def run_training_subprocess(
                     log.warning("Training subprocess did not terminate gracefully; killing")
                     proc.kill()
                     proc.wait(timeout=5)
+                _event(
+                    "train.finished",
+                    duration_s=round(time.time() - train_start, 2),
+                    final_iter=last_train_iter,
+                    ok=False,
+                )
                 return False, output_folder, list(log_tail)
             
             # Non-blocking read with timeout
@@ -1977,6 +2047,37 @@ def run_training_subprocess(
                 parsed_pct = _parse_training_iteration_percent(line, iter_total)
                 if parsed_pct is not None:
                     _emit_progress(parsed_pct)
+                    for match in _TRAINING_ITER_RE.finditer(line):
+                        current = int(match.group(1))
+                        total = int(match.group(2))
+                        if total == iter_total or abs(total - iter_total) / iter_total <= 0.05:
+                            last_train_iter = current
+                            last_train_percent = parsed_pct
+                            break
+                    eta_match = re.search(r"<\s*([\d:]+)", line)
+                    if eta_match:
+                        parts = eta_match.group(1).split(":")
+                        try:
+                            if len(parts) == 2:
+                                last_train_eta = float(parts[0]) * 60 + float(parts[1])
+                            elif len(parts) == 3:
+                                last_train_eta = (
+                                    float(parts[0]) * 3600
+                                    + float(parts[1]) * 60
+                                    + float(parts[2])
+                                )
+                        except ValueError:
+                            pass
+                    now = time.time()
+                    if now - last_train_progress_event >= HEARTBEAT_INTERVAL_SECONDS:
+                        _event(
+                            "train.progress",
+                            phase="TRAINING",
+                            percent=last_train_percent,
+                            iter=last_train_iter,
+                            eta_seconds=last_train_eta,
+                        )
+                        last_train_progress_event = now
             
             # Check if process has ended
             if proc.poll() is not None and not line:
@@ -1994,6 +2095,13 @@ def run_training_subprocess(
         # Get exit code
         exit_code = proc.returncode
         log.info("Training subprocess exited with code %d", exit_code)
+        train_ok = exit_code == 0
+        _event(
+            "train.finished",
+            duration_s=round(time.time() - train_start, 2),
+            final_iter=last_train_iter or iter_total if train_ok else last_train_iter,
+            ok=train_ok,
+        )
         
         # output_folder is parsed from "Output folder: ..." log line
         # If not found, training likely failed early
@@ -2306,6 +2414,9 @@ def run_colmap_subprocess(
     )
     log.info("=" * 60)
 
+    colmap_start = time.time()
+    _event("colmap.started", matcher=tracker.matcher, image_count=resolved_images)
+
     on_progress = progress_callback
     if on_progress is None and heartbeat_callback is not None:
         on_progress = lambda _local, _step, _eta: heartbeat_callback()
@@ -2348,6 +2459,12 @@ def run_colmap_subprocess(
                     log.warning("COLMAP subprocess did not terminate gracefully; killing")
                     proc.kill()
                     proc.wait(timeout=5)
+                _event(
+                    "colmap.finished",
+                    duration_s=round(time.time() - colmap_start, 2),
+                    matcher=tracker.matcher,
+                    ok=False,
+                )
                 return False, list(log_tail)
 
             line = proc.stdout.readline()
@@ -2378,7 +2495,14 @@ def run_colmap_subprocess(
 
         exit_code = proc.returncode
         log.info("COLMAP subprocess exited with code %d", exit_code)
-        if exit_code != 0:
+        colmap_ok = exit_code == 0
+        _event(
+            "colmap.finished",
+            duration_s=round(time.time() - colmap_start, 2),
+            matcher=tracker.matcher,
+            ok=colmap_ok,
+        )
+        if not colmap_ok:
             return False, list(log_tail)
 
         if not _scene_has_colmap_output(scene_dir):
@@ -2496,6 +2620,10 @@ def upload_training_outputs(
         
         log.info("Fallback resolution succeeded; using folder: %s", output_folder)
     
+    upload_start = time.time()
+    total_upload_bytes = 0
+    ply_key = resolve_view_splat_s3_key(output_prefix, output_folder)
+
     try:
         # Create and upload manifest
         manifest = {
@@ -2534,9 +2662,17 @@ def upload_training_outputs(
                 
                 log.info("Uploading %s to s3://%s/%s", rel_path, output_bucket, s3_key)
                 s3.upload_file(local_path, output_bucket, s3_key)
+                if os.path.isfile(local_path):
+                    total_upload_bytes += os.path.getsize(local_path)
                 uploaded_count += 1
         
         log.info("Uploaded %d training output files to S3", uploaded_count)
+        _event(
+            "output.uploaded",
+            duration_s=round(time.time() - upload_start, 2),
+            bytes=total_upload_bytes,
+            ply_key=ply_key,
+        )
         return True
         
     except Exception as e:
@@ -2809,6 +2945,30 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
     token = item.api_auth_token
     api_url = item.api_base_url or API_BASE_URL
     current_instance_id = INSTANCE_ID
+    job_started_at = time.time()
+    job_progress = {"phase": "INIT", "percent": 0}
+
+    def _set_job_progress(phase: str, percent: int) -> None:
+        job_progress["phase"] = phase
+        job_progress["percent"] = percent
+
+    def _emit_spot_interrupted() -> None:
+        _event(
+            "spot.interrupted",
+            level=logging.WARNING,
+            phase=job_progress["phase"],
+            percent=job_progress["percent"],
+        )
+        log_envelope.flush_logs()
+
+    def _emit_job_failed(phase: str, reason: str, error_message: str) -> None:
+        _event(
+            "job.failed",
+            level=logging.ERROR,
+            phase=phase,
+            reason=reason,
+            error_message=error_message,
+        )
 
     # Create shared interruption event
     interrupt_event = threading.Event()
@@ -2821,6 +2981,7 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
             check_count += 1
             if spot_interruption_notice():
                 log.warning("Spot interruption detected after %d checks", check_count)
+                _emit_spot_interrupted()
                 interrupt_event.set()
                 break
             # Log every 30 seconds to show the thread is working
@@ -2878,6 +3039,7 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
         # Phase 0: Mark as RUNNING with INIT phase - fail fast if attempt doesn't exist
         log.info("Marking attempt as RUNNING for attemptId=%s, sceneId=%s", attempt_id, scene_id)
         workspace = setup_workspace(attempt_id)
+        _set_job_progress("INIT", 0)
 
         start_patch = {
             "status": "RUNNING",
@@ -2905,9 +3067,11 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
                     "Initial RUNNING patch failed (status=%s); aborting",
                     start_result.status_code,
                 )
+            _emit_job_failed("INIT", "WORKER_ERROR", "Initial RUNNING patch failed")
             return False, False
 
         _send_heartbeat_if_due("INIT", 0, force=True)
+        _set_job_progress("INIT", 0)
 
         # Phase 1: Download
         log.info("Starting download phase for attemptId=%s, sceneId=%s", attempt_id, scene_id)
@@ -2955,7 +3119,7 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
                 "progressPercent": 0,
             }, api_base_url=api_url)
             _release_message_visibility()
-            # Spot interruption: don't decrement desired capacity (ASG will launch replacement)
+            _emit_spot_interrupted()
             return False, True
 
         if not dl_ok:
@@ -2966,6 +3130,7 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
                 "errorMessage": f"Failed to download inputs: {dl_error}",
                 "progressPhase": "INIT",
             }, api_base_url=api_url)
+            _emit_job_failed("INIT", dl_error or "WORKER_ERROR", f"Failed to download inputs: {dl_error}")
             return False, False
 
         patch_attempt(attempt_id, token, {
@@ -2973,6 +3138,7 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
             "progressPercent": overall_percent("INIT", 100),
         }, api_base_url=api_url)
         _send_heartbeat_if_due("INIT", overall_percent("INIT", 100), force=True)
+        _set_job_progress("INIT", overall_percent("INIT", 100))
         log.info("Download complete")
 
         # Phase 1.5: PREPARATION — lay out images for COLMAP when needed
@@ -2989,6 +3155,7 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
             "progressPercent": overall_percent("PREPARATION", 0),
         }, api_base_url=api_url)
         _send_heartbeat_if_due("PREPARATION", overall_percent("PREPARATION", 0))
+        _set_job_progress("PREPARATION", overall_percent("PREPARATION", 0))
 
         if needs_colmap:
             try:
@@ -3001,6 +3168,7 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
                     "errorMessage": str(e),
                     "progressPhase": "PREPARATION",
                 }, api_base_url=api_url)
+                _emit_job_failed("PREPARATION", "INVALID_INPUT", str(e))
                 return False, False
 
         patch_attempt(attempt_id, token, {
@@ -3008,6 +3176,7 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
             "progressPercent": overall_percent("PREPARATION", 100),
         }, api_base_url=api_url)
         _send_heartbeat_if_due("PREPARATION", overall_percent("PREPARATION", 100))
+        _set_job_progress("PREPARATION", overall_percent("PREPARATION", 100))
         log.info("PREPARATION phase complete")
 
         # Phase 1.75: COLMAP — run convert.py for raw image datasets
@@ -3023,6 +3192,7 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
             "progressPercent": overall_percent("COLMAP", 0),
         }, api_base_url=api_url)
         _send_heartbeat_if_due("COLMAP", overall_percent("COLMAP", 0))
+        _set_job_progress("COLMAP", overall_percent("COLMAP", 0))
 
         if needs_colmap:
             colmap_image_count = resolve_colmap_image_count(
@@ -3078,6 +3248,8 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
                     "progressPercent": overall_percent("COLMAP", 50),
                 }, api_base_url=api_url)
                 _release_message_visibility()
+                _set_job_progress("COLMAP", overall_percent("COLMAP", 50))
+                _emit_spot_interrupted()
                 return False, True
 
             if not colmap_ok:
@@ -3092,6 +3264,7 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
                     "progressPhase": "COLMAP",
                     "progressPercent": overall_percent("COLMAP", 50),
                 }, api_base_url=api_url)
+                _emit_job_failed("COLMAP", "WORKER_ERROR", error_detail[:500])
                 return False, False
 
         patch_attempt(attempt_id, token, {
@@ -3099,6 +3272,7 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
             "progressPercent": overall_percent("COLMAP", 100),
         }, api_base_url=api_url)
         _send_heartbeat_if_due("COLMAP", overall_percent("COLMAP", 100))
+        _set_job_progress("COLMAP", overall_percent("COLMAP", 100))
         log.info("COLMAP phase complete")
 
         # Phase 2: Training or Simulation
@@ -3122,6 +3296,7 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
                 "progressPercent": overall_percent("TRAINING", 0),
             }, api_base_url=api_url)
             _send_heartbeat_if_due("TRAINING", overall_percent("TRAINING", 0), force=True)
+            _set_job_progress("TRAINING", overall_percent("TRAINING", 0))
             
             def _report_training_progress(local_pct: float) -> None:
                 global_pct = overall_percent("TRAINING", local_pct)
@@ -3130,6 +3305,7 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
                     "progressPercent": global_pct,
                 }, api_base_url=api_url)
                 _send_heartbeat_if_due("TRAINING", global_pct)
+                _set_job_progress("TRAINING", global_pct)
             
             # Combine interrupt_event and global_stop into a single event for training
             combined_interrupt = threading.Event()
@@ -3171,8 +3347,10 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
                     "progressPercent": overall_percent("TRAINING", 50),
                 }, api_base_url=api_url)
                 _release_message_visibility()
+                _set_job_progress("TRAINING", overall_percent("TRAINING", 50))
+                _emit_spot_interrupted()
                 return False, True
-            
+
             if not training_success:
                 log.error("Training failed")
                 # Include last N log lines in error detail
@@ -3186,6 +3364,7 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
                     "progressPhase": "TRAINING",
                     "progressPercent": overall_percent("TRAINING", 50),
                 }, api_base_url=api_url)
+                _emit_job_failed("TRAINING", "WORKER_ERROR", error_detail[:500])
                 return False, False
             
             log.info("Training completed successfully; output folder: %s", training_output_folder)
@@ -3200,10 +3379,16 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
                     "progressPhase": "TRAINING",
                     "progressPercent": overall_percent("TRAINING", 100),
                 }, api_base_url=api_url)
+                _emit_job_failed(
+                    "TRAINING",
+                    "WORKER_ERROR",
+                    "Training succeeded but output folder could not be determined from logs.",
+                )
                 return False, False
             
             # Phase 2.5: Post-Processing (clean and convert point clouds)
             log.info("Starting post-processing phase")
+            _set_job_progress("POST_PROCESSING", overall_percent("POST_PROCESSING", 0))
             
             # Helper for consistent POST_PROCESSING marks (always emit 0%, 50%, 100%)
             def _pp_mark(local_pct: int):
@@ -3212,6 +3397,7 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
                     "progressPercent": overall_percent("POST_PROCESSING", local_pct),
                 }, api_base_url=api_url)
                 _send_heartbeat_if_due("POST_PROCESSING", overall_percent("POST_PROCESSING", local_pct), force=True)
+                _set_job_progress("POST_PROCESSING", overall_percent("POST_PROCESSING", local_pct))
             
             # Emit 0% heartbeat
             _pp_mark(0)
@@ -3245,8 +3431,10 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
                         "progressPercent": overall_percent("POST_PROCESSING", 50),
                     }, api_base_url=api_url)
                     _release_message_visibility()
+                    _set_job_progress("POST_PROCESSING", overall_percent("POST_PROCESSING", 50))
+                    _emit_spot_interrupted()
                     return False, True
-                
+
                 if not post_ok:
                     log.error("Post-processing failed: %s", post_error)
                     # Cap errorMessage at 2000 chars
@@ -3258,6 +3446,7 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
                         "progressPhase": "POST_PROCESSING",
                         "progressPercent": overall_percent("POST_PROCESSING", 50),
                     }, api_base_url=api_url)
+                    _emit_job_failed("POST_PROCESSING", "WORKER_ERROR", error_msg[:500])
                     return False, False
                 
                 log.info("Post-processing completed successfully")
@@ -3280,6 +3469,7 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
                 "progressPercent": overall_percent("EXPORT", 0),
             }, api_base_url=api_url)
             _send_heartbeat_if_due("EXPORT", overall_percent("EXPORT", 0), force=True)
+            _set_job_progress("EXPORT", overall_percent("EXPORT", 0))
             
             upload_ok = upload_training_outputs(item, training_output_folder, workspace)
             if not upload_ok:
@@ -3291,6 +3481,7 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
                     "progressPhase": "EXPORT",
                     "progressPercent": overall_percent("EXPORT", 50),
                 }, api_base_url=api_url)
+                _emit_job_failed("EXPORT", "WORKER_ERROR", "Failed to upload training outputs to S3")
                 return False, False
             
         else:
@@ -3299,6 +3490,7 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
             # ----------------------------
             log.info("Starting simulation phase for %d seconds", SIM_TOTAL_SECONDS)
             start_time = time.time()
+            _set_job_progress("TRAINING", overall_percent("TRAINING", 0))
 
             sim_duration = float(max(SIM_TOTAL_SECONDS, 1))
 
@@ -3319,6 +3511,8 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
                         "progressPercent": overall_percent("TRAINING", local_pct),
                     }, api_base_url=api_url)
                     _release_message_visibility()
+                    _set_job_progress("TRAINING", overall_percent("TRAINING", local_pct))
+                    _emit_spot_interrupted()
                     return False, True
 
                 if interrupt_event.is_set():
@@ -3330,6 +3524,8 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
                         "progressPercent": overall_percent("TRAINING", local_pct),
                     }, api_base_url=api_url)
                     _release_message_visibility()
+                    _set_job_progress("TRAINING", overall_percent("TRAINING", local_pct))
+                    _emit_spot_interrupted()
                     return False, True
 
                 if elapsed >= sim_duration:
@@ -3343,6 +3539,7 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
                     "progressPercent": global_pct,
                 }, api_base_url=api_url)
                 _send_heartbeat_if_due("TRAINING", global_pct)
+                _set_job_progress("TRAINING", global_pct)
 
                 # Sleep for update interval but check interruption frequently
                 remaining = max(sim_duration - elapsed, 0.0)
@@ -3356,6 +3553,8 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
                         "progressPercent": overall_percent("TRAINING", local_pct),
                     }, api_base_url=api_url)
                     _release_message_visibility()
+                    _set_job_progress("TRAINING", overall_percent("TRAINING", local_pct))
+                    _emit_spot_interrupted()
                     return False, True
 
             log.info("Simulation complete")
@@ -3367,6 +3566,7 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
                 "progressPercent": overall_percent("EXPORT", 0),
             }, api_base_url=api_url)
             _send_heartbeat_if_due("EXPORT", overall_percent("EXPORT", 0))
+            _set_job_progress("EXPORT", overall_percent("EXPORT", 0))
 
             upload_ok = upload_outputs(item, workspace)
             if not upload_ok:
@@ -3378,6 +3578,7 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
                     "progressPhase": "EXPORT",
                     "progressPercent": overall_percent("EXPORT", 50),
                 }, api_base_url=api_url)
+                _emit_job_failed("EXPORT", "WORKER_ERROR", "Failed to upload outputs to S3")
                 return False, False
 
             if item.output_prefix:
@@ -3402,7 +3603,13 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
             # Only return True if backend accepted the final patch
             if not final_result.ok:
                 log.error("Final SUCCEEDED patch failed (status=%s); returning False to prevent message deletion", final_result.status_code)
+                _emit_job_failed("FINALIZE", "WORKER_ERROR", "Final SUCCEEDED patch failed")
                 return False, False
+            _event(
+                "job.completed",
+                total_duration_s=round(time.time() - job_started_at, 2),
+                output_prefix=item.output_prefix,
+            )
             return True, False
         else:
             log.info("Simulated failure (SUCCESS_RATE=%f)", SUCCESS_RATE)
@@ -3413,6 +3620,7 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
                 "progressPhase": "FINALIZE",
                 "progressPercent": overall_percent("FINALIZE", 100),
             }, api_base_url=api_url)
+            _emit_job_failed("FINALIZE", "WORKER_ERROR", "Simulated failure during processing")
             return False, False
 
     except Exception as e:
@@ -3422,6 +3630,7 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
             "reason": "WORKER_ERROR",
             "errorMessage": f"Worker crash: {type(e).__name__}",
         }, api_base_url=api_url)
+        _emit_job_failed(job_progress["phase"], "WORKER_ERROR", f"Worker crash: {type(e).__name__}")
         return False, False
     finally:
         interrupt_event.set()
@@ -3530,6 +3739,12 @@ def main() -> None:
         log.error("Example: export SQS_QUEUE_URL='https://sqs.us-east-1.amazonaws.com/123456789/queue-name'")
         return
 
+    _event(
+        "worker.started",
+        queue=qurl,
+        poll_interval_s=getenv_int("WORKER_POLL_INTERVAL_SECONDS", 20),
+    )
+
     # Start global Spot interruption monitor
     def _monitor_spot_instance_events() -> None:
         # Detect Spot interruption notice and request graceful shutdown
@@ -3564,6 +3779,8 @@ def main() -> None:
                     "IDLE_EXIT_SECONDS (%d) exceeded without receiving messages; terminating self for scale-to-zero.",
                     IDLE_EXIT_SECONDS,
                 )
+                _event("worker.idle_exit", idle_seconds=int(idle_elapsed))
+                log_envelope.flush_logs()
                 terminate_self("idle_timeout", decrement_desired=True)
                 return
 
@@ -3618,6 +3835,16 @@ def main() -> None:
             terminate_self("invalid_message_processed", decrement_desired=True)
             return
 
+        log_envelope.bind_job(item.attempt_id, item.scene_id)
+        _event(
+            "job.received",
+            attempt_number=item.attempt_number,
+            input_type=item.input_file_type,
+            input_file_count=item.input_file_count,
+            input_size_bytes=item.input_size_bytes,
+            train_config=item.train_config,
+        )
+
         # Start visibility extension thread when we have a receipt handle
         vis_stop: Optional[threading.Event] = None
         extender: Optional[threading.Thread] = None
@@ -3643,6 +3870,8 @@ def main() -> None:
                 vis_stop.set()
             if extender:
                 extender.join(timeout=2)
+            log_envelope.clear_job()
+            log_envelope.flush_logs()
 
         poison_deleted = False
         # Delete message only on success, using robust retry mechanism

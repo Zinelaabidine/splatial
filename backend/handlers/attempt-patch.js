@@ -3,6 +3,7 @@
 const { DynamoDBClient, GetItemCommand, UpdateItemCommand } = require("@aws-sdk/client-dynamodb");
 const response = require("../lib/response");
 const { applyProgressFields } = require("../lib/progress-fields");
+const logger = require("../lib/logger");
 
 const dynamo = new DynamoDBClient({});
 const TABLE  = process.env.SCENES_TABLE_NAME;
@@ -26,6 +27,7 @@ const STATUS_MAP = {
  *   ec2InstanceId, spotRequestId, reason, errorMessage, outputBucket, outputPrefix
  */
 exports.handler = async (event) => {
+  const log = logger.forEvent(event, "attempt-patch");
   const attemptId = event.pathParameters?.attemptId;
   if (!attemptId) return response(400, { error: "Missing attemptId" });
 
@@ -119,6 +121,29 @@ exports.handler = async (event) => {
       ExpressionAttributeValues: exprValues,
     })
   );
+
+  if (mappedStatus) {
+    log.event("attempt.status_changed", {
+      attemptId,
+      data: {
+        from: Item.status?.S ?? null,
+        to: status,
+        mapped_status: mappedStatus,
+      },
+    });
+    if (status === "SUCCEEDED") {
+      log.event("attempt.completed", {
+        attemptId,
+        data: { output_bucket: outputBucket, output_prefix: outputPrefix },
+      });
+    }
+    if (status === "FAILED") {
+      log.error("attempt.failed", {
+        attemptId,
+        data: { reason, error_message: errorMessage },
+      });
+    }
+  }
 
   // Cascade status and progress to the parent scene when present.
   // Attempt records created by the new submit-job handler carry parent_scene_id.

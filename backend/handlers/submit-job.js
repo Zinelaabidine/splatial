@@ -5,6 +5,7 @@ const { DynamoDBClient, GetItemCommand, UpdateItemCommand, PutItemCommand } = re
 const { S3Client, HeadObjectCommand } = require("@aws-sdk/client-s3");
 const { randomUUID } = require("crypto");
 const response = require("../lib/response");
+const logger = require("../lib/logger");
 
 const sqs   = new SQSClient({});
 const dynamo = new DynamoDBClient({});
@@ -40,6 +41,7 @@ const SUBMITTABLE = new Set(["READY", "FAILED", "UPLOADED"]);
  * Success response (202): { "sceneId": "...", "attemptId": "...", "status": "QUEUED" }
  */
 exports.handler = async (event) => {
+  const log = logger.forEvent(event, "submit-job");
   const claims = event.requestContext?.authorizer?.jwt?.claims;
   const userId = claims?.sub;
   if (!userId) return response(401, { error: "Unauthorized: missing user identity" });
@@ -144,6 +146,12 @@ exports.handler = async (event) => {
     })
   );
 
+  log.event("attempt.created", {
+    sceneId,
+    attemptId,
+    data: { attempt_number: attemptNumber },
+  });
+
   await sqs.send(
     new SendMessageCommand({
       QueueUrl:    QUEUE_URL,
@@ -168,6 +176,13 @@ exports.handler = async (event) => {
       }),
     })
   );
+
+  log.event("job.queued", { attemptId, data: { queue: QUEUE_URL } });
+  log.event("job.submitted", {
+    sceneId,
+    attemptId,
+    data: { attempt_number: attemptNumber, train_config: resolvedTrainConfig },
+  });
 
   return response(202, { sceneId, attemptId, status: "QUEUED" });
 };
