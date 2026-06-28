@@ -63,10 +63,43 @@ variable "cors_extra_origins" {
   default     = []
 }
 
-variable "worker_instance_type" {
-  description = "EC2 instance type for GPU Spot workers."
+variable "worker_ami_id" {
+  description = "AMI for GPU Spot workers (WorkerGaussianSplattingARM_V1, us-east-1)."
   type        = string
-  default     = "g4dn.xlarge"
+  default     = "ami-0df365a537b0734b8"
+}
+
+variable "worker_spot_availability_zone" {
+  description = "Availability zone for GPU Spot workers (us-east-1d = use1-az6, lower Spot prices)."
+  type        = string
+  default     = "us-east-1d"
+
+  validation {
+    condition     = var.worker_spot_availability_zone == "us-east-1d"
+    error_message = "Worker spot subnet must stay in us-east-1d (use1-az6) for Spot pricing."
+  }
+}
+
+variable "worker_spot_subnet_cidr" {
+  description = "Private CIDR for the GPU Spot worker subnet in the app VPC."
+  type        = string
+}
+
+variable "worker_nat_public_subnet_cidr" {
+  description = "Public CIDR in the same AZ as worker_spot_subnet_cidr; hosts the worker NAT gateway."
+  type        = string
+}
+
+variable "worker_instance_profile_name" {
+  description = "Existing IAM instance profile attached to worker EC2 instances."
+  type        = string
+  default     = "backend-ec2-role"
+}
+
+variable "worker_instance_type" {
+  description = "EC2 instance type for ARM GPU Spot workers (must match worker AMI architecture)."
+  type        = string
+  default     = "g5g.xlarge"
 }
 
 variable "worker_asg_max_size" {

@@ -1,3 +1,7 @@
+data "aws_iam_instance_profile" "worker" {
+  name = var.worker_instance_profile_name
+}
+
 # ── Security Group ────────────────────────────────────────────────────────────
 
 resource "aws_security_group" "worker" {
@@ -18,14 +22,9 @@ resource "aws_security_group" "worker" {
   tags = {
     Name        = "${local.name_prefix}-splat-worker-sg"
     Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
   }
-}
-
-# ── AMI ───────────────────────────────────────────────────────────────────────
-# GaussianSplattingWorker custom AMI (us-east-1) — has worker.py, dependencies,
-# and splat-worker.service pre-installed. Update when rebaking.
-locals {
-  worker_ami_id = "ami-0512a845e4b778621"
 }
 
 # ── Launch Template ───────────────────────────────────────────────────────────
@@ -34,8 +33,8 @@ resource "aws_launch_template" "worker" {
   provider = aws.this
 
   name        = "${local.name_prefix}-splat-worker-lt"
-  description = "GPU Spot worker template for 3DGS training jobs"
-  image_id    = local.worker_ami_id
+  description = "ARM GPU Spot worker template for 3DGS training jobs"
+  image_id    = var.worker_ami_id
 
   instance_type = var.worker_instance_type
 
@@ -43,7 +42,7 @@ resource "aws_launch_template" "worker" {
   instance_initiated_shutdown_behavior = "terminate"
 
   iam_instance_profile {
-    name = aws_iam_instance_profile.worker_instance_profile.name
+    name = data.aws_iam_instance_profile.worker.name
   }
 
   # Request Spot capacity
@@ -76,8 +75,7 @@ resource "aws_launch_template" "worker" {
     http_put_response_hop_limit = 1
   }
 
-  # Write runtime env vars before starting the worker service.
-  # Assumes splat-worker.service has EnvironmentFile=/etc/splatial-worker.env
+  # Inject queue names before starting the pre-baked worker service on the AMI.
   user_data = base64encode(<<-EOT
     #!/bin/bash
     set -e
@@ -85,8 +83,14 @@ resource "aws_launch_template" "worker" {
     QUEUE_NAME=${aws_sqs_queue.processing_queue.name}
     DLQ_NAME=${aws_sqs_queue.processing_dlq.name}
     ENVFILE
-    systemctl enable splat-worker.service
-    systemctl start splat-worker.service
+    mkdir -p /etc/systemd/system/gaussian-worker.service.d
+    cat > /etc/systemd/system/gaussian-worker.service.d/env.conf <<'DROPIN'
+    [Service]
+    EnvironmentFile=/etc/splatial-worker.env
+    DROPIN
+    systemctl daemon-reload
+    systemctl enable gaussian-worker.service
+    systemctl start gaussian-worker.service
   EOT
   )
 
@@ -104,84 +108,97 @@ resource "aws_launch_template" "worker" {
   tags = {
     Name        = "${local.name_prefix}-splat-worker-lt"
     Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
   }
 }
 
 # ── Auto Scaling Group ────────────────────────────────────────────────────────
-# DISABLED: ASG and target tracking policy are commented out for manual testing.
-# Re-enable when automated scale-out is needed.
+# Scale out when SQS visible messages > 0; scale to zero when the queue is empty.
 
-# resource "aws_autoscaling_group" "worker" {
-#   provider = aws.this
-#
-#   name = "${local.name_prefix}-splat-worker-asg"
-#
-#   min_size         = 0
-#   max_size         = var.worker_asg_max_size
-#   desired_capacity = 0
-#
-#   vpc_zone_identifier = [for s in aws_subnet.private : s.id]
-#
-#   launch_template {
-#     id      = aws_launch_template.worker.id
-#     version = "$Latest"
-#   }
-#
-#   instance_refresh {
-#     strategy = "Rolling"
-#   }
-#
-#   tag {
-#     key                 = "Name"
-#     value               = "${local.name_prefix}-splat-worker"
-#     propagate_at_launch = true
-#   }
-#
-#   tag {
-#     key                 = "Environment"
-#     value               = var.environment
-#     propagate_at_launch = true
-#   }
-#
-#   lifecycle {
-#     ignore_changes = [desired_capacity]
-#   }
-# }
+resource "aws_autoscaling_group" "worker" {
+  provider = aws.this
+
+  name = "${local.name_prefix}-splat-worker-asg"
+
+  min_size         = 0
+  max_size         = var.worker_asg_max_size
+  desired_capacity = 0
+
+  vpc_zone_identifier = [aws_subnet.worker_spot.id]
+
+  launch_template {
+    id      = aws_launch_template.worker.id
+    version = "$Latest"
+  }
+
+  instance_refresh {
+    strategy = "Rolling"
+  }
+
+  tag {
+    key                 = "Name"
+    value               = "${local.name_prefix}-splat-worker"
+    propagate_at_launch = true
+  }
+
+  tag {
+    key                 = "Environment"
+    value               = var.environment
+    propagate_at_launch = true
+  }
+
+  tag {
+    key                 = "Project"
+    value               = var.project_name
+    propagate_at_launch = true
+  }
+
+  tag {
+    key                 = "ManagedBy"
+    value               = "terraform"
+    propagate_at_launch = true
+  }
+
+  lifecycle {
+    ignore_changes = [desired_capacity]
+  }
+}
 
 # ── Target Tracking Scaling Policy ───────────────────────────────────────────
-# DISABLED: commented out alongside the ASG.
+# One visible SQS message targets one running worker instance.
 
-# resource "aws_autoscaling_policy" "sqs_target_tracking" {
-#   provider = aws.this
-#
-#   name                   = "${local.name_prefix}-sqs-target-tracking"
-#   autoscaling_group_name = aws_autoscaling_group.worker.name
-#   policy_type            = "TargetTrackingScaling"
-#
-#   target_tracking_configuration {
-#     customized_metric_specification {
-#       metrics {
-#         id    = "queue_depth"
-#         label = "SQS visible messages"
-#
-#         metric_stat {
-#           metric {
-#             namespace   = "AWS/SQS"
-#             metric_name = "ApproximateNumberOfMessagesVisible"
-#
-#             dimensions {
-#               name  = "QueueName"
-#               value = aws_sqs_queue.processing_queue.name
-#             }
-#           }
-#           stat = "Sum"
-#         }
-#
-#         return_data = true
-#       }
-#     }
-#
-#     target_value     = 1
-#     disable_scale_in = false
-#   }
-# }
+resource "aws_autoscaling_policy" "sqs_target_tracking" {
+  provider = aws.this
+
+  name                   = "${local.name_prefix}-sqs-target-tracking"
+  autoscaling_group_name = aws_autoscaling_group.worker.name
+  policy_type            = "TargetTrackingScaling"
+
+  target_tracking_configuration {
+    customized_metric_specification {
+      metrics {
+        id    = "queue_depth"
+        label = "SQS visible messages"
+
+        metric_stat {
+          metric {
+            namespace   = "AWS/SQS"
+            metric_name = "ApproximateNumberOfMessagesVisible"
+
+            dimensions {
+              name  = "QueueName"
+              value = aws_sqs_queue.processing_queue.name
+            }
+          }
+          stat = "Sum"
+        }
+
+        return_data = true
+      }
+    }
+
+    target_value     = 1
+    disable_scale_in = false
+  }
+}

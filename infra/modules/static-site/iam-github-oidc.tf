@@ -294,6 +294,16 @@ data "aws_iam_policy_document" "github_deploy_policy" {
       "ec2:AssociateRouteTable",
       "ec2:DisassociateRouteTable",
       "ec2:ReplaceRoute",
+      "ec2:AllocateAddress",
+      "ec2:ReleaseAddress",
+      "ec2:CreateNatGateway",
+      "ec2:DeleteNatGateway",
+      "ec2:DescribeNatGateways",
+      "ec2:DescribeAddresses",
+      "ec2:CreateVpcEndpoint",
+      "ec2:DeleteVpcEndpoints",
+      "ec2:ModifyVpcEndpoint",
+      "ec2:DescribeVpcEndpoints",
       "ec2:CreateTags",
       "ec2:DeleteTags",
     ]
@@ -619,6 +629,7 @@ data "aws_iam_policy_document" "github_deploy_compute_policy" {
     actions = ["iam:PassRole"]
     resources = [
       "arn:aws:iam::886601940523:role/${local.name_prefix}-splat-worker-instance-role",
+      "arn:aws:iam::886601940523:role/backend-ec2-role",
     ]
     condition {
       test     = "StringEquals"
