@@ -846,6 +846,23 @@ data "aws_iam_policy_document" "github_deploy_cdn_policy" {
 
   # ─── CloudWatch Logs ───────────────────────────────────────────────────────
 
+  statement {
+    sid    = "CloudWatchAlarmsManage"
+    effect = "Allow"
+    actions = [
+      "cloudwatch:PutMetricAlarm",
+      "cloudwatch:DeleteAlarms",
+      "cloudwatch:DescribeAlarms",
+      "cloudwatch:TagResource",
+      "cloudwatch:UntagResource",
+      "cloudwatch:ListTagsForResource",
+    ]
+    resources = [
+      "arn:aws:cloudwatch:${var.aws_region}:886601940523:alarm:${local.name_prefix}-sqs-scale-out",
+      "arn:aws:cloudwatch:${var.aws_region}:886601940523:alarm:TargetTracking-${local.name_prefix}-splat-worker-asg-*",
+    ]
+  }
+
   # DescribeLogGroups is a list API that AWS requires on "*".
   statement {
     sid    = "CloudWatchLogsDescribeGlobal"

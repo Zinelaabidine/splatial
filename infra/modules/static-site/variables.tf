@@ -105,6 +105,6 @@ variable "worker_instance_type" {
 variable "worker_asg_max_size" {
   description = "Maximum number of GPU worker instances in the ASG."
   type        = number
-  default     = 5
+  default     = 1
 }
 

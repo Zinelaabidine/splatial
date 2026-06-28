@@ -165,40 +165,55 @@ resource "aws_autoscaling_group" "worker" {
   }
 }
 
-# ── Target Tracking Scaling Policy ───────────────────────────────────────────
-# One visible SQS message targets one running worker instance.
+# ── Step Scaling — Scale Out ──────────────────────────────────────────────────
+# Target tracking cannot scale from zero when queue depth equals target_value (1
+# message vs threshold > 1.0). Step scaling fires on the first visible message.
 
-resource "aws_autoscaling_policy" "sqs_target_tracking" {
+resource "aws_autoscaling_policy" "sqs_step_scale_out" {
   provider = aws.this
 
-  name                   = "${local.name_prefix}-sqs-target-tracking"
-  autoscaling_group_name = aws_autoscaling_group.worker.name
-  policy_type            = "TargetTrackingScaling"
+  name                      = "${local.name_prefix}-sqs-step-scale-out"
+  autoscaling_group_name    = aws_autoscaling_group.worker.name
+  policy_type               = "StepScaling"
+  adjustment_type           = "ExactCapacity"
+  metric_aggregation_type   = "Maximum"
+  estimated_instance_warmup = 120
+  cooldown                  = 60
 
-  target_tracking_configuration {
-    customized_metric_specification {
-      metrics {
-        id    = "queue_depth"
-        label = "SQS visible messages"
-
-        metric_stat {
-          metric {
-            namespace   = "AWS/SQS"
-            metric_name = "ApproximateNumberOfMessagesVisible"
-
-            dimensions {
-              name  = "QueueName"
-              value = aws_sqs_queue.processing_queue.name
-            }
-          }
-          stat = "Sum"
-        }
-
-        return_data = true
-      }
-    }
-
-    target_value     = 1
-    disable_scale_in = false
+  # Set capacity to exactly 1 when any message is visible — do not stack +1 on
+  # top of an instance already launched manually or by a prior alarm evaluation.
+  step_adjustment {
+    metric_interval_lower_bound = 0
+    scaling_adjustment          = 1
   }
 }
+
+resource "aws_cloudwatch_metric_alarm" "sqs_scale_out" {
+  provider = aws.this
+
+  alarm_name          = "${local.name_prefix}-sqs-scale-out"
+  alarm_description   = "Scale out GPU workers when the processing queue has visible messages."
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "ApproximateNumberOfMessagesVisible"
+  namespace           = "AWS/SQS"
+  period              = 60
+  statistic           = "Maximum"
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    QueueName = aws_sqs_queue.processing_queue.name
+  }
+
+  alarm_actions = [aws_autoscaling_policy.sqs_step_scale_out.arn]
+
+  tags = {
+    Name        = "${local.name_prefix}-sqs-scale-out"
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+  }
+}
+
+# Scale-in is handled by worker self-termination (terminate_self decrement_desired).
