@@ -201,6 +201,22 @@ terraform destroy
 
 > **Never use local state.** The `backend.tf` in each environment directory points to the shared S3 bucket + DynamoDB lock table provisioned by `infra/bootstrap/`.
 
+### Pre-commit checks
+
+Install the git hook once per clone:
+
+```bash
+./scripts/install-git-hooks.sh
+```
+
+Run the same checks manually anytime:
+
+```bash
+./scripts/pre-commit-check.sh
+```
+
+This validates Terraform format + `terraform validate` for `dev`, `staging`, and `prod` (via `init -backend=false`, no AWS credentials needed), frontend ESLint, and backend `require('./upload')` sanity.
+
 ---
 
 ## 5. Node.js Coding Standards (Lambda Handlers)
