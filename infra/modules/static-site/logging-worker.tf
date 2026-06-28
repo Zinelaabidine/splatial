@@ -12,6 +12,9 @@
 resource "aws_cloudwatch_log_group" "worker" {
   provider = aws.this
 
+  # Logs permissions live in github_deploy_cdn_policy; wait for propagation.
+  depends_on = [time_sleep.cdn_iam_propagation]
+
   name              = "/${var.project_name}/${var.environment}/worker"
   retention_in_days = var.environment == "prod" ? 90 : 30
 

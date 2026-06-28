@@ -947,6 +947,7 @@ data "aws_iam_policy_document" "github_deploy_cdn_policy" {
     resources = [
       "arn:aws:logs:${var.aws_region}:886601940523:log-group:/aws/lambda/${var.name}-*",
       "arn:aws:logs:${var.aws_region}:886601940523:log-group:/aws/apigateway/${var.name}-*",
+      "arn:aws:logs:${var.aws_region}:886601940523:log-group:/${var.project_name}/${var.environment}/worker",
     ]
   }
 
