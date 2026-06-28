@@ -9,6 +9,155 @@ Format: each release note lists **what changed**, **why**, **where to look**, an
 
 ---
 
+## 2026-06-28 — Phase 3: Admin log drill-down
+
+**Commit:** `104e8f2`  
+**Depends on:** Phase 2 structured worker logs in `/splatial/<env>/worker`  
+**Status:** Deployed to dev via GitHub Actions ([run #28334090322](https://github.com/Zinelaabidine/splatial/actions/runs/28334090322)).
+
+### Summary
+
+Phase 3 replaces the “logs appear here in Phase 3” placeholder in the admin
+attempts table with a **live Worker logs panel**. Expanding an attempt row now
+fetches that attempt’s CloudWatch lines from the worker log group, filtered on
+`attempt_id`, with level filtering, expandable `data` payloads, and pagination.
+
+This is read-only over logs Phase 2 already produces — **no worker change and no
+instance roll** required.
+
+---
+
+### New files
+
+| File | Purpose |
+|---|---|
+| `backend/handlers/admin-attempts-logs.js` | Admin-only `GET /admin/attempts/{attemptId}/logs`. Runs `FilterLogEvents` on the worker log group with a JSON filter pattern `{ $.attempt_id = "<id>" }`. Returns parsed envelope fields plus pagination. |
+| `frontend/types/adminLogs.ts` | TypeScript types for `AttemptLogLine` and `AttemptLogsResponse`. |
+| `frontend/services/adminLogsService.ts` | Authenticated client for the logs endpoint (`getAttemptLogs`). |
+| `frontend/components/admin/AttemptLogPanel.tsx` | UI panel: level filter, refresh, scrollable log list, expandable JSON `data`, “Load more” pagination. |
+| `infra/modules/static-site/admin-logs.tf` | IAM policy (`logs:FilterLogEvents`, `GetLogEvents`, `DescribeLogStreams`) scoped to `local.worker_log_group`, plus API Gateway route. |
+
+---
+
+### Backend changes
+
+#### Dependency (`backend/package.json`)
+
+- Added `@aws-sdk/client-cloudwatch-logs` (alphabetically with other `@aws-sdk/*`
+  packages). Terraform’s `null_resource.upload_lambda_deps` re-runs `npm install`
+  when `package.json` changes.
+
+#### Route registration (`backend/upload.js`)
+
+- Required `./handlers/admin-attempts-logs`.
+- Added dispatcher case:
+  ```js
+  case "GET /admin/attempts/{attemptId}/logs":
+    return await adminAttemptsLogs.handler(event);
+  ```
+
+#### Handler behaviour (`admin-attempts-logs.js`)
+
+- **Auth:** Cognito JWT at the gateway + server-side `isAdmin(event)` check
+  (non-admins get `403`).
+- **Log group:** reads `process.env.WORKER_LOG_GROUP` (e.g. `/splatial/dev/worker`).
+- **Filter:** CloudWatch JSON pattern on `attempt_id`; optional `level` filter.
+  `attemptId` is sanitized (quotes/backslashes stripped) before interpolation.
+- **Time window:** query params `from` / `to` (epoch-ms or ISO); default last 14
+  days; hard cap 31 days (≈ retention). Frontend scopes to attempt lifetime
+  (`createdAt − 1h` … `updatedAt + 1h`) for cheap, precise scans.
+- **Pagination:** `limit` (1–500, default 200) and `nextToken`.
+- **Empty group:** `ResourceNotFoundException` → `200` with `{ lines: [], note: "log group not found yet" }` (not an error).
+- **Response shape:** each line includes `timestamp`, `logStreamName`, and parsed
+  fields (`ts`, `level`, `event`, `msg`, `data`) when the message is valid JSON;
+  otherwise `{ raw }`.
+
+---
+
+### Frontend changes
+
+#### `AdminAttemptsTable.tsx`
+
+- Imported `AttemptLogPanel`.
+- Replaced the dashed Phase 3 placeholder in `DetailPanel` with:
+  ```tsx
+  <AttemptLogPanel attempt={attempt} />
+  ```
+- Field grid and error block unchanged.
+
+#### `AttemptLogPanel.tsx`
+
+- Loads logs when the row expands (scoped time window from attempt timestamps).
+- **Level filter:** All / Info / Warning / Error.
+- **Expandable rows:** lines with a `data` object expand to pretty-printed JSON.
+- **Pagination:** “Load more” when `nextToken` is present.
+- **Empty state:** “No log lines found for this attempt in the retained window.”
+
+---
+
+### Infrastructure changes
+
+#### `lambda-upload.tf`
+
+- Added Lambda environment variable:
+  ```hcl
+  WORKER_LOG_GROUP = local.worker_log_group
+  ```
+  Uses `local.worker_log_group` (`/${project}/${env}/worker`) — **not**
+  `aws_cloudwatch_log_group.worker`, because Phase 2 creates the group at runtime
+  on the worker side (see Phase 2 changelog).
+
+#### `admin-logs.tf`
+
+- **`aws_iam_role_policy.admin_lambda_logs_read`** — grants the upload Lambda
+  read access to the worker log group ARN (constructed from
+  `local.worker_log_group`).
+- **`aws_apigatewayv2_route.admin_attempt_logs`** — `GET /admin/attempts/{attemptId}/logs`
+  with Cognito JWT authorizer; reuses the existing upload Lambda integration.
+
+---
+
+### Where to verify
+
+| Surface | What to check |
+|---|---|
+| **Admin UI** | https://splatial-dev.openspacenexus.store/admin — expand an attempt that ran; **Worker logs** panel shows `job.received → colmap.* → train.* → job.completed` (or `job.failed` with phase/reason). |
+| **API** | `GET /admin/attempts/{attemptId}/logs?from=…&to=…` — admin JWT required; returns `{ lines, nextToken? }`. |
+| **CloudWatch** | Source data still in `/splatial/dev/worker`; panel reads the same group Phase 2 writes. |
+
+---
+
+### Design notes
+
+- **Bounded queries** — frontend narrows to attempt lifetime; backend caps any
+  window at ~31 days. No open-ended all-time scans.
+- **Same join key** — filters on `attempt_id`, the key Phase 2 stamps on every
+  worker line. Backend/frontend log groups can be added later without changing
+  the join.
+- **Secrets** — worker tokens never appear in worker logs (redacted at source in
+  Phase 2); the admin endpoint never logs or returns them.
+- **Forward seam** — Logs Insights aggregations (e.g. per-phase durations) can
+  be added later; route and IAM already exist.
+
+---
+
+### Files touched (complete list)
+
+```
+backend/handlers/admin-attempts-logs.js          (new)
+backend/package.json                             (modified)
+backend/package-lock.json                        (modified)
+backend/upload.js                                (modified)
+frontend/types/adminLogs.ts                      (new)
+frontend/services/adminLogsService.ts            (new)
+frontend/components/admin/AttemptLogPanel.tsx    (new)
+frontend/components/admin/AdminAttemptsTable.tsx (modified)
+infra/modules/static-site/admin-logs.tf          (new)
+infra/modules/static-site/lambda-upload.tf       (modified)
+```
+
+---
+
 ## 2026-06-28 — Phase 2: Structured logs + worker → CloudWatch
 
 **Commits:** `6f0b957`, `350ba08`, `3b21f23`  
