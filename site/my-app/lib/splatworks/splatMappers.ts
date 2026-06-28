@@ -38,5 +38,6 @@ export function apiSceneToSplat(scene: Scene, author: SplatAuthor): Splat {
       tintLayers: [`hsla(${hue}, 70%, 65%, 0.55)`],
       dotSize: 5 + (hue % 3),
     },
+    ...(scene.thumbnailUrl ? { thumbnailUrl: scene.thumbnailUrl } : {}),
   };
 }

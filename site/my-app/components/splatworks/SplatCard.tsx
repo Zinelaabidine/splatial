@@ -72,10 +72,22 @@ export default function SplatCard({
     >
       {/* Thumbnail — ~70% visual weight */}
       <div className="relative aspect-[16/10] w-full overflow-hidden rounded-t-xl">
-        <SplatPreviewVisual
-          subject={splat.subject}
-          className="relative h-full w-full"
-        />
+        {splat.thumbnailUrl ? (
+          <>
+            {/* Presigned S3 URLs — not compatible with next/image */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={splat.thumbnailUrl}
+              alt=""
+              className="h-full w-full object-cover"
+            />
+          </>
+        ) : (
+          <SplatPreviewVisual
+            subject={splat.subject}
+            className="relative h-full w-full"
+          />
+        )}
         <span className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-full border border-[#166534]/60 bg-[#14532d]/90 px-2.5 py-1 font-sw-mono text-[10px] font-semibold uppercase tracking-wide text-[#86efac] backdrop-blur-sm">
           <span className="h-1.5 w-1.5 rounded-full bg-[#4ade80]" aria-hidden />
           Completed

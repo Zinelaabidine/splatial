@@ -46,6 +46,8 @@ export type Splat = {
   /** Visual subject for preview rendering. */
   subject: SplatSubject;
   preview: SplatPreviewTint;
+  /** Presigned thumbnail when set via scene edit. */
+  thumbnailUrl?: string;
   downloadUrls?: { ply?: string; splat?: string };
   shareLink?: string;
 };
