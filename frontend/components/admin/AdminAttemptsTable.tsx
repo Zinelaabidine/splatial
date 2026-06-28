@@ -3,6 +3,7 @@
 import { Fragment, useState } from "react";
 import { ChevronDown, ChevronRight, Server } from "lucide-react";
 
+import AttemptLogPanel from "@/components/admin/AttemptLogPanel";
 import type { AdminAttempt } from "@/types/admin";
 
 const STATUS_STYLES: Record<string, { label: string; className: string }> = {
@@ -93,12 +94,7 @@ function DetailPanel({ attempt }: { attempt: AdminAttempt }) {
         </div>
       )}
 
-      <div className="rounded-lg border border-dashed border-[#3a3a3a] px-3 py-3 text-xs text-[#808080]">
-        Per-attempt CloudWatch logs appear here in Phase 3
-        <span className="mx-1 text-[#5a5a5a]">·</span>
-        they will be filtered by{" "}
-        <code className="font-mono text-[#9aa0a6]">attempt_id</code>.
-      </div>
+      <AttemptLogPanel attempt={attempt} />
     </div>
   );
 }

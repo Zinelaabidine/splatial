@@ -17,6 +17,7 @@ const cancelJob        = require("./handlers/cancel-job");
 const attemptPatch     = require("./handlers/attempt-patch");
 const attemptHeartbeat = require("./handlers/attempt-heartbeat");
 const adminAttemptsList = require("./handlers/admin-attempts-list");
+const adminAttemptsLogs = require("./handlers/admin-attempts-logs");
 const response    = require("./lib/response");
 
 exports.handler = async (event) => {
@@ -69,6 +70,8 @@ exports.handler = async (event) => {
       // ── Admin (admin-group gated inside the handler) ─────────────────────
       case "GET /admin/attempts":
         return await adminAttemptsList.handler(event);
+      case "GET /admin/attempts/{attemptId}/logs":
+        return await adminAttemptsLogs.handler(event);
 
       default:
         return response(404, { error: "Not found" });

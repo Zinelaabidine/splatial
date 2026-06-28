@@ -146,6 +146,7 @@ resource "aws_lambda_function" "upload_lambda" {
       SQS_QUEUE_URL               = aws_sqs_queue.processing_queue.url
       API_BASE_URL                = "https://api-${var.environment}.openspacenexus.store"
       GDRIVE_IMPORT_FUNCTION_NAME = aws_lambda_function.gdrive_import_lambda.function_name
+      WORKER_LOG_GROUP            = local.worker_log_group
       NODE_ENV                    = "production"
     }
   }
