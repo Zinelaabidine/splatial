@@ -1,27 +1,9 @@
-# Worker log group.
+# Worker log group name (see docs/logging-spec.md §9).
 #
-# The worker ships its structured JSON logs here directly via boto3 (see
-# worker/log_envelope.py). No CloudWatch agent is installed; the worker IAM role's
-# CloudWatchAgentServerPolicy already grants PutLogEvents / CreateLogStream /
-# CreateLogGroup, so no new IAM is required.
+# The group is created at runtime by the worker (log_envelope.py) because IAM
+# policy evaluation for log-group names containing "/" is unreliable for the
+# GitHub deploy role during terraform apply. The worker instance role already
+# grants logs:CreateLogGroup via CloudWatchAgentServerPolicy; retention is set
+# in log_envelope._ensure_group_and_stream.
 #
-# One log stream per instance id (e.g. "i-0abc123/2026-06-28"). The worker reads
-# the group name from WORKER_LOG_GROUP (set in compute.tf user_data); keep the two
-# in sync.
-
-resource "aws_cloudwatch_log_group" "worker" {
-  provider = aws.this
-
-  # Logs permissions live in github_deploy_cdn_policy; wait for propagation.
-  depends_on = [time_sleep.cdn_iam_propagation]
-
-  name              = "/${var.project_name}/${var.environment}/worker"
-  retention_in_days = var.environment == "prod" ? 90 : 30
-
-  tags = {
-    Name        = "${local.name_prefix}-worker-logs"
-    Environment = var.environment
-    Project     = var.project_name
-    ManagedBy   = "terraform"
-  }
-}
+# WORKER_LOG_GROUP in compute.tf user_data must stay in sync with local.worker_log_group.

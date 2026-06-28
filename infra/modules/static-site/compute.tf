@@ -83,7 +83,7 @@ resource "aws_launch_template" "worker" {
     QUEUE_NAME=${aws_sqs_queue.processing_queue.name}
     DLQ_NAME=${aws_sqs_queue.processing_dlq.name}
     SPLATIAL_ENV=${var.environment}
-    WORKER_LOG_GROUP=${aws_cloudwatch_log_group.worker.name}
+    WORKER_LOG_GROUP=${local.worker_log_group}
     LOG_TO_CLOUDWATCH=true
     ENVFILE
     mkdir -p /etc/systemd/system/gaussian-worker.service.d

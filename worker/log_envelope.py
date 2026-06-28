@@ -186,9 +186,17 @@ class _CloudWatchHandler(logging.Handler):
             ).start()
 
     def _ensure_group_and_stream(self) -> None:
-        # Terraform owns the group (for retention); create defensively anyway.
+        env = os.getenv("SPLATIAL_ENV", "dev")
+        retention_days = 90 if env == "prod" else 30
         try:
             self._client.create_log_group(logGroupName=self._group)
+        except Exception:
+            pass
+        try:
+            self._client.put_retention_policy(
+                logGroupName=self._group,
+                retentionInDays=retention_days,
+            )
         except Exception:
             pass
         try:

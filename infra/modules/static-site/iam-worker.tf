@@ -97,6 +97,21 @@ resource "aws_iam_role_policy" "worker_policy" {
         Resource = "*"
       },
       {
+        Sid    = "CloudWatchWorkerLogs"
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+          "logs:PutRetentionPolicy",
+          "logs:DescribeLogStreams",
+        ]
+        Resource = [
+          "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:log-group:${local.worker_log_group}",
+          "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:log-group:${local.worker_log_group}:*",
+        ]
+      },
+      {
         # EC2 fallback self-termination when not in an ASG (manual test launches).
         # Requires AllowSelfTerminate=true on the instance (set in launch template).
         Sid      = "EC2SelfTerminate"
