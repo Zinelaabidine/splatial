@@ -35,6 +35,8 @@ module "static_site" {
     "http://127.0.0.1:3000",
   ]
 
+  attach_deploy_policies_to_local_dev_role = true
+
 }
 
 # ---------------------------------------------------------------------------

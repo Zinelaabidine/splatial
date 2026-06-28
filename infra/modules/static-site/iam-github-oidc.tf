@@ -358,6 +358,8 @@ resource "aws_iam_role_policy_attachment" "github_deploy_core" {
 }
 
 resource "aws_iam_role_policy_attachment" "local_dev_core" {
+  count = var.attach_deploy_policies_to_local_dev_role ? 1 : 0
+
   role       = data.aws_iam_role.local_dev_role.name
   policy_arn = aws_iam_policy.github_deploy_core_policy.arn
 }
@@ -595,6 +597,8 @@ resource "aws_iam_role_policy_attachment" "github_deploy_compute" {
 }
 
 resource "aws_iam_role_policy_attachment" "local_dev_compute" {
+  count = var.attach_deploy_policies_to_local_dev_role ? 1 : 0
+
   role       = data.aws_iam_role.local_dev_role.name
   policy_arn = aws_iam_policy.github_deploy_compute_policy.arn
 }
@@ -740,6 +744,8 @@ resource "aws_iam_role_policy_attachment" "github_deploy_network" {
 }
 
 resource "aws_iam_role_policy_attachment" "local_dev_network" {
+  count = var.attach_deploy_policies_to_local_dev_role ? 1 : 0
+
   role       = data.aws_iam_role.local_dev_role.name
   policy_arn = aws_iam_policy.github_deploy_network_policy.arn
 }
@@ -973,6 +979,8 @@ resource "aws_iam_role_policy_attachment" "github_deploy_cdn" {
 }
 
 resource "aws_iam_role_policy_attachment" "local_dev_cdn" {
+  count = var.attach_deploy_policies_to_local_dev_role ? 1 : 0
+
   role       = data.aws_iam_role.local_dev_role.name
   policy_arn = aws_iam_policy.github_deploy_cdn_policy.arn
 }

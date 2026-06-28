@@ -108,3 +108,9 @@ variable "worker_asg_max_size" {
   default     = 1
 }
 
+variable "attach_deploy_policies_to_local_dev_role" {
+  description = "Attach this environment's deploy managed policies to splatial-local-dev-role. Only dev should enable this — the role is shared and AWS allows at most 10 managed policy attachments per role."
+  type        = bool
+  default     = false
+}
+
