@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 
 import { isExpectedSceneConflict } from "@/lib/api/apiErrors";
+import { normalizeReactionSummary } from "@/lib/reactions/constants";
 import { mapViewUrlError } from "@/lib/viewer/viewUrlErrors";
 import { getSceneStatus, getSceneViewUrl } from "@/services/scenesService";
+import type { ReactionSummary } from "@/types/api";
 
 function formatPendingStatus(status: string): string {
   return status.toLowerCase().replace(/_/g, " ");
@@ -12,6 +14,7 @@ function formatPendingStatus(status: string): string {
 
 export function useSceneViewUrl(sceneId: string) {
   const [splatUrl, setSplatUrl] = useState<string | null>(null);
+  const [reactionSummary, setReactionSummary] = useState<ReactionSummary | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [loading, setLoading] = useState(() => Boolean(sceneId));
 
@@ -25,9 +28,20 @@ export function useSceneViewUrl(sceneId: string) {
       setLoading(true);
       setFetchError(null);
       setSplatUrl(null);
+      setReactionSummary(null);
 
       try {
         const scene = await getSceneStatus(sceneId, ctrl.signal);
+
+        if (!cancelled) {
+          setReactionSummary(
+            normalizeReactionSummary({
+              reactionCounts: scene.reactionCounts,
+              reactionsTotal: scene.reactionsTotal,
+              myReaction: scene.myReaction,
+            }),
+          );
+        }
 
         if (scene.status !== "READY") {
           if (!cancelled) {
@@ -64,6 +78,7 @@ export function useSceneViewUrl(sceneId: string) {
 
   return {
     splatUrl: sceneId ? splatUrl : null,
+    reactionSummary: sceneId ? reactionSummary : null,
     error: sceneId ? fetchError : "No scene selected.",
     loading: sceneId ? loading : false,
   };

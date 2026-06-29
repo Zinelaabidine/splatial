@@ -1,19 +1,26 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 
+import ReactionBar from "@/components/viewer/ReactionBar";
+import type { ReactionSummary } from "@/types/api";
+
 const LegacySplatViewer = dynamic(
   () => import("@/components/viewer/LegacySplatViewer"),
   { ssr: false },
 );
 
 type GaussianViewerViewProps = {
+  sceneId: string;
   splatUrl: string | null;
+  reactionSummary: ReactionSummary | null;
   error: string | null;
   loading: boolean;
 };
 
 export default function GaussianViewerView({
+  sceneId,
   splatUrl,
+  reactionSummary,
   error,
   loading,
 }: GaussianViewerViewProps) {
@@ -44,6 +51,11 @@ export default function GaussianViewerView({
   return (
     <div className="relative h-full w-full">
       <LegacySplatViewer splatUrl={splatUrl} />
+      {reactionSummary ? (
+        <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 flex justify-center px-4">
+          <ReactionBar key={sceneId} sceneId={sceneId} initialSummary={reactionSummary} />
+        </div>
+      ) : null}
     </div>
   );
 }

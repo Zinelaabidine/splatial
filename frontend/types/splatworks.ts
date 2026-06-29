@@ -1,4 +1,4 @@
-import type { SceneManagementStatus, SceneVisibility } from "@/types/api";
+import type { SceneManagementStatus, SceneVisibility, ReactionCounts } from "@/types/api";
 
 /** Scene lifecycle per design handoff. */
 export type SceneStatus =
@@ -83,6 +83,8 @@ export type DashboardScene = {
   errorMessage?: string;
   failedAtIter?: string;
   failedAt?: string;
+  reactionCounts?: ReactionCounts;
+  reactionsTotal?: number;
 };
 
 export type DashboardStats = {

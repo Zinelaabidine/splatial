@@ -75,12 +75,29 @@ export interface CompleteResponse {
 }
 
 // ---------------------------------------------------------------------------
+// Scene reactions
+// ---------------------------------------------------------------------------
+export type ReactionType = "like" | "love" | "wow" | "fire" | "haha";
+
+export type ReactionCounts = Record<ReactionType, number>;
+
+export interface ReactionSummary {
+  reactionCounts: ReactionCounts;
+  reactionsTotal: number;
+  myReaction: ReactionType | null;
+}
+
+// ---------------------------------------------------------------------------
 // Step E: Poll scene processing status
 // ---------------------------------------------------------------------------
 export interface SceneStatusResponse {
   sceneId: string;
   status: SceneManagementStatus;
   location: string | null;
+  visibility?: SceneVisibility;
+  reactionCounts?: ReactionCounts;
+  reactionsTotal?: number;
+  myReaction?: ReactionType | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -158,6 +175,10 @@ export interface Scene {
   progressSubPhase?: string;
   /** Estimated seconds remaining for the current phase (worker-reported). */
   progressEtaSeconds?: number;
+  /** Per-type reaction counts (denormalized on list/feed responses). */
+  reactionCounts?: ReactionCounts;
+  /** Total reactions across all types. */
+  reactionsTotal?: number;
 }
 
 export interface CreateSceneRequest {

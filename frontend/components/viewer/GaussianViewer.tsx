@@ -9,10 +9,12 @@ type GaussianViewerProps = {
 
 /** Thin coordinator: resolves the presigned view URL and renders the viewer. */
 export default function GaussianViewer({ sceneId }: GaussianViewerProps) {
-  const { splatUrl, error, loading } = useSceneViewUrl(sceneId);
+  const { splatUrl, reactionSummary, error, loading } = useSceneViewUrl(sceneId);
   return (
     <GaussianViewerView
+      sceneId={sceneId}
       splatUrl={splatUrl}
+      reactionSummary={reactionSummary}
       error={error}
       loading={loading}
     />

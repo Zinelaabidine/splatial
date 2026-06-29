@@ -140,6 +140,8 @@ export function apiSceneToDashboardScene(scene: Scene): DashboardScene {
     ...(scene.progressEtaSeconds != null
       ? { eta: formatEtaSeconds(scene.progressEtaSeconds) }
       : {}),
+    ...(scene.reactionCounts ? { reactionCounts: scene.reactionCounts } : {}),
+    ...(scene.reactionsTotal != null ? { reactionsTotal: scene.reactionsTotal } : {}),
   };
 
   if (status === "completed") {
