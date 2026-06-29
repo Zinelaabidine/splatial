@@ -4,6 +4,8 @@ const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const response = require("../lib/response");
 const { followUser } = require("../lib/follows");
 const { validateUsername, resolveUserIdByUsername } = require("../lib/profile");
+const { getOwnerProfile } = require("../lib/scene-owner");
+const { emitNotification } = require("../lib/notifications");
 
 const dynamo = new DynamoDBClient({});
 
@@ -34,5 +36,17 @@ exports.handler = async (event) => {
   }
 
   const result = await followUser(followerId, followeeId);
+
+  if (result.created) {
+    const actorProfile = await getOwnerProfile(followerId);
+    if (actorProfile) {
+      await emitNotification({
+        recipientId: followeeId,
+        actorProfile,
+        type: "FOLLOW",
+      });
+    }
+  }
+
   return response(200, result);
 };

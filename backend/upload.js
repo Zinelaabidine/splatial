@@ -32,6 +32,9 @@ const reactionDelete = require("./handlers/reaction-delete");
 const commentCreate = require("./handlers/comment-create");
 const commentsList = require("./handlers/comments-list");
 const commentDelete = require("./handlers/comment-delete");
+const notificationsList = require("./handlers/notifications-list");
+const notificationsRead = require("./handlers/notifications-read");
+const notificationsUnreadCount = require("./handlers/notifications-unread-count");
 const response    = require("./lib/response");
 
 exports.handler = async (event) => {
@@ -110,6 +113,14 @@ exports.handler = async (event) => {
         return await commentsList.handler(event);
       case "DELETE /api/v1/scenes/{sceneId}/comments/{commentId}":
         return await commentDelete.handler(event);
+
+      // ── Notifications ────────────────────────────────────────────────
+      case "GET /api/v1/notifications":
+        return await notificationsList.handler(event);
+      case "POST /api/v1/notifications/read":
+        return await notificationsRead.handler(event);
+      case "GET /api/v1/notifications/unread-count":
+        return await notificationsUnreadCount.handler(event);
 
       // ── Admin (admin-group gated inside the handler) ─────────────────────
       case "GET /admin/attempts":

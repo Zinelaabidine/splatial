@@ -6,6 +6,7 @@ const { createComment, validateBody } = require("../lib/comments");
 const { parseMentionHandles, resolveMentions } = require("../lib/mentions");
 const { getOwnerProfile } = require("../lib/scene-owner");
 const { sceneVisibilityFromItem } = require("../lib/scene-response");
+const { emitNotification } = require("../lib/notifications");
 
 const dynamo = new DynamoDBClient({});
 const SCENES_TABLE = process.env.SCENES_TABLE_NAME;
@@ -70,6 +71,29 @@ exports.handler = async (event) => {
     body: validatedBody,
     mentions,
   });
+
+  const sceneOwnerId = item.user_id?.S;
+  if (sceneOwnerId && sceneOwnerId !== userId) {
+    await emitNotification({
+      recipientId: sceneOwnerId,
+      actorProfile: authorProfile,
+      type: "COMMENT",
+      sceneId,
+      commentId: comment.commentId,
+    });
+  }
+
+  const mentionUserIds = mentions?.userIds ?? [];
+  for (const mentionedId of mentionUserIds) {
+    if (mentionedId === userId || mentionedId === sceneOwnerId) continue;
+    await emitNotification({
+      recipientId: mentionedId,
+      actorProfile: authorProfile,
+      type: "MENTION",
+      sceneId,
+      commentId: comment.commentId,
+    });
+  }
 
   return response(200, comment);
 };

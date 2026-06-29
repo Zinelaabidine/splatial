@@ -91,11 +91,12 @@ async function setReaction(sceneId, userId, type) {
 
   if (existingType === type) {
     const sceneItem = await getSceneItem(sceneId);
-    return reactionSummaryFromSceneItem(sceneItem, type);
+    return { ...reactionSummaryFromSceneItem(sceneItem, type), added: false };
   }
 
   const now = new Date().toISOString();
   const newAttr = counterAttr(type);
+  let added = false;
 
   if (!existingType) {
     try {
@@ -128,11 +129,12 @@ async function setReaction(sceneId, userId, type) {
           ],
         })
       );
+      added = true;
     } catch (err) {
       if (isTransactionCanceledForCondition(err, 0)) {
         const sceneItem = await getSceneItem(sceneId);
         const myReaction = await getReaction(sceneId, userId);
-        return reactionSummaryFromSceneItem(sceneItem, myReaction);
+        return { ...reactionSummaryFromSceneItem(sceneItem, myReaction), added: false };
       }
       throw err;
     }
@@ -175,7 +177,7 @@ async function setReaction(sceneId, userId, type) {
   }
 
   const sceneItem = await getSceneItem(sceneId);
-  return reactionSummaryFromSceneItem(sceneItem, type);
+  return { ...reactionSummaryFromSceneItem(sceneItem, type), added };
 }
 
 async function removeReaction(sceneId, userId) {

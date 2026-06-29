@@ -102,6 +102,7 @@ async function profileResponseFromItem(item) {
     followersCount: counterValue(item, "followers_count"),
     followingCount: counterValue(item, "following_count"),
     scenesCount: counterValue(item, "scenes_count"),
+    unreadCount: counterValue(item, "unread_count"),
     createdAt: item.created_at?.S ?? "",
   };
 }

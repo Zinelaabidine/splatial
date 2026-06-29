@@ -5,6 +5,8 @@ const response = require("../lib/response");
 const { ALLOWED_REACTIONS } = require("../lib/reaction-types");
 const { setReaction } = require("../lib/reactions");
 const { sceneVisibilityFromItem } = require("../lib/scene-response");
+const { getOwnerProfile } = require("../lib/scene-owner");
+const { emitNotification } = require("../lib/notifications");
 
 const dynamo = new DynamoDBClient({});
 const SCENES_TABLE = process.env.SCENES_TABLE_NAME;
@@ -53,5 +55,23 @@ exports.handler = async (event) => {
   }
 
   const summary = await setReaction(sceneId, userId, type);
-  return response(200, summary);
+
+  if (summary.added) {
+    const sceneOwnerId = item.user_id?.S;
+    if (sceneOwnerId && sceneOwnerId !== userId) {
+      const actorProfile = await getOwnerProfile(userId);
+      if (actorProfile) {
+        await emitNotification({
+          recipientId: sceneOwnerId,
+          actorProfile,
+          type: "REACTION",
+          sceneId,
+          reactionType: type,
+        });
+      }
+    }
+  }
+
+  const { added: _added, ...reactionBody } = summary;
+  return response(200, reactionBody);
 };

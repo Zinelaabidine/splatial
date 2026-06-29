@@ -126,13 +126,13 @@ async function followUser(followerId, followeeId) {
   } catch (err) {
     if (isTransactionCanceledForCondition(err, 0)) {
       const followersCount = await getFollowersCount(followeeId);
-      return { following: true, followersCount };
+      return { following: true, followersCount, created: false };
     }
     throw err;
   }
 
   const followersCount = await getFollowersCount(followeeId);
-  return { following: true, followersCount };
+  return { following: true, followersCount, created: true };
 }
 
 async function unfollowUser(followerId, followeeId) {
