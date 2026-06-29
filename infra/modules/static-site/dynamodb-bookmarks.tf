@@ -6,7 +6,7 @@ resource "aws_dynamodb_table" "bookmarks" {
   hash_key     = "user_id"
   range_key    = "scene_id"
 
-  depends_on = [time_sleep.iam_propagation]
+  depends_on = [time_sleep.network_iam_propagation]
 
   attribute {
     name = "user_id"
