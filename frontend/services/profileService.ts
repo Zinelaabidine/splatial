@@ -2,6 +2,7 @@
 
 import { authenticatedFetch } from "@/services/apiClient";
 import type {
+  FollowResponse,
   Profile,
   ProfileScenesResponse,
   UpdateProfileRequest,
@@ -56,4 +57,24 @@ export async function checkUsernameAvailable(
     `/api/v1/profile/username-available/${encodeURIComponent(username)}`,
     { signal },
   ) as Promise<UsernameAvailableResponse>;
+}
+
+export async function followUser(
+  username: string,
+  signal?: AbortSignal,
+): Promise<FollowResponse> {
+  return authenticatedFetch(
+    `/api/v1/profiles/${encodeURIComponent(username)}/follow`,
+    { method: "POST", signal },
+  ) as Promise<FollowResponse>;
+}
+
+export async function unfollowUser(
+  username: string,
+  signal?: AbortSignal,
+): Promise<FollowResponse> {
+  return authenticatedFetch(
+    `/api/v1/profiles/${encodeURIComponent(username)}/follow`,
+    { method: "DELETE", signal },
+  ) as Promise<FollowResponse>;
 }

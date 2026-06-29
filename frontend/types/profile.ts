@@ -12,6 +12,15 @@ export type Profile = {
   followingCount: number;
   scenesCount: number;
   createdAt: string;
+  /** Present on GET /api/v1/profiles/{username} when viewing another user. */
+  isFollowing?: boolean;
+  /** True when the authenticated viewer is the profile owner. */
+  isSelf?: boolean;
+};
+
+export type FollowResponse = {
+  following: boolean;
+  followersCount: number;
 };
 
 export type UpdateProfileRequest = {

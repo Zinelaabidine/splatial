@@ -268,6 +268,7 @@ export interface ListScenesResponse {
 }
 
 export type {
+  FollowResponse,
   Profile,
   UpdateProfileRequest,
   UpdateProfileResponse,

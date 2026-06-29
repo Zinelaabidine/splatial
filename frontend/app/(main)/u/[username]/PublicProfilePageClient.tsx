@@ -11,8 +11,10 @@ import { Button } from "@/components/ui/button";
 import { ApiRequestError } from "@/lib/api/apiErrors";
 import { apiSceneToDashboardScene } from "@/lib/scenes/sceneMappers";
 import {
+  followUser,
   getProfileByUsername,
   getProfileScenes,
+  unfollowUser,
 } from "@/services/profileService";
 import type { Profile } from "@/types/api";
 import type { DashboardScene } from "@/types/splatworks";
@@ -44,6 +46,8 @@ export default function PublicProfilePageClient() {
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [scenesError, setScenesError] = useState<string | null>(null);
+  const [followBusy, setFollowBusy] = useState(false);
+  const [followError, setFollowError] = useState<string | null>(null);
 
   const fetchProfileAndScenes = useCallback(async (signal: AbortSignal) => {
     if (!username) {
@@ -102,6 +106,66 @@ export default function PublicProfilePageClient() {
     },
     [router],
   );
+
+  const handleFollowToggle = useCallback(async () => {
+    if (!profile || profile.isSelf || followBusy) return;
+
+    const handle = profile.username ?? username;
+    if (!handle) return;
+
+    const prevFollowing = profile.isFollowing ?? false;
+    const prevFollowersCount = profile.followersCount;
+    const nextFollowing = !prevFollowing;
+
+    setFollowBusy(true);
+    setFollowError(null);
+    setProfile((current) =>
+      current
+        ? {
+            ...current,
+            isFollowing: nextFollowing,
+            followersCount: Math.max(
+              0,
+              current.followersCount + (nextFollowing ? 1 : -1),
+            ),
+          }
+        : current,
+    );
+
+    try {
+      const result = nextFollowing
+        ? await followUser(handle)
+        : await unfollowUser(handle);
+      setProfile((current) =>
+        current
+          ? {
+              ...current,
+              isFollowing: result.following,
+              followersCount: result.followersCount,
+            }
+          : current,
+      );
+    } catch (err) {
+      setProfile((current) =>
+        current
+          ? {
+              ...current,
+              isFollowing: prevFollowing,
+              followersCount: prevFollowersCount,
+            }
+          : current,
+      );
+      const message =
+        err instanceof ApiRequestError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "Failed to update follow status";
+      setFollowError(message);
+    } finally {
+      setFollowBusy(false);
+    }
+  }, [profile, username, followBusy]);
 
   const loadMore = useCallback(async () => {
     if (!username || !nextCursor || loadingMore) return;
@@ -181,51 +245,80 @@ export default function PublicProfilePageClient() {
 
   const handle = profile.username ?? username;
   const initials = initialsFromDisplayName(profile.displayName);
+  const isFollowing = profile.isFollowing ?? false;
+  const showFollowButton = profile.isSelf !== true;
 
   return (
     <div className="mx-auto w-full max-w-[1400px]">
-      <header className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-start">
-        {profile.avatarUrl ? (
-          <>
-            {/* Presigned S3 URLs — not compatible with next/image */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={profile.avatarUrl}
-              alt=""
-              className="h-20 w-20 shrink-0 rounded-full object-cover"
-            />
-          </>
-        ) : (
-          <UserAvatar initials={initials} size={80} />
-        )}
-
-        <div className="min-w-0 flex-1">
-          <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
-            {profile.displayName}
-          </h1>
-          <p className="mt-1 font-sw-mono text-sm text-[#909090]">@{handle}</p>
-          {profile.bio.trim() !== "" && (
-            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[#c8c8c8]">
-              {profile.bio}
-            </p>
+      <header className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-start">
+          {profile.avatarUrl ? (
+            <>
+              {/* Presigned S3 URLs — not compatible with next/image */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={profile.avatarUrl}
+                alt=""
+                className="h-20 w-20 shrink-0 rounded-full object-cover"
+              />
+            </>
+          ) : (
+            <UserAvatar initials={initials} size={80} />
           )}
-          <p className="mt-3 text-sm text-[#909090]">
-            <span className="font-medium text-[#e8e8e8]">
-              {formatCount(profile.followersCount)}
-            </span>{" "}
-            followers
-            <span className="mx-2 text-[#505050]">·</span>
-            <span className="font-medium text-[#e8e8e8]">
-              {formatCount(profile.followingCount)}
-            </span>{" "}
-            following
-            <span className="mx-2 text-[#505050]">·</span>
-            <span className="font-medium text-[#e8e8e8]">
-              {formatCount(profile.scenesCount)}
-            </span>{" "}
-            scenes
-          </p>
+
+          <div className="min-w-0 flex-1">
+            <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
+              {profile.displayName}
+            </h1>
+            <p className="mt-1 font-sw-mono text-sm text-[#909090]">@{handle}</p>
+            {profile.bio.trim() !== "" && (
+              <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[#c8c8c8]">
+                {profile.bio}
+              </p>
+            )}
+            <p className="mt-3 text-sm text-[#909090]">
+              <span className="font-medium text-[#e8e8e8]">
+                {formatCount(profile.followersCount)}
+              </span>{" "}
+              followers
+              <span className="mx-2 text-[#505050]">·</span>
+              <span className="font-medium text-[#e8e8e8]">
+                {formatCount(profile.followingCount)}
+              </span>{" "}
+              following
+              <span className="mx-2 text-[#505050]">·</span>
+              <span className="font-medium text-[#e8e8e8]">
+                {formatCount(profile.scenesCount)}
+              </span>{" "}
+              scenes
+            </p>
+          </div>
         </div>
+
+        {showFollowButton ? (
+          <div className="flex shrink-0 flex-col items-stretch gap-2 sm:items-end">
+            <Button
+              type="button"
+              variant={isFollowing ? "outline" : "default"}
+              disabled={followBusy}
+              onClick={() => void handleFollowToggle()}
+            >
+              {followBusy ? (
+                <>
+                  <Loader2 className="animate-spin" />
+                  {isFollowing ? "Following…" : "Follow…"}
+                </>
+              ) : isFollowing ? (
+                "Following"
+              ) : (
+                "Follow"
+              )}
+            </Button>
+            {followError ? (
+              <p className="max-w-xs text-xs text-red-400">{followError}</p>
+            ) : null}
+          </div>
+        ) : null}
       </header>
 
       <h2 className="mb-4 text-lg font-semibold text-white">Public scenes</h2>
