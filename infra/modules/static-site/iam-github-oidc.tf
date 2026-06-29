@@ -653,6 +653,7 @@ data "aws_iam_policy_document" "github_deploy_network_policy" {
       "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-follows/index/*",
       "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-reactions",
       "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-comments",
+      "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-notifications",
     ]
   }
 
