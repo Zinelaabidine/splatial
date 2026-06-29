@@ -488,6 +488,8 @@ data "aws_iam_policy_document" "github_deploy_compute_policy" {
       "autoscaling:TerminateInstanceInAutoScalingGroup",
       "autoscaling:StartInstanceRefresh",
       "autoscaling:CancelInstanceRefresh",
+      "autoscaling:EnableMetricsCollection",
+      "autoscaling:DisableMetricsCollection",
     ]
     resources = [
       "arn:aws:autoscaling:${var.aws_region}:886601940523:autoScalingGroup:*:autoScalingGroupName/${local.name_prefix}-splat-worker-asg",
