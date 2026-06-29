@@ -46,6 +46,7 @@ const tourCreate = require("./handlers/tour-create");
 const toursList = require("./handlers/tours-list");
 const tourGet = require("./handlers/tour-get");
 const tourDelete = require("./handlers/tour-delete");
+const forkCreate = require("./handlers/fork-create");
 const response    = require("./lib/response");
 
 exports.handler = async (event) => {
@@ -94,6 +95,8 @@ exports.handler = async (event) => {
         return await sceneUpdate.handler(event);
       case "POST /api/v1/scenes/{sceneId}/thumbnail/presign":
         return await sceneThumbnailPresign.handler(event);
+      case "POST /api/v1/scenes/{sceneId}/fork":
+        return await forkCreate.handler(event);
 
       // ── User Profiles ─────────────────────────────────────────────────
       case "GET /api/v1/profile/me":

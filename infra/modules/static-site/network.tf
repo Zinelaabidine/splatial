@@ -343,6 +343,16 @@ resource "aws_apigatewayv2_route" "scenes_thumbnail_presign" {
   target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
 }
 
+resource "aws_apigatewayv2_route" "scenes_fork" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "POST /api/v1/scenes/{sceneId}/fork"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
 # ── User Profiles ─────────────────────────────────────────────────────────────
 
 resource "aws_apigatewayv2_route" "profile_get_me" {
