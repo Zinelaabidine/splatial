@@ -1,22 +1,60 @@
 "use client";
 
-import GaussianViewerView from "@/components/features/viewer/GaussianViewerView";
+import dynamic from "next/dynamic";
+
+import CommentSection from "@/components/viewer/CommentSection";
+import { useIsSceneOwner } from "@/hooks/viewer/useIsSceneOwner";
 import { useSceneViewUrl } from "@/hooks/viewer/useSceneViewUrl";
+
+const GaussianViewerView = dynamic(
+  () => import("@/components/features/viewer/GaussianViewerView"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-[min(60vh,720px)] items-center justify-center bg-black">
+        <p className="text-sm text-slate-400">Initialising viewer…</p>
+      </div>
+    ),
+  },
+);
 
 type GaussianViewerProps = {
   sceneId: string;
 };
 
-/** Thin coordinator: resolves the presigned view URL and renders the viewer. */
+/** Resolves the presigned view URL and renders the viewer with comments below. */
 export default function GaussianViewer({ sceneId }: GaussianViewerProps) {
-  const { splatUrl, reactionSummary, error, loading } = useSceneViewUrl(sceneId);
+  const {
+    splatUrl,
+    reactionSummary,
+    commentsCount,
+    setCommentsCount,
+    error,
+    loading,
+  } = useSceneViewUrl(sceneId);
+  const isSceneOwner = useIsSceneOwner(sceneId);
+
   return (
-    <GaussianViewerView
-      sceneId={sceneId}
-      splatUrl={splatUrl}
-      reactionSummary={reactionSummary}
-      error={error}
-      loading={loading}
-    />
+    <div className="flex min-h-full flex-col">
+      <div className="h-[min(60vh,720px)] min-h-[320px] shrink-0">
+        <GaussianViewerView
+          sceneId={sceneId}
+          splatUrl={splatUrl}
+          reactionSummary={reactionSummary}
+          error={error}
+          loading={loading}
+        />
+      </div>
+
+      {splatUrl && !error ? (
+        <CommentSection
+          key={sceneId}
+          sceneId={sceneId}
+          initialCommentsCount={commentsCount}
+          isSceneOwner={isSceneOwner}
+          onCommentsCountChange={setCommentsCount}
+        />
+      ) : null}
+    </div>
   );
 }

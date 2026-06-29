@@ -98,6 +98,31 @@ export interface SceneStatusResponse {
   reactionCounts?: ReactionCounts;
   reactionsTotal?: number;
   myReaction?: ReactionType | null;
+  commentsCount?: number;
+}
+
+// ---------------------------------------------------------------------------
+// Scene comments
+// ---------------------------------------------------------------------------
+export interface Comment {
+  commentId: string;
+  sceneId: string;
+  userId: string;
+  authorUsername: string;
+  authorDisplayName: string;
+  authorAvatarUrl?: string | null;
+  body: string;
+  createdAt: string;
+}
+
+export interface CommentsResponse {
+  comments: Comment[];
+  nextCursor?: string;
+}
+
+export interface DeleteCommentResponse {
+  ok: true;
+  commentsCount: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -179,6 +204,8 @@ export interface Scene {
   reactionCounts?: ReactionCounts;
   /** Total reactions across all types. */
   reactionsTotal?: number;
+  /** Denormalized comment count on list/feed responses. */
+  commentsCount?: number;
 }
 
 export interface CreateSceneRequest {

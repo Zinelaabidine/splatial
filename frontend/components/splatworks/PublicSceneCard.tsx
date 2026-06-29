@@ -1,6 +1,7 @@
 "use client";
 
 import PointCloudThumbnail from "@/components/splatworks/PointCloudThumbnail";
+import CommentCountBadge from "@/components/splatworks/CommentCountBadge";
 import ReactionTotalBadge from "@/components/splatworks/ReactionTotalBadge";
 import SceneTaxonomyDisplay from "@/components/features/scenes/SceneTaxonomyDisplay";
 import { cn } from "@/lib/utils";
@@ -70,11 +71,13 @@ export default function PublicSceneCard({ scene, onClick }: PublicSceneCardProps
         />
         <div className="mt-1 flex items-center justify-between gap-2">
           <p className="truncate font-sw-mono text-xs text-[#909090]">{scene.caption}</p>
-          <ReactionTotalBadge
-            reactionsTotal={scene.reactionsTotal}
-            reactionCounts={scene.reactionCounts}
-            className="shrink-0"
-          />
+          <div className="flex shrink-0 items-center gap-2">
+            <CommentCountBadge commentsCount={scene.commentsCount} />
+            <ReactionTotalBadge
+              reactionsTotal={scene.reactionsTotal}
+              reactionCounts={scene.reactionCounts}
+            />
+          </div>
         </div>
       </div>
     </article>

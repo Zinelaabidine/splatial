@@ -85,6 +85,8 @@ export type DashboardScene = {
   failedAt?: string;
   reactionCounts?: ReactionCounts;
   reactionsTotal?: number;
+  /** Denormalized comment count from list/feed API. */
+  commentsCount?: number;
 };
 
 export type DashboardStats = {

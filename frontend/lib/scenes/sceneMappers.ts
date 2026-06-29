@@ -142,6 +142,7 @@ export function apiSceneToDashboardScene(scene: Scene): DashboardScene {
       : {}),
     ...(scene.reactionCounts ? { reactionCounts: scene.reactionCounts } : {}),
     ...(scene.reactionsTotal != null ? { reactionsTotal: scene.reactionsTotal } : {}),
+    ...(scene.commentsCount != null ? { commentsCount: scene.commentsCount } : {}),
   };
 
   if (status === "completed") {

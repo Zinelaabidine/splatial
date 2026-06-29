@@ -65,7 +65,7 @@ function AppShellInner({ children, fullBleed: fullBleedProp }: AppShellProps) {
           className={cn(
             "min-w-0 flex-1 bg-[#121212]",
             fullBleed
-              ? "overflow-hidden"
+              ? "overflow-y-auto overflow-x-hidden"
               : "overflow-y-auto px-4 py-5 sm:px-6 sm:py-6",
           )}
         >

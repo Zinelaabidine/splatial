@@ -20,7 +20,7 @@ export default function ViewerPageClient() {
   usePageSearch("", false);
 
   return (
-    <div className="h-full">
+    <div className="min-h-full">
       <ViewerShell sceneId={sceneId} />
     </div>
   );
