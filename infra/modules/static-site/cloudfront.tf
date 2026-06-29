@@ -23,6 +23,13 @@ resource "aws_cloudfront_function" "nextjs_url_rewrite" {
       var request = event.request;
       var uri = request.uri;
 
+      // Public profile is client-rendered; static export only emits u/__placeholder__.html.
+      // Serve that shell for any /u/<username> so the client reads the handle from the URL.
+      if (uri === "/u" || uri === "/u/" || uri.indexOf("/u/") === 0) {
+        request.uri = "/u/__placeholder__.html";
+        return request;
+      }
+
       if (uri.endsWith("/")) {
         request.uri += "index.html";
       } else if (!uri.includes(".")) {

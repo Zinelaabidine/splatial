@@ -35,8 +35,12 @@ export default function PublicProfilePageClient() {
   const params = useParams();
   const router = useRouter();
   const rawUsername = params.username;
-  const username =
+  let username =
     typeof rawUsername === "string" ? rawUsername.trim().toLowerCase() : "";
+  if (username === "__placeholder__" && typeof window !== "undefined") {
+    const fromPath = window.location.pathname.split("/u/")[1]?.split("/")[0];
+    if (fromPath) username = fromPath.trim().toLowerCase();
+  }
 
   const [profile, setProfile] = useState<Profile | null>(null);
   const [scenes, setScenes] = useState<DashboardScene[]>([]);
