@@ -6,7 +6,7 @@ resource "aws_dynamodb_table" "follows" {
   hash_key     = "follower_id"
   range_key    = "followee_id"
 
-  depends_on = [time_sleep.iam_propagation]
+  depends_on = [time_sleep.network_iam_propagation]
 
   attribute {
     name = "follower_id"

@@ -763,6 +763,17 @@ resource "aws_iam_role_policy_attachment" "local_dev_network" {
   policy_arn = aws_iam_policy.github_deploy_network_policy.arn
 }
 
+# Network policy updates must propagate before DynamoDB CreateTable in the same apply.
+resource "time_sleep" "network_iam_propagation" {
+  create_duration = "15s"
+
+  triggers = {
+    network_policy_hash = sha256(aws_iam_policy.github_deploy_network_policy.policy)
+  }
+
+  depends_on = [aws_iam_role_policy_attachment.github_deploy_network]
+}
+
 # ── CDN / DNS / TLS / Logs permissions (separate policy to stay under 10 240-byte limit) ──
 
 data "aws_iam_policy_document" "github_deploy_cdn_policy" {
