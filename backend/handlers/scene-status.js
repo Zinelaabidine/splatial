@@ -49,6 +49,7 @@ exports.handler = async (event) => {
     visibility: sceneVisibilityFromItem(item),
     reactionsTotal: Number(item.reactions_total?.N ?? 0),
     reactionCounts: reactionCountsFromSceneItem(item),
+    commentsCount: Number(item.comments_count?.N ?? 0),
     myReaction,
   });
 };

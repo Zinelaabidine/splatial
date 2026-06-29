@@ -31,6 +31,7 @@ function sceneResponseFromItem(item, thumbnailUrl) {
     tags: item.tags?.SS ?? [],
     reactionsTotal: Number(item.reactions_total?.N ?? 0),
     reactionCounts: reactionCountsFromItem(item),
+    commentsCount: Number(item.comments_count?.N ?? 0),
     ...(item.ply_key ? { plyKey: item.ply_key.S } : {}),
     ...(item.thumbnail_key ? { thumbnailKey: item.thumbnail_key.S } : {}),
     ...(thumbnailUrl ? { thumbnailUrl } : {}),

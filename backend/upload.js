@@ -29,6 +29,9 @@ const feedList = require("./handlers/feed-list");
 const exploreList = require("./handlers/explore-list");
 const reactionSet = require("./handlers/reaction-set");
 const reactionDelete = require("./handlers/reaction-delete");
+const commentCreate = require("./handlers/comment-create");
+const commentsList = require("./handlers/comments-list");
+const commentDelete = require("./handlers/comment-delete");
 const response    = require("./lib/response");
 
 exports.handler = async (event) => {
@@ -101,6 +104,12 @@ exports.handler = async (event) => {
         return await reactionSet.handler(event);
       case "DELETE /api/v1/scenes/{sceneId}/reaction":
         return await reactionDelete.handler(event);
+      case "POST /api/v1/scenes/{sceneId}/comments":
+        return await commentCreate.handler(event);
+      case "GET /api/v1/scenes/{sceneId}/comments":
+        return await commentsList.handler(event);
+      case "DELETE /api/v1/scenes/{sceneId}/comments/{commentId}":
+        return await commentDelete.handler(event);
 
       // ── Admin (admin-group gated inside the handler) ─────────────────────
       case "GET /admin/attempts":
