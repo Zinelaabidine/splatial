@@ -38,6 +38,10 @@ const notificationsUnreadCount = require("./handlers/notifications-unread-count"
 const bookmarkSet = require("./handlers/bookmark-set");
 const bookmarkDelete = require("./handlers/bookmark-delete");
 const bookmarksList = require("./handlers/bookmarks-list");
+const shotCreate = require("./handlers/shot-create");
+const shotsList = require("./handlers/shots-list");
+const shotGet = require("./handlers/shot-get");
+const shotDelete = require("./handlers/shot-delete");
 const response    = require("./lib/response");
 
 exports.handler = async (event) => {
@@ -132,6 +136,16 @@ exports.handler = async (event) => {
         return await bookmarkDelete.handler(event);
       case "GET /api/v1/bookmarks":
         return await bookmarksList.handler(event);
+
+      // ── Shots (viewpoints) ───────────────────────────────────────────
+      case "POST /api/v1/scenes/{sceneId}/shots":
+        return await shotCreate.handler(event);
+      case "GET /api/v1/scenes/{sceneId}/shots":
+        return await shotsList.handler(event);
+      case "GET /api/v1/scenes/{sceneId}/shots/{shotId}":
+        return await shotGet.handler(event);
+      case "DELETE /api/v1/scenes/{sceneId}/shots/{shotId}":
+        return await shotDelete.handler(event);
 
       // ── Admin (admin-group gated inside the handler) ─────────────────────
       case "GET /admin/attempts":
