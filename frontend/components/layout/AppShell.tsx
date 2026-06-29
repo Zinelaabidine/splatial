@@ -10,6 +10,7 @@ import AppSidebar from "@/components/layout/AppSidebar";
 import { AppShellProvider } from "@/components/layout/AppShellContext";
 import AppTopBar from "@/components/layout/AppTopBar";
 import { useTrainingCount } from "@/hooks/layout/useTrainingCount";
+import { NotificationsBadgeProvider } from "@/hooks/notifications/useNotificationsBadge";
 import { cn } from "@/lib/utils";
 
 type AppShellProps = {
@@ -92,7 +93,9 @@ function AppShellInner({ children, fullBleed: fullBleedProp }: AppShellProps) {
 export default function AppShell(props: AppShellProps) {
   return (
     <AppShellProvider>
-      <AppShellInner {...props} />
+      <NotificationsBadgeProvider>
+        <AppShellInner {...props} />
+      </NotificationsBadgeProvider>
     </AppShellProvider>
   );
 }

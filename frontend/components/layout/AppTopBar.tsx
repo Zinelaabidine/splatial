@@ -3,6 +3,7 @@
 import { Menu, Search, X } from "lucide-react";
 
 import { useAppShell } from "@/components/layout/AppShellContext";
+import NotificationBell from "@/components/layout/NotificationBell";
 
 type AppTopBarProps = {
   onMenuClick?: () => void;
@@ -49,6 +50,8 @@ export default function AppTopBar({ onMenuClick }: AppTopBarProps) {
       ) : (
         <div className="flex-1" />
       )}
+
+      <NotificationBell />
     </header>
   );
 }

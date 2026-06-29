@@ -341,6 +341,38 @@ export interface ListScenesResponse {
   nextCursor?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+export type NotificationType = "FOLLOW" | "REACTION" | "COMMENT" | "MENTION";
+
+export interface AppNotification {
+  notificationId: string;
+  type: NotificationType;
+  actorUsername: string;
+  actorDisplayName: string;
+  actorAvatarUrl?: string | null;
+  sceneId?: string;
+  commentId?: string;
+  reactionType?: string;
+  createdAt: string;
+  read: boolean;
+}
+
+export interface NotificationsResponse {
+  notifications: AppNotification[];
+  unreadCount: number;
+  nextCursor?: string;
+}
+
+export interface UnreadCountResponse {
+  unreadCount: number;
+}
+
+export interface MarkAllNotificationsReadResponse {
+  unreadCount: 0;
+}
+
 export type {
   FollowResponse,
   Profile,
