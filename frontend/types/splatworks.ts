@@ -61,6 +61,8 @@ export type DashboardScene = {
   apiStatus?: SceneManagementStatus;
   /** PUBLIC scenes are listed on explore/feed; default PRIVATE when absent. */
   visibility?: SceneVisibility;
+  category?: string | null;
+  tags?: string[];
   /** Bottom caption line (mono, muted). */
   caption: string;
   preview?: SplatPreviewTint;

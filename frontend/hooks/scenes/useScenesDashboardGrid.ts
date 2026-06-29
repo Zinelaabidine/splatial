@@ -183,7 +183,13 @@ export function useScenesDashboardGrid(search: string) {
   }, [editSaving]);
 
   const handleSceneEdited = useCallback(
-    (updated: { title: string; thumbnailUrl?: string; visibility?: SceneVisibility }) => {
+    (updated: {
+      title: string;
+      thumbnailUrl?: string;
+      visibility?: SceneVisibility;
+      category?: string | null;
+      tags?: string[];
+    }) => {
       if (!editTarget) return;
       setScenes((prev) =>
         prev.map((s) =>
@@ -192,6 +198,8 @@ export function useScenesDashboardGrid(search: string) {
                 ...s,
                 title: updated.title,
                 ...(updated.visibility ? { visibility: updated.visibility } : {}),
+                ...(updated.category !== undefined ? { category: updated.category } : {}),
+                ...(updated.tags !== undefined ? { tags: updated.tags } : {}),
                 ...(updated.thumbnailUrl
                   ? { thumbnailUrl: updated.thumbnailUrl, preview: undefined }
                   : {}),

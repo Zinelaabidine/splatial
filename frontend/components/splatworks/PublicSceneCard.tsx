@@ -1,6 +1,7 @@
 "use client";
 
 import PointCloudThumbnail from "@/components/splatworks/PointCloudThumbnail";
+import SceneTaxonomyDisplay from "@/components/features/scenes/SceneTaxonomyDisplay";
 import { cn } from "@/lib/utils";
 import type { DashboardScene } from "@/types/splatworks";
 
@@ -61,6 +62,11 @@ export default function PublicSceneCard({ scene, onClick }: PublicSceneCardProps
 
       <div className="rounded-b-xl p-3">
         <h3 className="truncate text-[15px] font-semibold text-white">{scene.title}</h3>
+        <SceneTaxonomyDisplay
+          category={scene.category}
+          tags={scene.tags}
+          className="mt-1.5"
+        />
         <p className="mt-1 font-sw-mono text-xs text-[#909090]">{scene.caption}</p>
       </div>
     </article>

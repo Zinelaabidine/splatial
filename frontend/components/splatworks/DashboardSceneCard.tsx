@@ -5,6 +5,7 @@ import { MoreVertical, Pencil, RefreshCw, Send, Trash2, XCircle } from "lucide-r
 
 import PointCloudThumbnail from "@/components/splatworks/PointCloudThumbnail";
 import StatusDot, { STATUS_LABELS } from "@/components/splatworks/StatusDot";
+import SceneTaxonomyDisplay from "@/components/features/scenes/SceneTaxonomyDisplay";
 import { SceneVisibilityBadge, SceneVisibilityToggle } from "@/components/features/scenes/SceneVisibilityControl";
 import { Button } from "@/components/ui/button";
 import { formatProgressSubPhase } from "@/lib/scenes/progressLabels";
@@ -193,6 +194,11 @@ export default function DashboardSceneCard({
             )}
           </div>
         </div>
+        <SceneTaxonomyDisplay
+          category={scene.category}
+          tags={scene.tags}
+          className="mt-1.5"
+        />
         <p className="mt-1 font-sw-mono text-xs text-[#909090]">{scene.caption}</p>
         <div
           className="mt-3"

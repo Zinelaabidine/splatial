@@ -4,8 +4,10 @@ import dynamic from "next/dynamic";
 import { useCallback, useEffect, useState } from "react";
 import { Camera, Loader2, X } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
+import { SCENE_CATEGORIES } from "@/lib/scenes/categories";
+import SceneTagsInput from "@/components/features/scenes/SceneTagsInput";
 import { SceneVisibilityToggle } from "@/components/features/scenes/SceneVisibilityControl";
+import { Button } from "@/components/ui/button";
 import { useSceneViewUrl } from "@/hooks/viewer/useSceneViewUrl";
 import { ApiRequestError } from "@/lib/api/apiErrors";
 import {
@@ -41,6 +43,8 @@ type EditSceneModalProps = {
     title: string;
     thumbnailUrl?: string;
     visibility?: SceneVisibility;
+    category?: string | null;
+    tags?: string[];
   }) => void;
   onSavingChange: (saving: boolean) => void;
   onError: (message: string | null) => void;
@@ -80,6 +84,8 @@ export default function EditSceneModal({
   const sceneId = scene.sceneId ?? scene.id;
   const [name, setName] = useState(scene.title);
   const [visibility, setVisibility] = useState<SceneVisibility>(scene.visibility ?? "PRIVATE");
+  const [category, setCategory] = useState<string | null>(scene.category ?? null);
+  const [tags, setTags] = useState<string[]>(scene.tags ?? []);
   const [thumbnailBlob, setThumbnailBlob] = useState<Blob | null>(null);
   const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(
     scene.thumbnailUrl ?? null,
@@ -123,8 +129,12 @@ export default function EditSceneModal({
     const nameChanged = trimmedName !== scene.title;
     const thumbnailChanged = thumbnailBlob != null;
     const visibilityChanged = visibility !== (scene.visibility ?? "PRIVATE");
+    const categoryChanged = category !== (scene.category ?? null);
+    const tagsChanged =
+      tags.length !== (scene.tags ?? []).length ||
+      tags.some((tag, i) => tag !== (scene.tags ?? [])[i]);
 
-    if (!nameChanged && !thumbnailChanged && !visibilityChanged) {
+    if (!nameChanged && !thumbnailChanged && !visibilityChanged && !categoryChanged && !tagsChanged) {
       onDismiss();
       return;
     }
@@ -145,16 +155,26 @@ export default function EditSceneModal({
         thumbnailKey = presign.key;
       }
 
-      const payload: { name?: string; thumbnailKey?: string; visibility?: SceneVisibility } = {};
+      const payload: {
+        name?: string;
+        thumbnailKey?: string;
+        visibility?: SceneVisibility;
+        category?: string | null;
+        tags?: string[];
+      } = {};
       if (nameChanged) payload.name = trimmedName;
       if (thumbnailKey) payload.thumbnailKey = thumbnailKey;
       if (visibilityChanged) payload.visibility = visibility;
+      if (categoryChanged) payload.category = category;
+      if (tagsChanged) payload.tags = tags;
 
       const updated = await updateScene(sceneId, payload);
 
       onSaved({
         title: updated.name,
         visibility: updated.visibility,
+        category: updated.category ?? null,
+        tags: updated.tags ?? [],
         ...(updated.thumbnailUrl ? { thumbnailUrl: updated.thumbnailUrl } : {}),
       });
     } catch (err) {
@@ -173,7 +193,11 @@ export default function EditSceneModal({
     name,
     scene.title,
     scene.visibility,
+    scene.category,
+    scene.tags,
     visibility,
+    category,
+    tags,
     thumbnailBlob,
     sceneId,
     onDismiss,
@@ -236,6 +260,28 @@ export default function EditSceneModal({
             disabled={busy}
             onToggle={setVisibility}
           />
+
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="edit-scene-category" className="text-xs font-medium text-[#d4d4d4]">
+              Category
+            </label>
+            <select
+              id="edit-scene-category"
+              value={category ?? ""}
+              disabled={busy}
+              onChange={(e) => setCategory(e.target.value === "" ? null : e.target.value)}
+              className="rounded-lg border border-[#404040] bg-[#262626] px-3 py-2 text-sm text-white outline-none transition focus:border-[#6366f1] focus:ring-2 focus:ring-[#6366f1]/20 disabled:opacity-50"
+            >
+              <option value="">None</option>
+              {SCENE_CATEGORIES.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <SceneTagsInput tags={tags} disabled={busy} onChange={setTags} />
 
           <div className="relative overflow-hidden rounded-xl border border-[#303030] bg-[#0a0a0a]">
             <div className="relative h-[min(52vh,420px)] w-full [&_.splat-viewer-container]:h-full [&_#canvas]:h-full [&_#canvas]:w-full">

@@ -140,6 +140,10 @@ export interface Scene {
   status: SceneManagementStatus;
   /** Public scenes appear on explore/feed; missing values are treated as PRIVATE. */
   visibility: SceneVisibility;
+  /** Taxonomy category when set; null when uncategorized. */
+  category?: string | null;
+  /** Lowercase slug tags for discovery (max 10). */
+  tags?: string[];
   createdAt: string;
   /** S3 key in the splat-scenes bucket — present when the scene is READY. */
   plyKey?: string;
@@ -212,6 +216,8 @@ export interface UpdateSceneRequest {
   name?: string;
   thumbnailKey?: string;
   visibility?: SceneVisibility;
+  category?: string | null;
+  tags?: string[];
 }
 
 export type UpdateSceneResponse = Scene;

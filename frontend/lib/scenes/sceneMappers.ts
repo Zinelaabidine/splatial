@@ -128,6 +128,8 @@ export function apiSceneToDashboardScene(scene: Scene): DashboardScene {
     status,
     apiStatus: scene.status,
     visibility: scene.visibility ?? "PRIVATE",
+    category: scene.category ?? null,
+    tags: scene.tags ?? [],
     caption: dashboardCaption(scene, status),
     ...(scene.thumbnailUrl ? { thumbnailUrl: scene.thumbnailUrl } : {}),
     ...(scene.progressPercent != null
