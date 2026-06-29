@@ -19,6 +19,12 @@ import { useIsAdmin } from "@/lib/auth/useIsAdmin";
 import { cn } from "@/lib/utils";
 
 type NavId = "home" | "splats" | "training" | "activity" | "admin";
+type NavActionId = "training" | "activity";
+
+type AppSidebarProps = {
+  trainingCount?: number;
+  onNavAction?: (id: NavActionId) => void;
+};
 
 const NAV: {
   id: NavId;
@@ -26,7 +32,6 @@ const NAV: {
   href: string;
   icon: typeof Home;
   match: (path: string) => boolean;
-  badge?: number;
 }[] = [
   {
     id: "home",
@@ -48,7 +53,6 @@ const NAV: {
     href: "#",
     icon: TrendingUp,
     match: () => false,
-    badge: 2,
   },
   {
     id: "activity",
@@ -59,7 +63,10 @@ const NAV: {
   },
 ];
 
-export default function AppSidebar() {
+export default function AppSidebar({
+  trainingCount = 0,
+  onNavAction,
+}: AppSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const account = useAppAccount();
@@ -83,8 +90,9 @@ export default function AppSidebar() {
       <SplatworksLogo variant="dark" className="mb-5 px-1" />
 
       <nav className="flex flex-col gap-0.5">
-        {navItems.map(({ id, label, href, icon: Icon, match, badge }) => {
+        {navItems.map(({ id, label, href, icon: Icon, match }) => {
           const isActive = match(pathname);
+          const badge = id === "training" ? trainingCount : undefined;
           const inner = (
             <>
               <Icon
@@ -109,8 +117,14 @@ export default function AppSidebar() {
           );
 
           if (href === "#") {
+            const actionId = id as NavActionId;
             return (
-              <button key={id} type="button" className={className}>
+              <button
+                key={id}
+                type="button"
+                className={className}
+                onClick={() => onNavAction?.(actionId)}
+              >
                 {inner}
               </button>
             );

@@ -3,9 +3,12 @@
 import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
 
+import ActivityPanel from "@/components/layout/panels/ActivityPanel";
+import TrainingPanel from "@/components/layout/panels/TrainingPanel";
 import AppSidebar from "@/components/layout/AppSidebar";
 import { AppShellProvider } from "@/components/layout/AppShellContext";
 import AppTopBar from "@/components/layout/AppTopBar";
+import { useTrainingCount } from "@/hooks/layout/useTrainingCount";
 import { cn } from "@/lib/utils";
 
 type AppShellProps = {
@@ -18,6 +21,10 @@ function AppShellInner({ children, fullBleed: fullBleedProp }: AppShellProps) {
   const fullBleed =
     fullBleedProp ?? pathname.startsWith("/scenes/view");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [openPanel, setOpenPanel] = useState<"training" | "activity" | null>(
+    null,
+  );
+  const trainingCount = useTrainingCount();
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#121212] text-[#f1f1f1]">
@@ -39,7 +46,13 @@ function AppShellInner({ children, fullBleed: fullBleedProp }: AppShellProps) {
             mobileNavOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
           )}
         >
-          <AppSidebar />
+          <AppSidebar
+            trainingCount={trainingCount}
+            onNavAction={(id) => {
+              setOpenPanel(id);
+              setMobileNavOpen(false);
+            }}
+          />
         </div>
 
         <main
@@ -53,6 +66,15 @@ function AppShellInner({ children, fullBleed: fullBleedProp }: AppShellProps) {
           {children}
         </main>
       </div>
+
+      <TrainingPanel
+        open={openPanel === "training"}
+        onClose={() => setOpenPanel(null)}
+      />
+      <ActivityPanel
+        open={openPanel === "activity"}
+        onClose={() => setOpenPanel(null)}
+      />
     </div>
   );
 }
