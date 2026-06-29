@@ -2,7 +2,6 @@
 
 import { Loader2 } from "lucide-react";
 
-import FeedAuthorRow from "@/components/splatworks/FeedAuthorRow";
 import PublicSceneCard from "@/components/splatworks/PublicSceneCard";
 import { Button } from "@/components/ui/button";
 import type { PublicSceneListItem } from "@/lib/scenes/feedSceneMappers";
@@ -27,14 +26,14 @@ export default function PublicSceneCardGrid({
     <>
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
         {items.map((item) => (
-          <div key={item.scene.id}>
-            <FeedAuthorRow
-              ownerUsername={item.ownerUsername}
-              ownerDisplayName={item.ownerDisplayName}
-              ownerAvatarUrl={item.ownerAvatarUrl}
-            />
-            <PublicSceneCard scene={item.scene} onClick={onSceneClick} />
-          </div>
+          <PublicSceneCard
+            key={item.scene.id}
+            scene={item.scene}
+            onClick={onSceneClick}
+            ownerUsername={item.ownerUsername}
+            ownerDisplayName={item.ownerDisplayName}
+            ownerAvatarUrl={item.ownerAvatarUrl}
+          />
         ))}
       </div>
 

@@ -23,6 +23,14 @@ function buildExplorePath(category: string | null, tag: string | null): string {
   return qs ? `/explore?${qs}` : "/explore";
 }
 
+function ExplorePageTitle() {
+  return (
+    <h1 className="mb-6 bg-gradient-to-r from-white via-sky-100 to-indigo-200 bg-clip-text text-xl font-bold tracking-tight text-transparent sm:text-2xl">
+      Splatworks: Explore
+    </h1>
+  );
+}
+
 function exploreEmptyMessage(category: string | null, tag: string | null): string {
   if (category && tag) {
     return `No public scenes in ${category} tagged "${tag}" yet.`;
@@ -203,7 +211,7 @@ export default function ExplorePage() {
   if (loading) {
     return (
       <div className="mx-auto w-full max-w-[1400px]">
-        <h1 className="mb-6 text-2xl font-bold tracking-tight text-white">Explore</h1>
+        <ExplorePageTitle />
         {filterBar}
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
@@ -217,7 +225,7 @@ export default function ExplorePage() {
   if (error) {
     return (
       <div className="mx-auto w-full max-w-[1400px]">
-        <h1 className="mb-6 text-2xl font-bold tracking-tight text-white">Explore</h1>
+        <ExplorePageTitle />
         {filterBar}
         <div className="rounded-xl border border-red-900/50 bg-red-950/40 px-5 py-4 text-sm text-red-300">
           {error}{" "}
@@ -238,7 +246,7 @@ export default function ExplorePage() {
 
   return (
     <div className="mx-auto w-full max-w-[1400px]">
-      <h1 className="mb-6 text-2xl font-bold tracking-tight text-white">Explore</h1>
+      <ExplorePageTitle />
       {filterBar}
 
       {loadMoreError ? (

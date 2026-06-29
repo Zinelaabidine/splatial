@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import { UserAvatar } from "@/components/splatworks/SplatworksLogo";
+import { cn } from "@/lib/utils";
 
 function initialsFromDisplayName(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -16,19 +17,21 @@ type FeedAuthorRowProps = {
   ownerUsername: string;
   ownerDisplayName: string;
   ownerAvatarUrl?: string | null;
+  className?: string;
 };
 
 export default function FeedAuthorRow({
   ownerUsername,
   ownerDisplayName,
   ownerAvatarUrl,
+  className,
 }: FeedAuthorRowProps) {
   const handle = ownerUsername.trim().toLowerCase();
   const initials = initialsFromDisplayName(ownerDisplayName || ownerUsername);
 
   if (!handle) {
     return (
-      <div className="mb-3 flex items-center gap-2.5">
+      <div className={cn("flex items-center gap-2.5", className)}>
         <UserAvatar initials={initials} size={32} />
         <span className="truncate text-sm font-medium text-white">
           {ownerDisplayName || "Unknown creator"}
@@ -41,7 +44,10 @@ export default function FeedAuthorRow({
     <Link
       href={`/u/${encodeURIComponent(handle)}`}
       onClick={(e) => e.stopPropagation()}
-      className="mb-3 flex items-center gap-2.5 rounded-lg transition-colors hover:bg-[#2a2a2a]/60"
+      className={cn(
+        "flex items-center gap-2.5 rounded-lg transition-colors hover:bg-white/5",
+        className,
+      )}
     >
       {ownerAvatarUrl ? (
         <>
