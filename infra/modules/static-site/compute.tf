@@ -139,6 +139,12 @@ resource "aws_autoscaling_group" "worker" {
     strategy = "Rolling"
   }
 
+  # Required for the queue-empty scale-in composite alarm (GroupDesiredCapacity).
+  enabled_metrics = [
+    "GroupDesiredCapacity",
+    "GroupInServiceInstances",
+  ]
+
   tag {
     key                 = "Name"
     value               = "${local.name_prefix}-splat-worker"
@@ -218,9 +224,11 @@ resource "aws_cloudwatch_metric_alarm" "sqs_scale_out" {
   }
 }
 
-# ── Step Scaling — Scale In ───────────────────────────────────────────────────
-# Scale-out sets desired=1 but nothing previously reset it to 0 when the queue
-# drained. Worker self-terminate is a backstop; this policy handles empty queue.
+# ── Step Scaling — Scale In (ASG termination on empty queue) ─────────────────
+# Complements worker self-termination: when the queue is fully drained but the
+# ASG still requests capacity, set desired=0 so Auto Scaling terminates any
+# running or pending Spot instances. Uses total queue depth (not visible-only)
+# so in-flight messages during active jobs do not trigger premature scale-in.
 
 resource "aws_autoscaling_policy" "sqs_step_scale_in" {
   provider = aws.this
@@ -242,18 +250,67 @@ resource "aws_cloudwatch_metric_alarm" "sqs_scale_in" {
   provider = aws.this
 
   alarm_name          = "${local.name_prefix}-sqs-scale-in"
-  alarm_description   = "Scale in GPU workers when the processing queue is fully empty."
-  comparison_operator = "LessThanOrEqualToThreshold"
-  evaluation_periods  = 2
-  metric_name         = "ApproximateNumberOfMessages"
-  namespace           = "AWS/SQS"
-  period              = 60
-  statistic           = "Maximum"
+  alarm_description   = "Terminate worker ASG capacity when the processing queue is fully empty but workers are still requested."
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
   threshold           = 0
   treat_missing_data  = "notBreaching"
 
-  dimensions = {
-    QueueName = aws_sqs_queue.processing_queue.name
+  metric_query {
+    id          = "queue_total"
+    return_data = false
+
+    metric {
+      metric_name = "ApproximateNumberOfMessages"
+      namespace   = "AWS/SQS"
+      period      = 60
+      stat        = "Maximum"
+
+      dimensions = {
+        QueueName = aws_sqs_queue.processing_queue.name
+      }
+    }
+  }
+
+  metric_query {
+    id          = "asg_desired"
+    return_data = false
+
+    metric {
+      metric_name = "GroupDesiredCapacity"
+      namespace   = "AWS/AutoScaling"
+      period      = 60
+      stat        = "Maximum"
+
+      dimensions = {
+        AutoScalingGroupName = aws_autoscaling_group.worker.name
+      }
+    }
+  }
+
+  metric_query {
+    id          = "asg_in_service"
+    return_data = false
+
+    metric {
+      metric_name = "GroupInServiceInstances"
+      namespace   = "AWS/AutoScaling"
+      period      = 60
+      stat        = "Maximum"
+
+      dimensions = {
+        AutoScalingGroupName = aws_autoscaling_group.worker.name
+      }
+    }
+  }
+
+  # Fire when queue is empty AND the ASG still has requested or running workers.
+  # In-flight SQS messages (invisible during processing) keep queue_total > 0.
+  metric_query {
+    id          = "queue_empty_workers_still_up"
+    expression  = "IF(queue_total <= 0 AND (asg_desired > 0 OR asg_in_service > 0), 1, 0)"
+    label       = "QueueEmptyWorkersStillUp"
+    return_data = true
   }
 
   alarm_actions = [aws_autoscaling_policy.sqs_step_scale_in.arn]
@@ -266,5 +323,6 @@ resource "aws_cloudwatch_metric_alarm" "sqs_scale_in" {
   }
 }
 
-# Worker self-termination remains a backstop if the queue is empty but the
-# instance is still running after the scale-in alarm evaluation window.
+# Worker self-termination remains the primary scale-down path after each job;
+# this alarm is the ASG-level backstop when capacity is still requested on an
+# empty queue (e.g. worker terminate API failure or stale desired capacity).
