@@ -132,7 +132,7 @@ Processed splats are served over CloudFront with Origin Access Control (OAC) and
 
 ---
 
-## � AWS Well-Architected Alignment
+## 🏛️ AWS Well-Architected Alignment
 
 This platform is intentionally designed around the AWS Well-Architected Framework, with clear tradeoffs across cost, reliability, performance, and security:
 
@@ -141,7 +141,7 @@ This platform is intentionally designed around the AWS Well-Architected Framewor
 - **Performance Efficiency:** Direct browser-to-S3 multipart uploads bypass API Gateway and Lambda payload constraints, allowing large datasets to flow into the platform without creating a bottleneck in the web tier.
 - **Security:** The platform uses GitHub OIDC for CI/CD authentication, enforces IMDSv2 on compute hosts, and applies least-privilege IAM so workloads run without standing credentials or broad access.
 
-## �🛠️ Technology Stack
+## 🛠️ Technology Stack
 
 ### ☁️ Cloud & Infrastructure as Code
 
@@ -179,6 +179,32 @@ This platform is intentionally designed around the AWS Well-Architected Framewor
 | **Three.js** | 3D scene graph, camera trajectories, MP4 export |
 | **Modern C++** | High-performance depth sorting, binary splat parsing, and compute kernels *(roadmap)* |
 | **Unreal Engine 5** | Scene export, cinematic workflows, and spatial content pipelines *(roadmap)* |
+
+---
+
+## 🌐 Social & Interaction Layer
+
+Beyond the core upload→train→view pipeline, Splatial ships a full social platform
+layer — 15 features built as independent, deployable increments on top of the same
+serverless stack (no new compute tier; each feature owns its DynamoDB table and a
+set of routes on the existing API).
+
+| Capability | Features |
+|---|---|
+| **Identity** | Unique usernames, public profiles (`/u/<username>`), avatars, bios, counters |
+| **Graph & discovery** | Follow / unfollow, personalized feed (fan-out on read), global Explore, tags & categories |
+| **Engagement** | Multi-type reactions, comments, `@mentions`, a notifications center with unread badge |
+| **Curation** | Scene visibility (public/private), bookmarks / "Saved", remix / fork with lineage |
+| **Camera authoring** | Saved viewpoints ("Shots"), shareable deep-links, and guided fly-through tours |
+
+Engineering patterns worth noting: **transactional counters** (`TransactWriteItems`
+for follower/reaction/comment counts — idempotent and non-negative), **denormalized
+identity** on child records to avoid N+1 reads, **sparse GSIs** for filtered
+listings, **best-effort** notification emission that never fails the primary action,
+and safe **plain-text rendering** of all user content.
+
+> Full as-built reference — data model, every endpoint, per-feature invariants, and
+> upgrade paths — in [`docs/SOCIAL_FEATURES_REFERENCE.md`](./docs/SOCIAL_FEATURES_REFERENCE.md).
 
 ---
 
@@ -304,7 +330,10 @@ Focused on the media pipeline, 3D rendering experience, and spatial content work
 | Document | Description |
 |---|---|
 | [`docs/ARCHITECTURE_REFERENCE.md`](./docs/ARCHITECTURE_REFERENCE.md) | Definitive as-built reference: network topology, IAM, data flows, known gaps, remediation plan |
+| [`docs/SOCIAL_FEATURES_REFERENCE.md`](./docs/SOCIAL_FEATURES_REFERENCE.md) | As-built reference for the social & interaction layer (features 1–15): data model, API, per-feature invariants, upgrade paths |
 | [`docs/architecture.md`](./docs/architecture.md) | System design narrative and cost model |
+| [`docs/logging-spec.md`](./docs/logging-spec.md) | Logging & observability contract across backend, worker, infra, frontend |
+| [`docs/CHANGELOG.md`](./docs/CHANGELOG.md) | Dated change log (what changed, why, where, how to verify) |
 | [`CLAUDE.md`](./CLAUDE.md) | Engineering standards and architectural contract for contributors |
 | [`docs/postman/`](./docs/postman/) | Postman collection and environment for API testing |
 
@@ -323,7 +352,7 @@ Contributions are welcome. Please open an issue before submitting significant ch
 
 ## 📄 License
 
-MIT License — Copyright (c) 2026 Splatial Contributors. See repository history for full license text.
+Released under the **MIT License** — see [`LICENSE`](./LICENSE) for the full text.
 
 ---
 

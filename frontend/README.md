@@ -1,36 +1,58 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Splatial — Frontend
 
-## Getting Started
+The Next.js web client for Splatial: authentication, scene upload, the in-browser
+WebGL/WebGPU Gaussian-splat viewer, and the full social layer (profiles, feed,
+explore, reactions, comments, notifications, bookmarks, shots, tours, remix).
 
-First, run the development server:
+> This is one package of a larger monorepo. For the system overview, architecture,
+> and deployment, see the [root README](../README.md). For the social layer, see
+> [`../docs/SOCIAL_FEATURES_REFERENCE.md`](../docs/SOCIAL_FEATURES_REFERENCE.md).
+
+## Stack
+
+- **Next.js 16** (App Router, static export) · **React 19** · **TypeScript** (strict)
+- **Tailwind CSS v4** + **shadcn/ui**
+- **AWS Amplify** (Cognito auth) · authenticated `fetch` via `services/apiClient.ts`
+- **WebGL/WebGPU splat viewer** (`@mkkellogg/gaussian-splats-3d`, Three.js) under `viewer/`
+
+## Develop
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev        # http://localhost:3000 (proxies /api/* to the dev API Gateway)
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The dev server rewrites `/api/*` to `NEXT_PUBLIC_API_GATEWAY_URL` to avoid CORS;
+production builds export a static site (`output: 'export'`) deployed to S3 +
+CloudFront.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Verify before pushing
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run lint       # ESLint (also enforced in CI)
+npm run build      # type-check + static export; must pass with zero errors
+```
 
-## Learn More
+## Layout
 
-To learn more about Next.js, take a look at the following resources:
+```
+app/            App Router pages and layouts (auth-gated under (main)/)
+api/            HTTP client + base URL resolution
+services/       One authenticated API helper per domain (profiles, feed, reactions, …)
+components/     UI (ui/, layout/, upload/, viewer/, scenes/, …)
+hooks/          Custom hooks (upload/, viewer/)
+viewer/         WebGL engine + camera/trajectory math (non-React)
+types/          Shared TypeScript types (all API shapes in types/api.ts)
+lib/            Auth bootstrap, helpers
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Conventions
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- All authenticated calls go through `authenticatedFetch` (never raw `fetch` with
+  tokens); the API base URL comes from `api/baseUrl.ts` — never hardcode stage URLs.
+- No JWT/token storage in `localStorage`/`sessionStorage`; rely on Amplify's session.
+- New API response shapes live in `types/api.ts`; `strict` is on — no `any`.
+- Heavy 3D components are lazy-loaded (`next/dynamic`, `{ ssr: false }`).
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+See [`AGENTS.md`](./AGENTS.md) and the root [`CLAUDE.md`](../CLAUDE.md) for the full
+engineering contract.

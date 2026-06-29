@@ -9,6 +9,56 @@ Format: each release note lists **what changed**, **why**, **where to look**, an
 
 ---
 
+## 2026-06-29 — Social & Interaction Layer (Features 1–15)
+
+**Commits:** `acd09bc` … `05130a8` (range on `dev`)
+**Status:** Deployed to dev via GitHub Actions.
+
+### Summary
+
+Shipped a full social platform layer on top of the core upload→train→view
+pipeline, delivered as 15 independent, deployable increments. Each feature was
+split into an **Infra+Backend** unit (data model + API) and a **Frontend** unit,
+each verified locally (backend syntax/router load, `npm run lint && build`,
+`terraform fmt/validate/plan`) before a single push.
+
+**What changed**
+
+- **Identity:** user profiles + globally unique usernames (forced at onboarding),
+  public profiles at `/u/<username>`.
+- **Graph & discovery:** follow/unfollow, personalized feed (fan-out on read),
+  global Explore, scene tags & categories.
+- **Engagement:** multi-type reactions, comments, resolved `@mentions`, and a
+  notifications center (follow/reaction/comment/mention) with an unread badge.
+- **Curation & camera:** scene visibility (public/private), bookmarks, saved
+  viewpoints ("Shots") with shareable deep-links, guided fly-through tours, and
+  remix/fork with server-side artifact copy + lineage.
+
+**Why**
+
+Turn a private rendering tool into a shareable platform without adding a new
+compute tier — every feature is routes on the existing single Lambda router plus a
+domain-owned DynamoDB table.
+
+**Where to look**
+
+- As-built reference: [`SOCIAL_FEATURES_REFERENCE.md`](./SOCIAL_FEATURES_REFERENCE.md)
+  (data model, every endpoint, per-feature invariants, upgrade paths).
+- Tables: `infra/modules/static-site/dynamodb-*.tf`; routes:
+  `infra/modules/static-site/network.tf`; handlers: `backend/handlers/`.
+- CI: `.github/workflows/deploy.yml` was made path-filtered so each push runs only
+  the relevant half (apply on infra/backend, build+sync on frontend).
+
+**How to verify**
+
+- Sign in, claim a username, follow another user, react/comment on a public scene,
+  and confirm the feed, notifications bell, and `/u/<username>` page all update.
+- API: the social routes under `/api/v1/profiles`, `/api/v1/feed`,
+  `/api/v1/explore`, `/api/v1/scenes/{id}/{reaction|comments|shots|tours|fork}`,
+  and `/api/v1/notifications` return as documented.
+
+---
+
 ## 2026-06-28 — Phase 3: Admin log drill-down
 
 **Commit:** `104e8f2`  
