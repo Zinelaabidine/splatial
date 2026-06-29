@@ -33,7 +33,9 @@ exports.handler = async (event) => {
   const item = result.Item;
   if (!item) return response(404, { error: "Scene not found" });
 
-  if (item.user_id?.S !== userId) {
+  const isOwner = item.user_id?.S === userId;
+  const isPublic = sceneVisibilityFromItem(item) === "PUBLIC";
+  if (!isOwner && !isPublic) {
     return response(403, { error: "Forbidden: scene does not belong to this user" });
   }
 
