@@ -112,6 +112,8 @@ export interface Comment {
   authorDisplayName: string;
   authorAvatarUrl?: string | null;
   body: string;
+  /** Lowercase handles the backend resolved from @mentions in `body`. */
+  mentions?: string[];
   createdAt: string;
 }
 

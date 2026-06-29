@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Trash2 } from "lucide-react";
 
+import CommentBody from "@/components/viewer/CommentBody";
 import { UserAvatar } from "@/components/splatworks/SplatworksLogo";
 import { Button } from "@/components/ui/button";
 import { formatRelativeTime } from "@/lib/time/formatRelativeTime";
@@ -92,9 +93,11 @@ export default function CommentRow({
           ) : null}
         </div>
 
-        <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed text-[#e8e8e8]">
-          {comment.body}
-        </p>
+        <CommentBody
+          body={comment.body}
+          mentions={comment.mentions}
+          className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed text-[#e8e8e8]"
+        />
       </div>
     </article>
   );

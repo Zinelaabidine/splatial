@@ -305,6 +305,10 @@ export default function CommentSection({
               {postError}
             </p>
           ) : null}
+          <p className="text-xs text-[#737373]">
+            Tip: mention someone with{" "}
+            <span className="font-sw-mono text-[#909090]">@username</span>
+          </p>
         </div>
 
         {loading ? (
