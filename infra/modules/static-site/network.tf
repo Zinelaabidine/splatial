@@ -171,38 +171,6 @@ resource "aws_apigatewayv2_authorizer" "cognito" {
 }
 
 
-
-
-resource "aws_apigatewayv2_integration" "hello_from_lambda" {
-  api_id           = aws_apigatewayv2_api.http_api.id
-  integration_type = "AWS_PROXY" # "AWS_PROXY" is used for Lambda
-
-  integration_uri        = aws_lambda_function.myfunc.invoke_arn
-  payload_format_version = "2.0" # Always use 2.0 for HTTP APIs
-}
-
-
-resource "aws_lambda_permission" "apigw_lambda" {
-  statement_id  = "AllowExecutionFromAPIGateway"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.myfunc.function_name
-  principal     = "apigateway.amazonaws.com"
-
-  # This scope ensures ONLY your specific API can call the function
-  source_arn = "${aws_apigatewayv2_api.http_api.execution_arn}/*/*"
-}
-
-
-resource "aws_apigatewayv2_route" "hello_from_lambda" {
-  api_id    = aws_apigatewayv2_api.http_api.id
-  route_key = "GET /helloFromLambda"
-
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-
-  target = "integrations/${aws_apigatewayv2_integration.hello_from_lambda.id}"
-}
-
 resource "aws_apigatewayv2_integration" "upload_init" {
   api_id           = aws_apigatewayv2_api.http_api.id
   integration_type = "AWS_PROXY"

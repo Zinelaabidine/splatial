@@ -313,7 +313,6 @@ data "aws_iam_policy_document" "github_deploy_policy" {
     resources = [
       "arn:aws:iam::886601940523:role/${local.name_prefix}-github-deploy-role",
       "arn:aws:iam::886601940523:role/splatial-local-dev-role",
-      aws_iam_role.lambda_exec.arn,
       # Constructed ARN for the upload Lambda execution role (does not exist yet).
       "arn:aws:iam::886601940523:role/${var.name}-upload-lambda-exec-role",
       # Constructed ARN for the Google Drive import Lambda execution role.
@@ -332,7 +331,6 @@ data "aws_iam_policy_document" "github_deploy_policy" {
       "iam:PassRole",
     ]
     resources = [
-      aws_iam_role.lambda_exec.arn,
       # Constructed ARN for the upload Lambda execution role (does not exist yet).
       "arn:aws:iam::886601940523:role/${var.name}-upload-lambda-exec-role",
       # Constructed ARN for the Google Drive import Lambda execution role.
@@ -741,7 +739,6 @@ data "aws_iam_policy_document" "github_deploy_network_policy" {
       "lambda:ListVersionsByFunction",
     ]
     resources = [
-      aws_lambda_function.myfunc.arn,
       # Constructed ARN for the upload Lambda (does not exist yet on first apply).
       "arn:aws:lambda:${var.aws_region}:886601940523:function:${var.name}-upload-lambda",
       # Constructed ARN for the Google Drive import Lambda.
