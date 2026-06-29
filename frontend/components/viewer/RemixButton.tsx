@@ -81,26 +81,28 @@ export default function RemixButton({ sceneId, sceneName }: RemixButtonProps) {
 
   return (
     <>
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        disabled={forking}
-        aria-label="Remix scene"
-        title="Remix"
-        onClick={openModal}
-        className={cn(
-          "h-auto gap-1.5 rounded-full border border-white/10 bg-black/70 px-3 py-2 text-white shadow-lg backdrop-blur-md hover:bg-white/10",
-          forking && "opacity-70",
-        )}
-      >
-        {forking ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : (
-          <GitFork className="h-4 w-4" strokeWidth={1.75} />
-        )}
-        <span className="text-xs font-medium">{forking ? "Remixing…" : "Remix"}</span>
-      </Button>
+      <div className="pointer-events-auto flex flex-col items-center gap-1.5">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={forking}
+          aria-label="Remix scene"
+          title="Remix"
+          onClick={openModal}
+          className={cn(
+            "h-auto gap-1.5 rounded-full border border-white/10 bg-black/70 px-3 py-2 text-white shadow-lg backdrop-blur-md hover:bg-white/10",
+            forking && "opacity-70",
+          )}
+        >
+          {forking ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <GitFork className="h-4 w-4" strokeWidth={1.75} />
+          )}
+          <span className="text-xs font-medium">{forking ? "Remixing…" : "Remix"}</span>
+        </Button>
+      </div>
 
       {modalOpen ? (
         <div
