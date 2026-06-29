@@ -5,6 +5,7 @@ const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { DynamoDBClient, QueryCommand } = require("@aws-sdk/client-dynamodb");
 const response = require("../lib/response");
 const { feedItemFromScene } = require("../lib/scene-response");
+const { ALLOWED_CATEGORIES, normalizeTags } = require("../lib/scene-taxonomy");
 
 const s3 = new S3Client({});
 const dynamo = new DynamoDBClient({});
@@ -63,7 +64,7 @@ function decodeCursor(cursor) {
  *
  * Returns newest public scenes (newest-only; trending deferred until engagement signals exist).
  *
- * Query: ?cursor=<opaque>&limit=<n>
+ * Query: ?cursor=<opaque>&limit=<n>&category=<name>&tag=<slug>
  *
  * Success response (200):
  *   { "scenes": [...], "nextCursor"?: "<opaque>" }
@@ -80,15 +81,39 @@ exports.handler = async (event) => {
   }
   const limit = parseLimit(qs.limit);
 
-  // Index projection is ALL — owner_* and thumbnail_* are on the item; no extra GetItem.
+  const filterParts = ["attribute_exists(#nm)"];
+  const exprNames = { "#nm": "name" };
+  const exprValues = { ":pub": { S: "PUBLIC" } };
+
+  const rawCategory = qs.category;
+  if (rawCategory !== undefined && rawCategory !== null && rawCategory !== "") {
+    if (!ALLOWED_CATEGORIES.has(rawCategory)) {
+      return response(400, { error: "category is not allowed" });
+    }
+    filterParts.push("#cat = :cat");
+    exprNames["#cat"] = "category";
+    exprValues[":cat"] = { S: rawCategory };
+  }
+
+  const rawTag = qs.tag;
+  if (rawTag !== undefined && rawTag !== null && rawTag !== "") {
+    const tagResult = normalizeTags([rawTag]);
+    if (!tagResult.ok || tagResult.tags.length === 0) {
+      return response(400, { error: tagResult.ok ? "tag is not valid" : tagResult.error });
+    }
+    filterParts.push("contains(tags, :tag)");
+    exprValues[":tag"] = { S: tagResult.tags[0] };
+  }
+
+  // FilterExpression runs post-read on the GSI (MVP). A sparse category GSI is the future upgrade if volume grows.
   const result = await dynamo.send(
     new QueryCommand({
       TableName: TABLE,
       IndexName: "visibility-created_at-index",
       KeyConditionExpression: "visibility = :pub",
-      FilterExpression: "attribute_exists(#nm)",
-      ExpressionAttributeNames: { "#nm": "name" },
-      ExpressionAttributeValues: { ":pub": { S: "PUBLIC" } },
+      FilterExpression: filterParts.join(" AND "),
+      ExpressionAttributeNames: exprNames,
+      ExpressionAttributeValues: exprValues,
       ScanIndexForward: false,
       Limit: limit,
       ExclusiveStartKey: exclusiveStartKey,

@@ -5,6 +5,7 @@ const { randomUUID } = require("crypto");
 const response = require("../lib/response");
 const { DEFAULT_VISIBILITY } = require("../lib/scene-response");
 const { getOwnerProfile, ownerFieldsFromProfile } = require("../lib/scene-owner");
+const { normalizeTags, validateCategory } = require("../lib/scene-taxonomy");
 
 const dynamo = new DynamoDBClient({});
 const TABLE = process.env.SCENES_TABLE_NAME;
@@ -18,7 +19,7 @@ const ALLOWED_INPUT_TYPES = new Set(["video", "images"]);
  * an upload from the dashboard.
  *
  * Request body:
- *   { "name": "My Garden", "inputType": "video" | "images" }
+ *   { "name": "My Garden", "inputType": "video" | "images", "category"?: string, "tags"?: string[] }
  *
  * Success response (201):
  *   { "sceneId": "...", "name": "...", "inputType": "...", "status": "UPLOADED", "createdAt": "...", "visibility": "PRIVATE" }
@@ -35,13 +36,33 @@ exports.handler = async (event) => {
     return response(400, { error: "Invalid JSON body" });
   }
 
-  const { name, inputType } = body;
+  const { name, inputType, category, tags } = body;
 
   if (!name || typeof name !== "string" || name.trim() === "") {
     return response(400, { error: "Missing required field: name" });
   }
   if (!inputType || !ALLOWED_INPUT_TYPES.has(inputType)) {
     return response(400, { error: "inputType must be 'video' or 'images'" });
+  }
+
+  let validatedCategory;
+  if (category !== undefined && category !== null && category !== "") {
+    const categoryResult = validateCategory(category);
+    if (!categoryResult.ok) {
+      return response(400, { error: categoryResult.error });
+    }
+    validatedCategory = categoryResult.category;
+  }
+
+  let normalizedTags;
+  if (tags !== undefined) {
+    const tagsResult = normalizeTags(tags);
+    if (!tagsResult.ok) {
+      return response(400, { error: tagsResult.error });
+    }
+    if (tagsResult.tags.length > 0) {
+      normalizedTags = tagsResult.tags;
+    }
   }
 
   const profile = await getOwnerProfile(userId);
@@ -66,6 +87,8 @@ exports.handler = async (event) => {
         visibility: { S: DEFAULT_VISIBILITY },
         created_at: { S: now },
         updated_at: { S: now },
+        ...(validatedCategory ? { category: { S: validatedCategory } } : {}),
+        ...(normalizedTags ? { tags: { SS: normalizedTags } } : {}),
         ...ownerFields,
       },
       ConditionExpression: "attribute_not_exists(scene_id)",
@@ -79,5 +102,7 @@ exports.handler = async (event) => {
     status: "UPLOADED",
     visibility: DEFAULT_VISIBILITY,
     createdAt: now,
+    ...(validatedCategory ? { category: validatedCategory } : {}),
+    ...(normalizedTags ? { tags: normalizedTags } : {}),
   });
 };

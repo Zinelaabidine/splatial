@@ -18,6 +18,8 @@ function sceneResponseFromItem(item, thumbnailUrl) {
     status: item.status?.S ?? "",
     createdAt: item.created_at?.S ?? "",
     visibility: sceneVisibilityFromItem(item),
+    category: item.category?.S ?? null,
+    tags: item.tags?.SS ?? [],
     ...(item.ply_key ? { plyKey: item.ply_key.S } : {}),
     ...(item.thumbnail_key ? { thumbnailKey: item.thumbnail_key.S } : {}),
     ...(thumbnailUrl ? { thumbnailUrl } : {}),

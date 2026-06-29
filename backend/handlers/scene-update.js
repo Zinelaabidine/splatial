@@ -18,6 +18,7 @@ const {
   resolveSceneViewObject,
   thumbnailKeyForViewKey,
 } = require("../lib/scene-view-key");
+const { normalizeTags, validateCategory } = require("../lib/scene-taxonomy");
 
 const s3 = new S3Client({});
 const dynamo = new DynamoDBClient({});
@@ -40,7 +41,7 @@ async function presignedThumbnailUrl(bucket, key) {
  * Updates scene metadata owned by the caller.
  *
  * Request body (at least one field required):
- *   { "name"?: string, "thumbnailKey"?: string, "visibility"?: "PUBLIC" | "PRIVATE" }
+ *   { "name"?: string, "thumbnailKey"?: string, "visibility"?: "PUBLIC" | "PRIVATE", "category"?: string | null, "tags"?: string[] }
  *
  * thumbnailKey must match the key returned by POST .../thumbnail/presign
  * after the client uploads the JPEG to S3.
@@ -62,13 +63,17 @@ exports.handler = async (event) => {
     return response(400, { error: "Invalid JSON body" });
   }
 
-  const { name, thumbnailKey, visibility } = body;
+  const { name, thumbnailKey, visibility, category, tags } = body;
   const hasName = name !== undefined;
   const hasThumbnailKey = thumbnailKey !== undefined;
   const hasVisibility = visibility !== undefined;
+  const hasCategory = category !== undefined;
+  const hasTags = tags !== undefined;
 
-  if (!hasName && !hasThumbnailKey && !hasVisibility) {
-    return response(400, { error: "Provide at least one of: name, thumbnailKey, visibility" });
+  if (!hasName && !hasThumbnailKey && !hasVisibility && !hasCategory && !hasTags) {
+    return response(400, {
+      error: "Provide at least one of: name, thumbnailKey, visibility, category, tags",
+    });
   }
 
   if (hasName && (typeof name !== "string" || name.trim() === "")) {
@@ -81,6 +86,34 @@ exports.handler = async (event) => {
 
   if (hasVisibility && !ALLOWED_VISIBILITY.has(visibility)) {
     return response(400, { error: "visibility must be 'PUBLIC' or 'PRIVATE'" });
+  }
+
+  let validatedCategory;
+  let clearCategory = false;
+  if (hasCategory) {
+    if (category === null || category === "") {
+      clearCategory = true;
+    } else {
+      const categoryResult = validateCategory(category);
+      if (!categoryResult.ok) {
+        return response(400, { error: categoryResult.error });
+      }
+      validatedCategory = categoryResult.category;
+    }
+  }
+
+  let normalizedTags;
+  let clearTags = false;
+  if (hasTags) {
+    const tagsResult = normalizeTags(tags);
+    if (!tagsResult.ok) {
+      return response(400, { error: tagsResult.error });
+    }
+    if (tagsResult.tags.length === 0) {
+      clearTags = true;
+    } else {
+      normalizedTags = tagsResult.tags;
+    }
   }
 
   const existing = await dynamo.send(
@@ -148,6 +181,24 @@ exports.handler = async (event) => {
   if (hasVisibility) {
     exprParts.push("visibility = :visibility");
     exprValues[":visibility"] = { S: visibility };
+  }
+
+  if (hasCategory) {
+    if (clearCategory) {
+      removeParts.push("category");
+    } else {
+      exprParts.push("category = :category");
+      exprValues[":category"] = { S: validatedCategory };
+    }
+  }
+
+  if (hasTags) {
+    if (clearTags) {
+      removeParts.push("tags");
+    } else {
+      exprParts.push("tags = :tags");
+      exprValues[":tags"] = { SS: normalizedTags };
+    }
   }
 
   if (ownerRefresh) {
