@@ -525,6 +525,46 @@ resource "aws_apigatewayv2_route" "scene_shot_delete" {
   target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
 }
 
+resource "aws_apigatewayv2_route" "scene_tour_create" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "POST /api/v1/scenes/{sceneId}/tours"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
+resource "aws_apigatewayv2_route" "scene_tours_list" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "GET /api/v1/scenes/{sceneId}/tours"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
+resource "aws_apigatewayv2_route" "scene_tour_get" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "GET /api/v1/scenes/{sceneId}/tours/{tourId}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
+resource "aws_apigatewayv2_route" "scene_tour_delete" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "DELETE /api/v1/scenes/{sceneId}/tours/{tourId}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
 resource "aws_apigatewayv2_route" "notifications_list" {
   api_id    = aws_apigatewayv2_api.http_api.id
   route_key = "GET /api/v1/notifications"

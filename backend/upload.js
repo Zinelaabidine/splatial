@@ -42,6 +42,10 @@ const shotCreate = require("./handlers/shot-create");
 const shotsList = require("./handlers/shots-list");
 const shotGet = require("./handlers/shot-get");
 const shotDelete = require("./handlers/shot-delete");
+const tourCreate = require("./handlers/tour-create");
+const toursList = require("./handlers/tours-list");
+const tourGet = require("./handlers/tour-get");
+const tourDelete = require("./handlers/tour-delete");
 const response    = require("./lib/response");
 
 exports.handler = async (event) => {
@@ -146,6 +150,16 @@ exports.handler = async (event) => {
         return await shotGet.handler(event);
       case "DELETE /api/v1/scenes/{sceneId}/shots/{shotId}":
         return await shotDelete.handler(event);
+
+      // ── Tours (guided fly-through) ────────────────────────────────────
+      case "POST /api/v1/scenes/{sceneId}/tours":
+        return await tourCreate.handler(event);
+      case "GET /api/v1/scenes/{sceneId}/tours":
+        return await toursList.handler(event);
+      case "GET /api/v1/scenes/{sceneId}/tours/{tourId}":
+        return await tourGet.handler(event);
+      case "DELETE /api/v1/scenes/{sceneId}/tours/{tourId}":
+        return await tourDelete.handler(event);
 
       // ── Admin (admin-group gated inside the handler) ─────────────────────
       case "GET /admin/attempts":
