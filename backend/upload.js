@@ -27,6 +27,8 @@ const profileScenesList = require("./handlers/profile-scenes-list");
 const profileUsernameAvailable = require("./handlers/profile-username-available");
 const feedList = require("./handlers/feed-list");
 const exploreList = require("./handlers/explore-list");
+const reactionSet = require("./handlers/reaction-set");
+const reactionDelete = require("./handlers/reaction-delete");
 const response    = require("./lib/response");
 
 exports.handler = async (event) => {
@@ -95,6 +97,10 @@ exports.handler = async (event) => {
         return await feedList.handler(event);
       case "GET /api/v1/explore":
         return await exploreList.handler(event);
+      case "PUT /api/v1/scenes/{sceneId}/reaction":
+        return await reactionSet.handler(event);
+      case "DELETE /api/v1/scenes/{sceneId}/reaction":
+        return await reactionDelete.handler(event);
 
       // ── Admin (admin-group gated inside the handler) ─────────────────────
       case "GET /admin/attempts":

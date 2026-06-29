@@ -2,6 +2,7 @@
 
 const { DynamoDBClient, GetItemCommand } = require("@aws-sdk/client-dynamodb");
 const response = require("../lib/response");
+const { getReaction, reactionCountsFromSceneItem } = require("../lib/reactions");
 const { sceneVisibilityFromItem } = require("../lib/scene-response");
 
 const dynamo = new DynamoDBClient({});
@@ -39,10 +40,15 @@ exports.handler = async (event) => {
     return response(403, { error: "Forbidden: scene does not belong to this user" });
   }
 
+  const myReaction = await getReaction(sceneId, userId);
+
   return response(200, {
     sceneId,
     status: item.status?.S ?? "PROCESSING",
     location: item.s3_location?.S ?? null,
     visibility: sceneVisibilityFromItem(item),
+    reactionsTotal: Number(item.reactions_total?.N ?? 0),
+    reactionCounts: reactionCountsFromSceneItem(item),
+    myReaction,
   });
 };

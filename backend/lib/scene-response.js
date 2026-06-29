@@ -1,6 +1,7 @@
 "use strict";
 
 const { mapProgressFromItem } = require("./progress-fields");
+const { ALLOWED_REACTIONS } = require("./reaction-types");
 
 const DEFAULT_VISIBILITY = "PRIVATE";
 const ALLOWED_VISIBILITY = new Set(["PUBLIC", "PRIVATE"]);
@@ -8,6 +9,14 @@ const ALLOWED_VISIBILITY = new Set(["PUBLIC", "PRIVATE"]);
 function sceneVisibilityFromItem(item) {
   const value = item?.visibility?.S;
   return value === "PUBLIC" ? "PUBLIC" : DEFAULT_VISIBILITY;
+}
+
+function reactionCountsFromItem(item) {
+  const counts = {};
+  for (const type of ALLOWED_REACTIONS) {
+    counts[type] = Number(item?.[`rc_${type}`]?.N ?? 0);
+  }
+  return counts;
 }
 
 function sceneResponseFromItem(item, thumbnailUrl) {
@@ -20,6 +29,8 @@ function sceneResponseFromItem(item, thumbnailUrl) {
     visibility: sceneVisibilityFromItem(item),
     category: item.category?.S ?? null,
     tags: item.tags?.SS ?? [],
+    reactionsTotal: Number(item.reactions_total?.N ?? 0),
+    reactionCounts: reactionCountsFromItem(item),
     ...(item.ply_key ? { plyKey: item.ply_key.S } : {}),
     ...(item.thumbnail_key ? { thumbnailKey: item.thumbnail_key.S } : {}),
     ...(thumbnailUrl ? { thumbnailUrl } : {}),
