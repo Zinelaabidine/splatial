@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect } from "react";
+import { CameraTrajectoryProvider } from "@/hooks/viewer/CameraTrajectoryContext";
 import { startViewer, stopViewer } from "@/viewer/engine/viewer";
 import ShotsPanel from "@/components/viewer/ShotsPanel";
+import ToursPanel from "@/components/viewer/ToursPanel";
 import TrajectoryControls from "@/components/viewer/TrajectoryControls";
 
 interface LegacySplatViewerProps {
@@ -11,6 +13,7 @@ interface LegacySplatViewerProps {
   /** When set, enables the Shots panel and deep-link handling. */
   sceneId?: string;
   shotId?: string | null;
+  tourId?: string | null;
   isSceneOwner?: boolean;
 }
 
@@ -26,6 +29,7 @@ export default function LegacySplatViewer({
   splatUrl,
   sceneId,
   shotId,
+  tourId,
   isSceneOwner = false,
 }: LegacySplatViewerProps) {
   useEffect(() => {
@@ -89,14 +93,23 @@ export default function LegacySplatViewer({
         <span id="camid" />
       </div>
 
-      <TrajectoryControls />
-      {sceneId ? (
-        <ShotsPanel
-          sceneId={sceneId}
-          shotId={shotId}
-          isSceneOwner={isSceneOwner}
-        />
-      ) : null}
+      <CameraTrajectoryProvider>
+        <TrajectoryControls />
+        {sceneId ? (
+          <>
+            <ShotsPanel
+              sceneId={sceneId}
+              shotId={shotId}
+              isSceneOwner={isSceneOwner}
+            />
+            <ToursPanel
+              sceneId={sceneId}
+              tourId={tourId}
+              isSceneOwner={isSceneOwner}
+            />
+          </>
+        ) : null}
+      </CameraTrajectoryProvider>
     </div>
   );
 }

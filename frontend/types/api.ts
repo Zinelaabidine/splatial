@@ -146,6 +146,29 @@ export interface ShotsResponse {
 }
 
 // ---------------------------------------------------------------------------
+// Scene tours (guided camera flythroughs)
+// ---------------------------------------------------------------------------
+export interface TourItem {
+  matrix: number[];
+  label?: string;
+}
+
+export interface Tour {
+  tourId: string;
+  sceneId: string;
+  creatorUsername: string;
+  title: string;
+  segmentDurationMs: number;
+  items: TourItem[];
+  createdAt: string;
+}
+
+export interface ToursResponse {
+  tours: Tour[];
+  nextCursor?: string;
+}
+
+// ---------------------------------------------------------------------------
 // Client-side UI state for the upload queue / right sidebar tracker
 // ---------------------------------------------------------------------------
 export type UploadStage =

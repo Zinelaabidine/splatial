@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
-import { useCameraTrajectory } from "@/hooks/viewer/useCameraTrajectory";
+import { useCameraTrajectoryContext } from "@/hooks/viewer/CameraTrajectoryContext";
 import { useMp4Export } from "@/hooks/viewer/useMp4Export";
 
 /**
@@ -10,7 +10,7 @@ import { useMp4Export } from "@/hooks/viewer/useMp4Export";
  * of the WebGL canvas.
  */
 export default function TrajectoryControls() {
-  const traj = useCameraTrajectory();
+  const traj = useCameraTrajectoryContext();
   const mp4  = useMp4Export();
 
   /**

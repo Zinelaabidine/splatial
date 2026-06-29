@@ -18,6 +18,7 @@ type GaussianViewerViewProps = {
   error: string | null;
   loading: boolean;
   shotId?: string | null;
+  tourId?: string | null;
   isSceneOwner?: boolean;
 };
 
@@ -29,6 +30,7 @@ export default function GaussianViewerView({
   error,
   loading,
   shotId,
+  tourId,
   isSceneOwner = false,
 }: GaussianViewerViewProps) {
   if (loading) {
@@ -61,6 +63,7 @@ export default function GaussianViewerView({
         splatUrl={splatUrl}
         sceneId={sceneId}
         shotId={shotId}
+        tourId={tourId}
         isSceneOwner={isSceneOwner}
       />
       <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 flex justify-center gap-3 px-4">
