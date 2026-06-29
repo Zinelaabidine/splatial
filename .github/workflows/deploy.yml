@@ -9,6 +9,8 @@ on:
       - "README.md"
       - "**/*.md"
       - "docs/**"
+      - "scripts/**"
+      - "worker/**"
       - ".cursor/**"
       - "**/*.prompt.md"
 permissions:
