@@ -10,6 +10,7 @@ import { UserAvatar } from "@/components/splatworks/SplatworksLogo";
 import { Button } from "@/components/ui/button";
 import { ApiRequestError } from "@/lib/api/apiErrors";
 import { apiSceneToDashboardScene } from "@/lib/scenes/sceneMappers";
+import { sceneViewerUrl } from "@/lib/scenes/viewerUrls";
 import {
   followUser,
   getProfileByUsername,
@@ -105,7 +106,12 @@ export default function PublicProfilePageClient() {
   const openScene = useCallback(
     (scene: DashboardScene) => {
       if (scene.status === "completed" && scene.sceneId) {
-        router.push(`/scenes/view?id=${scene.sceneId}`);
+        router.push(
+          sceneViewerUrl(scene.sceneId, {
+            forkedFromSceneId: scene.forkedFromSceneId,
+            forkedFromUsername: scene.forkedFromUsername,
+          }),
+        );
       }
     },
     [router],

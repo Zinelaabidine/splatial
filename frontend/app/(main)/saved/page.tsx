@@ -8,6 +8,7 @@ import SceneCardSkeleton from "@/components/splatworks/SceneCardSkeleton";
 import { Button } from "@/components/ui/button";
 import { ApiRequestError } from "@/lib/api/apiErrors";
 import { feedSceneToListItem, type PublicSceneListItem } from "@/lib/scenes/feedSceneMappers";
+import { sceneViewerUrl } from "@/lib/scenes/viewerUrls";
 import { getBookmarks } from "@/services/bookmarksService";
 import type { DashboardScene } from "@/types/splatworks";
 
@@ -56,7 +57,12 @@ export default function SavedPage() {
   const openScene = useCallback(
     (scene: DashboardScene) => {
       if (scene.status === "completed" && scene.sceneId) {
-        router.push(`/scenes/view?id=${scene.sceneId}`);
+        router.push(
+          sceneViewerUrl(scene.sceneId, {
+            forkedFromSceneId: scene.forkedFromSceneId,
+            forkedFromUsername: scene.forkedFromUsername,
+          }),
+        );
       }
     },
     [router],

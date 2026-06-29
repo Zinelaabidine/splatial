@@ -19,11 +19,25 @@ export default function ViewerPageClient() {
   const sceneId = searchParams.get("id") ?? "";
   const tourId = searchParams.get("tour");
   const shotId = tourId ? null : searchParams.get("shot");
+  const fromScene = searchParams.get("fromScene");
+  const fromUser = searchParams.get("fromUser");
+  const lineageFromUrl =
+    fromScene || fromUser
+      ? {
+          forkedFromSceneId: fromScene,
+          forkedFromUsername: fromUser,
+        }
+      : undefined;
   usePageSearch("", false);
 
   return (
     <div className="min-h-full">
-      <ViewerShell sceneId={sceneId} shotId={shotId} tourId={tourId} />
+      <ViewerShell
+        sceneId={sceneId}
+        shotId={shotId}
+        tourId={tourId}
+        lineageFromUrl={lineageFromUrl}
+      />
     </div>
   );
 }

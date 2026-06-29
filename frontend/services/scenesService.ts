@@ -4,6 +4,7 @@ import { authenticatedFetch } from "@/services/apiClient";
 import type {
   DeleteSceneResponse,
   ListScenesV1Response,
+  Scene,
   SceneStatusResponse,
   ThumbnailPresignResponse,
   UpdateSceneRequest,
@@ -65,6 +66,19 @@ export async function updateScene(
     body: JSON.stringify(body),
     signal,
   }) as Promise<UpdateSceneResponse>;
+}
+
+export async function forkScene(
+  sceneId: string,
+  name?: string,
+  signal?: AbortSignal,
+): Promise<Scene> {
+  const body = name !== undefined ? JSON.stringify({ name }) : undefined;
+  return authenticatedFetch(`/api/v1/scenes/${sceneId}/fork`, {
+    method: "POST",
+    ...(body ? { body } : {}),
+    signal,
+  }) as Promise<Scene>;
 }
 
 export async function presignSceneThumbnail(

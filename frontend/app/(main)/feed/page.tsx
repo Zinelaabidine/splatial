@@ -7,6 +7,7 @@ import PublicSceneCardGrid from "@/components/splatworks/PublicSceneCardGrid";
 import SceneCardSkeleton from "@/components/splatworks/SceneCardSkeleton";
 import { ApiRequestError } from "@/lib/api/apiErrors";
 import { feedSceneToListItem, type PublicSceneListItem } from "@/lib/scenes/feedSceneMappers";
+import { sceneViewerUrl } from "@/lib/scenes/viewerUrls";
 import { getFeed } from "@/services/feedService";
 import type { DashboardScene } from "@/types/splatworks";
 
@@ -55,7 +56,12 @@ export default function FeedPage() {
   const openScene = useCallback(
     (scene: DashboardScene) => {
       if (scene.status === "completed" && scene.sceneId) {
-        router.push(`/scenes/view?id=${scene.sceneId}`);
+        router.push(
+          sceneViewerUrl(scene.sceneId, {
+            forkedFromSceneId: scene.forkedFromSceneId,
+            forkedFromUsername: scene.forkedFromUsername,
+          }),
+        );
       }
     },
     [router],

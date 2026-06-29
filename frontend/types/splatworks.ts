@@ -87,6 +87,9 @@ export type DashboardScene = {
   reactionsTotal?: number;
   /** Denormalized comment count from list/feed API. */
   commentsCount?: number;
+  forkedFromSceneId?: string | null;
+  forkedFromUsername?: string | null;
+  forksCount?: number;
 };
 
 export type DashboardStats = {

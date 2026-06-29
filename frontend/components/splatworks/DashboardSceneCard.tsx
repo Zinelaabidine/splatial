@@ -4,6 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { MoreVertical, Pencil, RefreshCw, Send, Trash2, XCircle } from "lucide-react";
 
 import PointCloudThumbnail from "@/components/splatworks/PointCloudThumbnail";
+import CommentCountBadge from "@/components/splatworks/CommentCountBadge";
+import ForkCountBadge from "@/components/splatworks/ForkCountBadge";
+import ReactionTotalBadge from "@/components/splatworks/ReactionTotalBadge";
 import StatusDot, { STATUS_LABELS } from "@/components/splatworks/StatusDot";
 import SceneTaxonomyDisplay from "@/components/features/scenes/SceneTaxonomyDisplay";
 import { SceneVisibilityBadge, SceneVisibilityToggle } from "@/components/features/scenes/SceneVisibilityControl";
@@ -200,6 +203,18 @@ export default function DashboardSceneCard({
           className="mt-1.5"
         />
         <p className="mt-1 font-sw-mono text-xs text-[#909090]">{scene.caption}</p>
+        {(scene.forksCount != null && scene.forksCount > 0) ||
+        (scene.commentsCount != null && scene.commentsCount > 0) ||
+        (scene.reactionsTotal != null && scene.reactionsTotal > 0) ? (
+          <div className="mt-1.5 flex items-center gap-2">
+            <ForkCountBadge forksCount={scene.forksCount} />
+            <CommentCountBadge commentsCount={scene.commentsCount} />
+            <ReactionTotalBadge
+              reactionsTotal={scene.reactionsTotal}
+              reactionCounts={scene.reactionCounts}
+            />
+          </div>
+        ) : null}
         <div
           className="mt-3"
           onClick={(e) => e.stopPropagation()}

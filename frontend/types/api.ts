@@ -94,12 +94,16 @@ export interface SceneStatusResponse {
   sceneId: string;
   status: SceneManagementStatus;
   location: string | null;
+  name?: string;
   visibility?: SceneVisibility;
   reactionCounts?: ReactionCounts;
   reactionsTotal?: number;
   myReaction?: ReactionType | null;
   commentsCount?: number;
   isBookmarked?: boolean;
+  forkedFromSceneId?: string | null;
+  forkedFromUsername?: string | null;
+  forksCount?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -249,6 +253,11 @@ export interface Scene {
   reactionsTotal?: number;
   /** Denormalized comment count on list/feed responses. */
   commentsCount?: number;
+  /** Source scene when this scene is a remix/fork. */
+  forkedFromSceneId?: string | null;
+  forkedFromUsername?: string | null;
+  /** How many times this scene has been remixed. */
+  forksCount?: number;
 }
 
 export interface CreateSceneRequest {

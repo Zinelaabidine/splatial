@@ -1,8 +1,13 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import { Suspense } from "react";
 
 import BookmarkButton from "@/components/viewer/BookmarkButton";
+import ForkCountBadge from "@/components/splatworks/ForkCountBadge";
 import ReactionBar from "@/components/viewer/ReactionBar";
+import RemixAttribution from "@/components/viewer/RemixAttribution";
+import RemixButton from "@/components/viewer/RemixButton";
+import RemixSuccessBanner from "@/components/viewer/RemixSuccessBanner";
 import type { ReactionSummary } from "@/types/api";
 
 const LegacySplatViewer = dynamic(
@@ -15,6 +20,10 @@ type GaussianViewerViewProps = {
   splatUrl: string | null;
   reactionSummary: ReactionSummary | null;
   isBookmarked: boolean;
+  sceneName?: string;
+  forkedFromSceneId?: string | null;
+  forkedFromUsername?: string | null;
+  forksCount?: number;
   error: string | null;
   loading: boolean;
   shotId?: string | null;
@@ -27,6 +36,10 @@ export default function GaussianViewerView({
   splatUrl,
   reactionSummary,
   isBookmarked,
+  sceneName,
+  forkedFromSceneId,
+  forkedFromUsername,
+  forksCount = 0,
   error,
   loading,
   shotId,
@@ -57,6 +70,11 @@ export default function GaussianViewerView({
 
   if (!splatUrl) return null;
 
+  const showAttribution =
+    forkedFromSceneId &&
+    forkedFromUsername &&
+    forkedFromUsername.trim() !== "";
+
   return (
     <div className="relative h-full w-full">
       <LegacySplatViewer
@@ -66,10 +84,35 @@ export default function GaussianViewerView({
         tourId={tourId}
         isSceneOwner={isSceneOwner}
       />
-      <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 flex justify-center gap-3 px-4">
+
+      <Suspense fallback={null}>
+        <RemixSuccessBanner />
+      </Suspense>
+
+      {(showAttribution || forksCount > 0) && (
+        <div className="pointer-events-none absolute inset-x-0 top-4 z-10 flex flex-col items-center gap-2 px-4">
+          {showAttribution ? (
+            <div className="pointer-events-auto max-w-lg rounded-full border border-white/10 bg-black/70 px-4 py-2 shadow-lg backdrop-blur-md">
+              <RemixAttribution
+                forkedFromSceneId={forkedFromSceneId}
+                forkedFromUsername={forkedFromUsername}
+              />
+            </div>
+          ) : null}
+          {forksCount > 0 ? (
+            <ForkCountBadge
+              forksCount={forksCount}
+              className="pointer-events-auto rounded-full border border-white/10 bg-black/70 px-3 py-1.5 text-white/80 shadow-lg backdrop-blur-md"
+            />
+          ) : null}
+        </div>
+      )}
+
+      <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 flex flex-wrap items-end justify-center gap-3 px-4">
         {reactionSummary ? (
           <ReactionBar key={sceneId} sceneId={sceneId} initialSummary={reactionSummary} />
         ) : null}
+        <RemixButton sceneId={sceneId} sceneName={sceneName} />
         <BookmarkButton
           key={`${sceneId}-bookmark`}
           sceneId={sceneId}

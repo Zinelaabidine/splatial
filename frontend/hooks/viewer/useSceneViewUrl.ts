@@ -17,6 +17,10 @@ export function useSceneViewUrl(sceneId: string) {
   const [reactionSummary, setReactionSummary] = useState<ReactionSummary | null>(null);
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [commentsCount, setCommentsCount] = useState(0);
+  const [sceneName, setSceneName] = useState<string | undefined>(undefined);
+  const [forkedFromSceneId, setForkedFromSceneId] = useState<string | null>(null);
+  const [forkedFromUsername, setForkedFromUsername] = useState<string | null>(null);
+  const [forksCount, setForksCount] = useState(0);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [loading, setLoading] = useState(() => Boolean(sceneId));
 
@@ -33,6 +37,10 @@ export function useSceneViewUrl(sceneId: string) {
       setReactionSummary(null);
       setIsBookmarked(false);
       setCommentsCount(0);
+      setSceneName(undefined);
+      setForkedFromSceneId(null);
+      setForkedFromUsername(null);
+      setForksCount(0);
 
       try {
         const scene = await getSceneStatus(sceneId, ctrl.signal);
@@ -47,6 +55,10 @@ export function useSceneViewUrl(sceneId: string) {
           );
           setCommentsCount(scene.commentsCount ?? 0);
           setIsBookmarked(scene.isBookmarked ?? false);
+          if (scene.name) setSceneName(scene.name);
+          if (scene.forkedFromSceneId) setForkedFromSceneId(scene.forkedFromSceneId);
+          if (scene.forkedFromUsername) setForkedFromUsername(scene.forkedFromUsername);
+          setForksCount(scene.forksCount ?? 0);
         }
 
         if (scene.status !== "READY") {
@@ -88,6 +100,10 @@ export function useSceneViewUrl(sceneId: string) {
     isBookmarked: sceneId ? isBookmarked : false,
     commentsCount: sceneId ? commentsCount : 0,
     setCommentsCount,
+    sceneName: sceneId ? sceneName : undefined,
+    forkedFromSceneId: sceneId ? forkedFromSceneId : null,
+    forkedFromUsername: sceneId ? forkedFromUsername : null,
+    forksCount: sceneId ? forksCount : 0,
     error: sceneId ? fetchError : "No scene selected.",
     loading: sceneId ? loading : false,
   };

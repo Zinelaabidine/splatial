@@ -22,20 +22,38 @@ type GaussianViewerProps = {
   sceneId: string;
   shotId?: string | null;
   tourId?: string | null;
+  lineageFromUrl?: {
+    forkedFromSceneId: string | null;
+    forkedFromUsername: string | null;
+  };
 };
 
 /** Resolves the presigned view URL and renders the viewer with comments below. */
-export default function GaussianViewer({ sceneId, shotId, tourId }: GaussianViewerProps) {
+export default function GaussianViewer({
+  sceneId,
+  shotId,
+  tourId,
+  lineageFromUrl,
+}: GaussianViewerProps) {
   const {
     splatUrl,
     reactionSummary,
     isBookmarked,
     commentsCount,
     setCommentsCount,
+    sceneName,
+    forkedFromSceneId: forkedFromSceneIdFromApi,
+    forkedFromUsername: forkedFromUsernameFromApi,
+    forksCount,
     error,
     loading,
   } = useSceneViewUrl(sceneId);
   const isSceneOwner = useIsSceneOwner(sceneId);
+
+  const forkedFromSceneId =
+    forkedFromSceneIdFromApi ?? lineageFromUrl?.forkedFromSceneId ?? null;
+  const forkedFromUsername =
+    forkedFromUsernameFromApi ?? lineageFromUrl?.forkedFromUsername ?? null;
 
   return (
     <div className="flex min-h-full flex-col">
@@ -45,6 +63,10 @@ export default function GaussianViewer({ sceneId, shotId, tourId }: GaussianView
           splatUrl={splatUrl}
           reactionSummary={reactionSummary}
           isBookmarked={isBookmarked}
+          sceneName={sceneName}
+          forkedFromSceneId={forkedFromSceneId}
+          forkedFromUsername={forkedFromUsername}
+          forksCount={forksCount}
           error={error}
           loading={loading}
           shotId={shotId}

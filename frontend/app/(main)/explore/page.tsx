@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { ApiRequestError } from "@/lib/api/apiErrors";
 import { SCENE_CATEGORIES, isSceneCategory } from "@/lib/scenes/categories";
 import { feedSceneToListItem, type PublicSceneListItem } from "@/lib/scenes/feedSceneMappers";
+import { sceneViewerUrl } from "@/lib/scenes/viewerUrls";
 import { cn } from "@/lib/utils";
 import { getExplore } from "@/services/exploreService";
 import type { DashboardScene } from "@/types/splatworks";
@@ -109,7 +110,12 @@ export default function ExplorePage() {
   const openScene = useCallback(
     (scene: DashboardScene) => {
       if (scene.status === "completed" && scene.sceneId) {
-        router.push(`/scenes/view?id=${scene.sceneId}`);
+        router.push(
+          sceneViewerUrl(scene.sceneId, {
+            forkedFromSceneId: scene.forkedFromSceneId,
+            forkedFromUsername: scene.forkedFromUsername,
+          }),
+        );
       }
     },
     [router],

@@ -11,6 +11,7 @@ import {
 import { cancelJob, submitJob } from "@/services/jobsService";
 import { deleteScene, listScenes, updateScene } from "@/services/scenesService";
 import { ApiRequestError } from "@/lib/api/apiErrors";
+import { sceneViewerUrl } from "@/lib/scenes/viewerUrls";
 import type { SceneVisibility } from "@/types/api";
 import type { DashboardScene } from "@/types/splatworks";
 
@@ -80,7 +81,12 @@ export function useScenesDashboardGrid(search: string) {
 
   const openScene = (scene: DashboardScene) => {
     if (scene.status === "completed" && scene.sceneId) {
-      router.push(`/scenes/view?id=${scene.sceneId}`);
+      router.push(
+        sceneViewerUrl(scene.sceneId, {
+          forkedFromSceneId: scene.forkedFromSceneId,
+          forkedFromUsername: scene.forkedFromUsername,
+        }),
+      );
     }
   };
 

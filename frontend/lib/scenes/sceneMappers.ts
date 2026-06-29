@@ -143,6 +143,13 @@ export function apiSceneToDashboardScene(scene: Scene): DashboardScene {
     ...(scene.reactionCounts ? { reactionCounts: scene.reactionCounts } : {}),
     ...(scene.reactionsTotal != null ? { reactionsTotal: scene.reactionsTotal } : {}),
     ...(scene.commentsCount != null ? { commentsCount: scene.commentsCount } : {}),
+    ...(scene.forkedFromSceneId != null
+      ? { forkedFromSceneId: scene.forkedFromSceneId }
+      : {}),
+    ...(scene.forkedFromUsername != null
+      ? { forkedFromUsername: scene.forkedFromUsername }
+      : {}),
+    ...(scene.forksCount != null ? { forksCount: scene.forksCount } : {}),
   };
 
   if (status === "completed") {
