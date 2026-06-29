@@ -154,6 +154,7 @@ module.exports = {
   validateDisplayName,
   validateBio,
   displayNameFromClaims,
+  counterValue,
   profileResponseFromItem,
   buildMinimalProfileItem,
   resolveUserIdByUsername,

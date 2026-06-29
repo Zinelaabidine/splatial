@@ -7,6 +7,7 @@ const {
   validateUsername,
   resolveUserIdByUsername,
 } = require("../lib/profile");
+const { isFollowing } = require("../lib/follows");
 
 const dynamo = new DynamoDBClient({});
 const PROFILES_TABLE = process.env.PROFILES_TABLE_NAME;
@@ -44,6 +45,13 @@ exports.handler = async (event) => {
     return response(404, { error: "Profile not found" });
   }
 
-  const body = await profileResponseFromItem(profile.Item);
+  const isSelf = userId === ownerId;
+  const following = isSelf ? false : await isFollowing(userId, ownerId);
+
+  const body = {
+    ...(await profileResponseFromItem(profile.Item)),
+    isSelf,
+    isFollowing: following,
+  };
   return response(200, body);
 };
