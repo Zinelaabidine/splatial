@@ -25,9 +25,19 @@ function sceneResponseFromItem(item, thumbnailUrl) {
   };
 }
 
+function feedItemFromScene(item, thumbnailUrl, ownerAvatarUrl) {
+  return {
+    ...sceneResponseFromItem(item, thumbnailUrl),
+    ownerUsername: item.owner_username?.S ?? "",
+    ownerDisplayName: item.owner_display_name?.S ?? "",
+    ownerAvatarUrl: ownerAvatarUrl ?? null,
+  };
+}
+
 module.exports = {
   ALLOWED_VISIBILITY,
   DEFAULT_VISIBILITY,
   sceneVisibilityFromItem,
   sceneResponseFromItem,
+  feedItemFromScene,
 };

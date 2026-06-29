@@ -3,6 +3,7 @@
 const {
   DynamoDBClient,
   GetItemCommand,
+  QueryCommand,
   TransactWriteItemsCommand,
 } = require("@aws-sdk/client-dynamodb");
 const { counterValue } = require("./profile");
@@ -10,6 +11,9 @@ const { counterValue } = require("./profile");
 const dynamo = new DynamoDBClient({});
 const FOLLOWS_TABLE = process.env.FOLLOWS_TABLE_NAME;
 const PROFILES_TABLE = process.env.PROFILES_TABLE_NAME;
+
+/** MVP cap — listFollowing stops paging once this many followees are collected. */
+const MAX_FOLLOWING = 500;
 
 async function getFollowersCount(followeeId) {
   const result = await dynamo.send(
@@ -19,6 +23,38 @@ async function getFollowersCount(followeeId) {
     })
   );
   return counterValue(result.Item, "followers_count");
+}
+
+/**
+ * Returns followee_id strings for everyone the given user follows.
+ * Pages internally until all rows are read or MAX_FOLLOWING is reached.
+ */
+async function listFollowing(followerId, limit) {
+  const cap = Math.min(typeof limit === "number" && limit > 0 ? limit : MAX_FOLLOWING, MAX_FOLLOWING);
+  const followeeIds = [];
+  let exclusiveStartKey;
+
+  while (followeeIds.length < cap) {
+    const result = await dynamo.send(
+      new QueryCommand({
+        TableName: FOLLOWS_TABLE,
+        KeyConditionExpression: "follower_id = :me",
+        ExpressionAttributeValues: { ":me": { S: followerId } },
+        ExclusiveStartKey: exclusiveStartKey,
+        Limit: Math.min(100, cap - followeeIds.length),
+      })
+    );
+
+    for (const item of result.Items ?? []) {
+      const id = item.followee_id?.S;
+      if (id) followeeIds.push(id);
+    }
+
+    if (!result.LastEvaluatedKey || followeeIds.length >= cap) break;
+    exclusiveStartKey = result.LastEvaluatedKey;
+  }
+
+  return followeeIds;
 }
 
 async function isFollowing(followerId, followeeId) {
@@ -166,4 +202,6 @@ module.exports = {
   unfollowUser,
   isFollowing,
   getFollowersCount,
+  listFollowing,
+  MAX_FOLLOWING,
 };
