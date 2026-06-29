@@ -288,9 +288,8 @@ data "aws_iam_policy_document" "github_deploy_policy" {
     ]
   }
 
-  # Scoped exclusively to the two roles this module owns: the GitHub deployment
-  # role and the Lambda execution role. No other role ARN is permitted here to
-  # prevent unchecked privilege escalation.
+  # Scoped to project-owned IAM roles. Constructed ARNs cover roles that may not
+  # exist yet on first apply (or legacy roles mid-teardown).
   statement {
     sid    = "IAMProjectRolesManage"
     effect = "Allow"
@@ -306,6 +305,7 @@ data "aws_iam_policy_document" "github_deploy_policy" {
       "iam:AttachRolePolicy",
       "iam:DetachRolePolicy",
       "iam:ListAttachedRolePolicies",
+      "iam:ListInstanceProfilesForRole",
       "iam:TagRole",
       "iam:UntagRole",
       "iam:ListRoleTags",
@@ -313,6 +313,8 @@ data "aws_iam_policy_document" "github_deploy_policy" {
     resources = [
       "arn:aws:iam::886601940523:role/${local.name_prefix}-github-deploy-role",
       "arn:aws:iam::886601940523:role/splatial-local-dev-role",
+      # Legacy helloFromLambda scaffold exec role (tear-down only; role removed from config).
+      "arn:aws:iam::886601940523:role/${var.name}-lambda-exec-role",
       # Constructed ARN for the upload Lambda execution role (does not exist yet).
       "arn:aws:iam::886601940523:role/${var.name}-upload-lambda-exec-role",
       # Constructed ARN for the Google Drive import Lambda execution role.
