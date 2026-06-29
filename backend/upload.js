@@ -26,6 +26,7 @@ const followDelete = require("./handlers/follow-delete");
 const profileScenesList = require("./handlers/profile-scenes-list");
 const profileUsernameAvailable = require("./handlers/profile-username-available");
 const feedList = require("./handlers/feed-list");
+const exploreList = require("./handlers/explore-list");
 const response    = require("./lib/response");
 
 exports.handler = async (event) => {
@@ -92,6 +93,8 @@ exports.handler = async (event) => {
         return await profileUsernameAvailable.handler(event);
       case "GET /api/v1/feed":
         return await feedList.handler(event);
+      case "GET /api/v1/explore":
+        return await exploreList.handler(event);
 
       // ── Admin (admin-group gated inside the handler) ─────────────────────
       case "GET /admin/attempts":

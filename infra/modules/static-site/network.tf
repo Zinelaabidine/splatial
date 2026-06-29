@@ -425,6 +425,16 @@ resource "aws_apigatewayv2_route" "feed_list" {
   target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
 }
 
+resource "aws_apigatewayv2_route" "explore_list" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "GET /api/v1/explore"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
 # ── Job Management ────────────────────────────────────────────────────────────
 
 resource "aws_apigatewayv2_route" "job_submit" {
