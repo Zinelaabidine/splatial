@@ -4,7 +4,7 @@ const { S3Client, GetObjectCommand } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { DynamoDBClient, ScanCommand } = require("@aws-sdk/client-dynamodb");
 const response = require("../lib/response");
-const { mapProgressFromItem } = require("../lib/progress-fields");
+const { sceneResponseFromItem } = require("../lib/scene-response");
 
 const s3 = new S3Client({});
 const dynamo = new DynamoDBClient({});
@@ -34,7 +34,7 @@ async function presignedThumbnailUrl(item) {
  *       for MVP but will not scale.
  *
  * Success response (200):
- *   { "scenes": [{ "sceneId": "...", "name": "...", "inputType": "...", "status": "...", "createdAt": "..." }] }
+ *   { "scenes": [{ "sceneId": "...", "name": "...", "inputType": "...", "status": "...", "createdAt": "...", "visibility": "PRIVATE" | "PUBLIC" }] }
  */
 exports.handler = async (event) => {
   const claims = event.requestContext?.authorizer?.jwt?.claims;
@@ -53,17 +53,7 @@ exports.handler = async (event) => {
   const scenes = await Promise.all(
     (result.Items ?? []).map(async (item) => {
       const thumbnailUrl = await presignedThumbnailUrl(item);
-      return {
-        sceneId: item.scene_id?.S ?? "",
-        name: item.name?.S ?? "",
-        inputType: item.input_type?.S ?? "",
-        status: item.status?.S ?? "",
-        createdAt: item.created_at?.S ?? "",
-        ...(item.ply_key ? { plyKey: item.ply_key.S } : {}),
-        ...(item.thumbnail_key ? { thumbnailKey: item.thumbnail_key.S } : {}),
-        ...(thumbnailUrl ? { thumbnailUrl } : {}),
-        ...mapProgressFromItem(item),
-      };
+      return sceneResponseFromItem(item, thumbnailUrl);
     })
   );
 

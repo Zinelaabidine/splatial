@@ -4,7 +4,16 @@ const { S3Client, GetObjectCommand } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { DynamoDBClient, GetItemCommand, UpdateItemCommand } = require("@aws-sdk/client-dynamodb");
 const response = require("../lib/response");
-const { mapProgressFromItem } = require("../lib/progress-fields");
+const {
+  adjustPublicScenesCount,
+  buildOwnerRefreshUpdate,
+  getOwnerProfile,
+} = require("../lib/scene-owner");
+const {
+  ALLOWED_VISIBILITY,
+  sceneResponseFromItem,
+  sceneVisibilityFromItem,
+} = require("../lib/scene-response");
 const {
   resolveSceneViewObject,
   thumbnailKeyForViewKey,
@@ -25,27 +34,13 @@ async function presignedThumbnailUrl(bucket, key) {
   );
 }
 
-function sceneResponseFromItem(item, thumbnailUrl) {
-  return {
-    sceneId: item.scene_id?.S ?? "",
-    name: item.name?.S ?? "",
-    inputType: item.input_type?.S ?? "",
-    status: item.status?.S ?? "",
-    createdAt: item.created_at?.S ?? "",
-    ...(item.ply_key ? { plyKey: item.ply_key.S } : {}),
-    ...(item.thumbnail_key ? { thumbnailKey: item.thumbnail_key.S } : {}),
-    ...(thumbnailUrl ? { thumbnailUrl } : {}),
-    ...mapProgressFromItem(item),
-  };
-}
-
 /**
  * PATCH /api/v1/scenes/{sceneId}
  *
  * Updates scene metadata owned by the caller.
  *
  * Request body (at least one field required):
- *   { "name"?: string, "thumbnailKey"?: string }
+ *   { "name"?: string, "thumbnailKey"?: string, "visibility"?: "PUBLIC" | "PRIVATE" }
  *
  * thumbnailKey must match the key returned by POST .../thumbnail/presign
  * after the client uploads the JPEG to S3.
@@ -67,12 +62,13 @@ exports.handler = async (event) => {
     return response(400, { error: "Invalid JSON body" });
   }
 
-  const { name, thumbnailKey } = body;
+  const { name, thumbnailKey, visibility } = body;
   const hasName = name !== undefined;
   const hasThumbnailKey = thumbnailKey !== undefined;
+  const hasVisibility = visibility !== undefined;
 
-  if (!hasName && !hasThumbnailKey) {
-    return response(400, { error: "Provide at least one of: name, thumbnailKey" });
+  if (!hasName && !hasThumbnailKey && !hasVisibility) {
+    return response(400, { error: "Provide at least one of: name, thumbnailKey, visibility" });
   }
 
   if (hasName && (typeof name !== "string" || name.trim() === "")) {
@@ -81,6 +77,10 @@ exports.handler = async (event) => {
 
   if (hasThumbnailKey && (typeof thumbnailKey !== "string" || thumbnailKey.trim() === "")) {
     return response(400, { error: "thumbnailKey must be a non-empty string" });
+  }
+
+  if (hasVisibility && !ALLOWED_VISIBILITY.has(visibility)) {
+    return response(400, { error: "visibility must be 'PUBLIC' or 'PRIVATE'" });
   }
 
   const existing = await dynamo.send(
@@ -114,10 +114,23 @@ exports.handler = async (event) => {
     }
   }
 
+  const currentVisibility = sceneVisibilityFromItem(item);
+  const visibilityChanging = hasVisibility && visibility !== currentVisibility;
+
+  let ownerRefresh = null;
+  if (visibilityChanging) {
+    const profile = await getOwnerProfile(userId);
+    if (!profile?.username?.S) {
+      return response(400, { error: "Complete profile setup before changing scene visibility" });
+    }
+    ownerRefresh = buildOwnerRefreshUpdate(profile, userId);
+  }
+
   const now = new Date().toISOString();
   const exprParts = ["updated_at = :now"];
   const exprValues = { ":now": { S: now }, ":uid": { S: userId } };
   const exprNames = {};
+  const removeParts = [];
 
   if (hasName) {
     exprParts.push("#nm = :name");
@@ -132,17 +145,41 @@ exports.handler = async (event) => {
     exprValues[":thumbBucket"] = { S: resolvedViewObject.bucket };
   }
 
+  if (hasVisibility) {
+    exprParts.push("visibility = :visibility");
+    exprValues[":visibility"] = { S: visibility };
+  }
+
+  if (ownerRefresh) {
+    exprParts.push(...ownerRefresh.setParts);
+    removeParts.push(...ownerRefresh.removeParts);
+    Object.assign(exprValues, ownerRefresh.values);
+  }
+
+  let updateExpression = `SET ${exprParts.join(", ")}`;
+  if (removeParts.length > 0) {
+    updateExpression += ` REMOVE ${removeParts.join(", ")}`;
+  }
+
   const updateResult = await dynamo.send(
     new UpdateItemCommand({
       TableName: TABLE,
       Key: { scene_id: { S: sceneId } },
-      UpdateExpression: `SET ${exprParts.join(", ")}`,
+      UpdateExpression: updateExpression,
       ConditionExpression: "user_id = :uid",
       ExpressionAttributeNames: Object.keys(exprNames).length > 0 ? exprNames : undefined,
       ExpressionAttributeValues: exprValues,
       ReturnValues: "ALL_NEW",
     })
   );
+
+  if (visibilityChanging) {
+    if (visibility === "PUBLIC") {
+      await adjustPublicScenesCount(userId, 1);
+    } else {
+      await adjustPublicScenesCount(userId, -1);
+    }
+  }
 
   const updated = updateResult.Attributes ?? item;
   let thumbnailUrl;

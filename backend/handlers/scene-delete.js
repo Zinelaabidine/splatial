@@ -14,6 +14,8 @@ const {
   S3Client,
 } = require("../lib/s3-cleanup");
 const response = require("../lib/response");
+const { adjustPublicScenesCount } = require("../lib/scene-owner");
+const { sceneVisibilityFromItem } = require("../lib/scene-response");
 
 const dynamo = new DynamoDBClient({});
 const s3 = new S3Client({});
@@ -67,6 +69,7 @@ exports.handler = async (event) => {
 
   const logContext = { sceneId, userId };
   const currentStatus = item.status?.S ?? "";
+  const wasPublic = sceneVisibilityFromItem(item) === "PUBLIC";
   let cancelledJob = false;
 
   if (ACTIVE_STATUSES.has(currentStatus)) {
@@ -185,6 +188,10 @@ exports.handler = async (event) => {
       ExpressionAttributeValues: { ":uid": { S: userId } },
     })
   );
+
+  if (wasPublic) {
+    await adjustPublicScenesCount(userId, -1);
+  }
 
   return response(200, { sceneId, deleted: true, cancelledJob });
 };

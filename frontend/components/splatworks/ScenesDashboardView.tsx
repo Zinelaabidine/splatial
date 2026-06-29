@@ -67,6 +67,8 @@ export default function ScenesDashboardView() {
     setEditError,
     dismissEditModal,
     handleSceneEdited,
+    toggleSceneVisibility,
+    visibilityUpdatingId,
     dismissDeleteModal,
     confirmDelete,
   } = useScenesDashboardGrid(search);
@@ -137,8 +139,12 @@ export default function ScenesDashboardView() {
               onCancelScene={cancelScene}
               onDeleteScene={remove}
               onEditScene={edit}
+              onVisibilityChange={(scene, visibility) => {
+                void toggleSceneVisibility(scene, visibility);
+              }}
               submitting={submittingId === scene.sceneId}
               cancelling={cancellingId === scene.sceneId}
+              visibilityUpdating={visibilityUpdatingId === scene.sceneId}
             />
           ))}
         </div>

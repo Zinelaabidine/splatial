@@ -5,7 +5,9 @@ import { useCallback, useEffect, useState } from "react";
 import { Camera, Loader2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { SceneVisibilityToggle } from "@/components/features/scenes/SceneVisibilityControl";
 import { useSceneViewUrl } from "@/hooks/viewer/useSceneViewUrl";
+import { ApiRequestError } from "@/lib/api/apiErrors";
 import {
   blobToObjectUrl,
   captureViewerCanvas,
@@ -15,6 +17,7 @@ import {
   updateScene,
   uploadThumbnailToS3,
 } from "@/services/scenesService";
+import type { SceneVisibility } from "@/types/api";
 import type { DashboardScene } from "@/types/splatworks";
 
 const LegacySplatViewer = dynamic(
@@ -34,7 +37,11 @@ type EditSceneModalProps = {
   saving: boolean;
   error: string | null;
   onDismiss: () => void;
-  onSaved: (updated: { title: string; thumbnailUrl?: string }) => void;
+  onSaved: (updated: {
+    title: string;
+    thumbnailUrl?: string;
+    visibility?: SceneVisibility;
+  }) => void;
   onSavingChange: (saving: boolean) => void;
   onError: (message: string | null) => void;
 };
@@ -72,6 +79,7 @@ export default function EditSceneModal({
 }: EditSceneModalProps) {
   const sceneId = scene.sceneId ?? scene.id;
   const [name, setName] = useState(scene.title);
+  const [visibility, setVisibility] = useState<SceneVisibility>(scene.visibility ?? "PRIVATE");
   const [thumbnailBlob, setThumbnailBlob] = useState<Blob | null>(null);
   const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(
     scene.thumbnailUrl ?? null,
@@ -114,8 +122,9 @@ export default function EditSceneModal({
 
     const nameChanged = trimmedName !== scene.title;
     const thumbnailChanged = thumbnailBlob != null;
+    const visibilityChanged = visibility !== (scene.visibility ?? "PRIVATE");
 
-    if (!nameChanged && !thumbnailChanged) {
+    if (!nameChanged && !thumbnailChanged && !visibilityChanged) {
       onDismiss();
       return;
     }
@@ -136,20 +145,26 @@ export default function EditSceneModal({
         thumbnailKey = presign.key;
       }
 
-      const payload: { name?: string; thumbnailKey?: string } = {};
+      const payload: { name?: string; thumbnailKey?: string; visibility?: SceneVisibility } = {};
       if (nameChanged) payload.name = trimmedName;
       if (thumbnailKey) payload.thumbnailKey = thumbnailKey;
+      if (visibilityChanged) payload.visibility = visibility;
 
       const updated = await updateScene(sceneId, payload);
 
       onSaved({
         title: updated.name,
+        visibility: updated.visibility,
         ...(updated.thumbnailUrl ? { thumbnailUrl: updated.thumbnailUrl } : {}),
       });
     } catch (err) {
       console.error("[EditSceneModal] save failed", err);
       onError(
-        err instanceof Error ? err.message : "Failed to save changes. Please try again.",
+        err instanceof ApiRequestError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "Failed to save changes. Please try again.",
       );
     } finally {
       onSavingChange(false);
@@ -157,6 +172,8 @@ export default function EditSceneModal({
   }, [
     name,
     scene.title,
+    scene.visibility,
+    visibility,
     thumbnailBlob,
     sceneId,
     onDismiss,
@@ -213,6 +230,12 @@ export default function EditSceneModal({
               className="rounded-lg border border-[#404040] bg-[#262626] px-3 py-2 text-sm text-white outline-none transition focus:border-[#6366f1] focus:ring-2 focus:ring-[#6366f1]/20 disabled:opacity-50"
             />
           </div>
+
+          <SceneVisibilityToggle
+            visibility={visibility}
+            disabled={busy}
+            onToggle={setVisibility}
+          />
 
           <div className="relative overflow-hidden rounded-xl border border-[#303030] bg-[#0a0a0a]">
             <div className="relative h-[min(52vh,420px)] w-full [&_.splat-viewer-container]:h-full [&_#canvas]:h-full [&_#canvas]:w-full">

@@ -5,10 +5,12 @@ import { MoreVertical, Pencil, RefreshCw, Send, Trash2, XCircle } from "lucide-r
 
 import PointCloudThumbnail from "@/components/splatworks/PointCloudThumbnail";
 import StatusDot, { STATUS_LABELS } from "@/components/splatworks/StatusDot";
+import { SceneVisibilityBadge, SceneVisibilityToggle } from "@/components/features/scenes/SceneVisibilityControl";
 import { Button } from "@/components/ui/button";
 import { formatProgressSubPhase } from "@/lib/scenes/progressLabels";
 import { isActiveGpuJobStatus } from "@/lib/scenes/sceneMappers";
 import { cn } from "@/lib/utils";
+import type { SceneVisibility } from "@/types/api";
 import type { DashboardScene, SceneStatus } from "@/types/splatworks";
 
 const DARK_STATUS: Record<
@@ -29,8 +31,10 @@ type DashboardSceneCardProps = {
   onCancelScene?: (scene: DashboardScene) => void;
   onDeleteScene?: (scene: DashboardScene) => void;
   onEditScene?: (scene: DashboardScene) => void;
+  onVisibilityChange?: (scene: DashboardScene, visibility: SceneVisibility) => void;
   submitting?: boolean;
   cancelling?: boolean;
+  visibilityUpdating?: boolean;
 };
 
 function canSubmitScene(scene: DashboardScene): boolean {
@@ -48,12 +52,15 @@ export default function DashboardSceneCard({
   onCancelScene,
   onDeleteScene,
   onEditScene,
+  onVisibilityChange,
   submitting = false,
   cancelling = false,
+  visibilityUpdating = false,
 }: DashboardSceneCardProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const styles = DARK_STATUS[scene.status];
+  const visibility = scene.visibility ?? "PRIVATE";
   const isViewable = scene.status === "completed";
   const showSubmit = canSubmitScene(scene);
   const showCancel = isActiveGpuJobStatus(scene.apiStatus);
@@ -120,9 +127,14 @@ export default function DashboardSceneCard({
 
       <div className="rounded-b-xl p-3">
         <div className="flex items-start gap-2">
-          <h3 className="min-w-0 flex-1 truncate text-[15px] font-semibold text-white">
-            {scene.title}
-          </h3>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <h3 className="min-w-0 flex-1 truncate text-[15px] font-semibold text-white">
+                {scene.title}
+              </h3>
+              <SceneVisibilityBadge visibility={visibility} />
+            </div>
+          </div>
           <div
             ref={menuRef}
             className="relative shrink-0"
@@ -182,6 +194,17 @@ export default function DashboardSceneCard({
           </div>
         </div>
         <p className="mt-1 font-sw-mono text-xs text-[#909090]">{scene.caption}</p>
+        <div
+          className="mt-3"
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          <SceneVisibilityToggle
+            visibility={visibility}
+            disabled={visibilityUpdating}
+            onToggle={(nextVisibility) => onVisibilityChange?.(scene, nextVisibility)}
+          />
+        </div>
         {showCancel && (
           <Button
             size="sm"

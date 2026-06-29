@@ -2,6 +2,7 @@
 
 const { DynamoDBClient, GetItemCommand } = require("@aws-sdk/client-dynamodb");
 const response = require("../lib/response");
+const { sceneVisibilityFromItem } = require("../lib/scene-response");
 
 const dynamo = new DynamoDBClient({});
 const TABLE = process.env.SCENES_TABLE_NAME;
@@ -40,5 +41,6 @@ exports.handler = async (event) => {
     sceneId,
     status: item.status?.S ?? "PROCESSING",
     location: item.s3_location?.S ?? null,
+    visibility: sceneVisibilityFromItem(item),
   });
 };

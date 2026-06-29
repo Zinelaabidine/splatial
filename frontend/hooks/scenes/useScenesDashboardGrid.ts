@@ -9,7 +9,9 @@ import {
   POLL_INTERVAL_MS,
 } from "@/lib/scenes/sceneMappers";
 import { cancelJob, submitJob } from "@/services/jobsService";
-import { deleteScene, listScenes } from "@/services/scenesService";
+import { deleteScene, listScenes, updateScene } from "@/services/scenesService";
+import { ApiRequestError } from "@/lib/api/apiErrors";
+import type { SceneVisibility } from "@/types/api";
 import type { DashboardScene } from "@/types/splatworks";
 
 export function useScenesDashboardGrid(search: string) {
@@ -26,6 +28,7 @@ export function useScenesDashboardGrid(search: string) {
   const [editTarget, setEditTarget] = useState<DashboardScene | null>(null);
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [visibilityUpdatingId, setVisibilityUpdatingId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -180,7 +183,7 @@ export function useScenesDashboardGrid(search: string) {
   }, [editSaving]);
 
   const handleSceneEdited = useCallback(
-    (updated: { title: string; thumbnailUrl?: string }) => {
+    (updated: { title: string; thumbnailUrl?: string; visibility?: SceneVisibility }) => {
       if (!editTarget) return;
       setScenes((prev) =>
         prev.map((s) =>
@@ -188,6 +191,7 @@ export function useScenesDashboardGrid(search: string) {
             ? {
                 ...s,
                 title: updated.title,
+                ...(updated.visibility ? { visibility: updated.visibility } : {}),
                 ...(updated.thumbnailUrl
                   ? { thumbnailUrl: updated.thumbnailUrl, preview: undefined }
                   : {}),
@@ -200,6 +204,41 @@ export function useScenesDashboardGrid(search: string) {
       setActionMessage("Scene updated.");
     },
     [editTarget],
+  );
+
+  const toggleSceneVisibility = useCallback(
+    async (scene: DashboardScene, nextVisibility: SceneVisibility) => {
+      const sceneId = scene.sceneId ?? scene.id;
+      const currentVisibility = scene.visibility ?? "PRIVATE";
+      if (nextVisibility === currentVisibility || visibilityUpdatingId) return;
+
+      setVisibilityUpdatingId(sceneId);
+      setActionError(null);
+      setScenes((prev) =>
+        prev.map((s) =>
+          s.id === scene.id ? { ...s, visibility: nextVisibility } : s,
+        ),
+      );
+
+      try {
+        await updateScene(sceneId, { visibility: nextVisibility });
+      } catch (err) {
+        console.error("[useScenesDashboardGrid] visibility update failed", err);
+        setScenes((prev) =>
+          prev.map((s) =>
+            s.id === scene.id ? { ...s, visibility: currentVisibility } : s,
+          ),
+        );
+        setActionError(
+          err instanceof ApiRequestError
+            ? err.message
+            : "Failed to update scene visibility. Please try again.",
+        );
+      } finally {
+        setVisibilityUpdatingId(null);
+      }
+    },
+    [visibilityUpdatingId],
   );
 
   const dismissDeleteModal = useCallback(() => {
@@ -261,10 +300,12 @@ export function useScenesDashboardGrid(search: string) {
     editTarget,
     editSaving,
     editError,
+    visibilityUpdatingId,
     setEditSaving,
     setEditError,
     dismissEditModal,
     handleSceneEdited,
+    toggleSceneVisibility,
     dismissDeleteModal,
     confirmDelete,
   };

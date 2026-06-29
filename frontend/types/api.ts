@@ -131,11 +131,15 @@ export type InputType = "video" | "images" | "ply";
 
 export type SceneManagementStatus = "PENDING_UPLOAD" | "UPLOADED" | "QUEUED" | "PROCESSING" | "READY" | "FAILED" | "CANCELLED";
 
+export type SceneVisibility = "PUBLIC" | "PRIVATE";
+
 export interface Scene {
   sceneId: string;
   name: string;
   inputType: InputType;
   status: SceneManagementStatus;
+  /** Public scenes appear on explore/feed; missing values are treated as PRIVATE. */
+  visibility: SceneVisibility;
   createdAt: string;
   /** S3 key in the splat-scenes bucket — present when the scene is READY. */
   plyKey?: string;
@@ -184,6 +188,7 @@ export interface CancelJobResponse {
 export interface UpdateSceneRequest {
   name?: string;
   thumbnailKey?: string;
+  visibility?: SceneVisibility;
 }
 
 export type UpdateSceneResponse = Scene;

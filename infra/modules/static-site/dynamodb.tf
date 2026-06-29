@@ -25,12 +25,30 @@ resource "aws_dynamodb_table" "scenes" {
     type = "S"
   }
 
+  attribute {
+    name = "visibility"
+    type = "S"
+  }
+
+  attribute {
+    name = "created_at"
+    type = "S"
+  }
+
   # GSI for listing a user's scenes by status (e.g. PENDING_UPLOAD, READY).
   global_secondary_index {
     name            = "user_id-status-index"
     hash_key        = "user_id"
     range_key       = "status"
     projection_type = "KEYS_ONLY"
+  }
+
+  # GSI for listing public scenes newest-first (explore / feed).
+  global_secondary_index {
+    name            = "visibility-created_at-index"
+    hash_key        = "visibility"
+    range_key       = "created_at"
+    projection_type = "ALL"
   }
 
   # TTL: Lambda sets `expires_at` (epoch seconds) on every record.

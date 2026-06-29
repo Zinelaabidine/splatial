@@ -1,4 +1,4 @@
-import type { SceneManagementStatus } from "@/types/api";
+import type { SceneManagementStatus, SceneVisibility } from "@/types/api";
 
 /** Scene lifecycle per design handoff. */
 export type SceneStatus =
@@ -59,6 +59,8 @@ export type DashboardScene = {
   status: SceneStatus;
   /** Original API status — used for polling decisions. */
   apiStatus?: SceneManagementStatus;
+  /** PUBLIC scenes are listed on explore/feed; default PRIVATE when absent. */
+  visibility?: SceneVisibility;
   /** Bottom caption line (mono, muted). */
   caption: string;
   preview?: SplatPreviewTint;
