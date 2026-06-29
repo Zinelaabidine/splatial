@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { ChevronDown, RefreshCw } from "lucide-react";
 
 import DeleteSceneModal from "@/components/features/scenes/DeleteSceneModal";
@@ -16,6 +17,7 @@ const SORT_LABELS = {
 export default function SplatsGalleryView() {
   const { search } = usePageSearch("Search splats");
   const gallery = useSplatsGallery(search);
+  const sortRef = useRef<HTMLDivElement>(null);
 
   const {
     splats,
@@ -44,6 +46,17 @@ export default function SplatsGalleryView() {
     confirmDelete,
   } = gallery;
 
+  useEffect(() => {
+    if (!sortOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (sortRef.current && !sortRef.current.contains(e.target as Node)) {
+        setSortOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [sortOpen, setSortOpen]);
+
   const emptyMessage =
     search.trim().length > 0
       ? "No splats match your search."
@@ -64,7 +77,7 @@ export default function SplatsGalleryView() {
           )}
         </div>
 
-        <div className="relative">
+        <div ref={sortRef} className="relative">
           <button
             type="button"
             onClick={() => setSortOpen((o) => !o)}

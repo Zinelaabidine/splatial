@@ -85,8 +85,10 @@ export default function DashboardSceneCard({
           : undefined
       }
       className={cn(
-        "group relative rounded-xl bg-[#212121] transition-transform duration-200",
-        isViewable && "cursor-pointer hover:-translate-y-1",
+        "group relative rounded-xl bg-[#212121] transition-all duration-200",
+        isViewable
+          ? "cursor-pointer hover:-translate-y-1 hover:shadow-lg hover:shadow-black/40"
+          : "hover:bg-[#242424]",
         menuOpen && "z-50",
       )}
     >

@@ -1,6 +1,6 @@
 "use client";
 
-import { Menu, Search } from "lucide-react";
+import { Menu, Search, X } from "lucide-react";
 
 import { useAppShell } from "@/components/layout/AppShellContext";
 
@@ -32,7 +32,18 @@ export default function AppTopBar({ onMenuClick }: AppTopBarProps) {
               placeholder={searchPlaceholder}
               className="min-w-0 flex-1 bg-transparent text-sm text-[#f1f1f1] outline-none placeholder:text-[#717171]"
             />
-            <Search className="h-[18px] w-[18px] shrink-0 text-[#717171]" strokeWidth={1.5} />
+            {search.length > 0 ? (
+              <button
+                type="button"
+                aria-label="Clear search"
+                onClick={() => setSearch("")}
+                className="shrink-0 rounded-full p-0.5 text-[#717171] transition-colors hover:text-[#f1f1f1]"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            ) : (
+              <Search className="h-[18px] w-[18px] shrink-0 text-[#717171]" strokeWidth={1.5} />
+            )}
           </label>
         </div>
       ) : (
