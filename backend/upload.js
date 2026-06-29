@@ -35,6 +35,9 @@ const commentDelete = require("./handlers/comment-delete");
 const notificationsList = require("./handlers/notifications-list");
 const notificationsRead = require("./handlers/notifications-read");
 const notificationsUnreadCount = require("./handlers/notifications-unread-count");
+const bookmarkSet = require("./handlers/bookmark-set");
+const bookmarkDelete = require("./handlers/bookmark-delete");
+const bookmarksList = require("./handlers/bookmarks-list");
 const response    = require("./lib/response");
 
 exports.handler = async (event) => {
@@ -121,6 +124,14 @@ exports.handler = async (event) => {
         return await notificationsRead.handler(event);
       case "GET /api/v1/notifications/unread-count":
         return await notificationsUnreadCount.handler(event);
+
+      // ── Bookmarks ──────────────────────────────────────────────────────
+      case "PUT /api/v1/scenes/{sceneId}/bookmark":
+        return await bookmarkSet.handler(event);
+      case "DELETE /api/v1/scenes/{sceneId}/bookmark":
+        return await bookmarkDelete.handler(event);
+      case "GET /api/v1/bookmarks":
+        return await bookmarksList.handler(event);
 
       // ── Admin (admin-group gated inside the handler) ─────────────────────
       case "GET /admin/attempts":

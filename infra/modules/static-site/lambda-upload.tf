@@ -85,6 +85,7 @@ resource "aws_iam_role_policy" "upload_lambda_data_access" {
         Effect = "Allow"
         Action = [
           "dynamodb:GetItem",
+          "dynamodb:BatchGetItem",
           "dynamodb:PutItem",
           "dynamodb:UpdateItem",
           "dynamodb:DeleteItem",
@@ -103,6 +104,8 @@ resource "aws_iam_role_policy" "upload_lambda_data_access" {
           aws_dynamodb_table.reactions.arn,
           aws_dynamodb_table.comments.arn,
           aws_dynamodb_table.notifications.arn,
+          aws_dynamodb_table.bookmarks.arn,
+          "${aws_dynamodb_table.bookmarks.arn}/index/*",
         ]
       },
       {
@@ -158,6 +161,7 @@ resource "aws_lambda_function" "upload_lambda" {
       REACTIONS_TABLE_NAME        = aws_dynamodb_table.reactions.name
       COMMENTS_TABLE_NAME         = aws_dynamodb_table.comments.name
       NOTIFICATIONS_TABLE_NAME    = aws_dynamodb_table.notifications.name
+      BOOKMARKS_TABLE_NAME        = aws_dynamodb_table.bookmarks.name
       SQS_QUEUE_URL               = aws_sqs_queue.processing_queue.url
       API_BASE_URL                = "https://api-${var.environment}.openspacenexus.store"
       GDRIVE_IMPORT_FUNCTION_NAME = aws_lambda_function.gdrive_import_lambda.function_name

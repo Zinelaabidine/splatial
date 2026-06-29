@@ -515,6 +515,36 @@ resource "aws_apigatewayv2_route" "notifications_unread_count" {
   target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
 }
 
+resource "aws_apigatewayv2_route" "scene_bookmark_set" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "PUT /api/v1/scenes/{sceneId}/bookmark"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
+resource "aws_apigatewayv2_route" "scene_bookmark_delete" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "DELETE /api/v1/scenes/{sceneId}/bookmark"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
+resource "aws_apigatewayv2_route" "bookmarks_list" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "GET /api/v1/bookmarks"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
 # ── Job Management ────────────────────────────────────────────────────────────
 
 resource "aws_apigatewayv2_route" "job_submit" {

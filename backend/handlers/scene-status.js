@@ -3,6 +3,7 @@
 const { DynamoDBClient, GetItemCommand } = require("@aws-sdk/client-dynamodb");
 const response = require("../lib/response");
 const { getReaction, reactionCountsFromSceneItem } = require("../lib/reactions");
+const { isBookmarked } = require("../lib/bookmarks");
 const { sceneVisibilityFromItem } = require("../lib/scene-response");
 
 const dynamo = new DynamoDBClient({});
@@ -40,7 +41,10 @@ exports.handler = async (event) => {
     return response(403, { error: "Forbidden: scene does not belong to this user" });
   }
 
-  const myReaction = await getReaction(sceneId, userId);
+  const [myReaction, bookmarked] = await Promise.all([
+    getReaction(sceneId, userId),
+    isBookmarked(userId, sceneId),
+  ]);
 
   return response(200, {
     sceneId,
@@ -51,5 +55,6 @@ exports.handler = async (event) => {
     reactionCounts: reactionCountsFromSceneItem(item),
     commentsCount: Number(item.comments_count?.N ?? 0),
     myReaction,
+    isBookmarked: bookmarked,
   });
 };
