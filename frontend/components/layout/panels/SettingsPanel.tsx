@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useAuthenticator } from "@aws-amplify/ui-react";
 import { useState } from "react";
 
@@ -36,7 +37,7 @@ export default function SettingsPanel({ open, onClose }: SettingsPanelProps) {
     >
       <section>
         <h3 className={SECTION_HEADING}>Profile</h3>
-        <div className="flex items-center gap-3 px-4 pb-4">
+        <div className="flex items-center gap-3 px-4 pb-3">
           <UserAvatar initials={account.initials} size={48} />
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold text-white">
@@ -46,6 +47,18 @@ export default function SettingsPanel({ open, onClose }: SettingsPanelProps) {
               {account.email}
             </p>
           </div>
+        </div>
+        <div className="px-4 pb-4">
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full border-[#404040] bg-transparent text-[#e8e8e8] hover:bg-[#212121]"
+            render={
+              <Link href="/settings/profile" onClick={onClose} />
+            }
+          >
+            Profile settings
+          </Button>
         </div>
       </section>
 

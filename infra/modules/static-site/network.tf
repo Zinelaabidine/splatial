@@ -343,6 +343,48 @@ resource "aws_apigatewayv2_route" "scenes_thumbnail_presign" {
   target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
 }
 
+# ── User Profiles ─────────────────────────────────────────────────────────────
+
+resource "aws_apigatewayv2_route" "profile_get_me" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "GET /api/v1/profile/me"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
+resource "aws_apigatewayv2_route" "profile_update_me" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "PUT /api/v1/profile/me"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
+resource "aws_apigatewayv2_route" "profile_get_by_username" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "GET /api/v1/profiles/{username}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
+resource "aws_apigatewayv2_route" "profile_username_available" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "GET /api/v1/profile/username-available/{username}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
 # ── Job Management ────────────────────────────────────────────────────────────
 
 resource "aws_apigatewayv2_route" "job_submit" {

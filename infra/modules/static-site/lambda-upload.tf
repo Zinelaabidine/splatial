@@ -94,6 +94,9 @@ resource "aws_iam_role_policy" "upload_lambda_data_access" {
         Resource = [
           aws_dynamodb_table.scenes.arn,
           "${aws_dynamodb_table.scenes.arn}/index/*",
+          aws_dynamodb_table.profiles.arn,
+          "${aws_dynamodb_table.profiles.arn}/index/*",
+          aws_dynamodb_table.usernames.arn,
         ]
       },
       {
@@ -143,6 +146,8 @@ resource "aws_lambda_function" "upload_lambda" {
       RAW_SCENES_BUCKET_NAME      = aws_s3_bucket.raw_scenes.bucket
       SPLAT_SCENES_BUCKET_NAME    = aws_s3_bucket.splat_scenes.bucket
       SCENES_TABLE_NAME           = aws_dynamodb_table.scenes.name
+      PROFILES_TABLE_NAME         = aws_dynamodb_table.profiles.name
+      USERNAMES_TABLE_NAME        = aws_dynamodb_table.usernames.name
       SQS_QUEUE_URL               = aws_sqs_queue.processing_queue.url
       API_BASE_URL                = "https://api-${var.environment}.openspacenexus.store"
       GDRIVE_IMPORT_FUNCTION_NAME = aws_lambda_function.gdrive_import_lambda.function_name

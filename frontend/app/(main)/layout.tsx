@@ -1,5 +1,5 @@
 import AuthGate from "@/components/layout/AuthGate";
-import AppShell from "@/components/layout/AppShell";
+import ProfileOnboardingGate from "@/components/layout/ProfileOnboardingGate";
 
 export default function MainLayout({
   children,
@@ -8,7 +8,7 @@ export default function MainLayout({
 }) {
   return (
     <AuthGate>
-      <AppShell>{children}</AppShell>
+      <ProfileOnboardingGate>{children}</ProfileOnboardingGate>
     </AuthGate>
   );
 }

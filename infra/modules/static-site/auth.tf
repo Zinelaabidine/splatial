@@ -12,6 +12,18 @@ resource "aws_cognito_user_pool" "this" {
     require_symbols   = true
     require_uppercase = true
   }
+
+  schema {
+    name                = "preferred_username"
+    attribute_data_type = "String"
+    mutable             = true
+    required            = false
+
+    string_attribute_constraints {
+      min_length = 3
+      max_length = 20
+    }
+  }
 }
 
 resource "aws_cognito_user_pool_client" "this" {

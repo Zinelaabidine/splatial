@@ -114,7 +114,23 @@ export default function AuthGate({ children }: AuthGateProps) {
   return (
     <ThemeProvider theme={minimalTheme}>
       <div className="auth-gate min-h-screen w-full antialiased">
-        <Authenticator signUpAttributes={["email"]} loginMechanisms={["email"]}>
+        <Authenticator
+          signUpAttributes={["email", "preferred_username"]}
+          loginMechanisms={["email"]}
+          formFields={{
+            signUp: {
+              preferred_username: {
+                label: "Username",
+                placeholder: "your_handle (a-z, 0-9, _)",
+                isRequired: true,
+                order: 2,
+              },
+              email: {
+                order: 1,
+              },
+            },
+          }}
+        >
           {() => <>{children}</>}
         </Authenticator>
       </div>

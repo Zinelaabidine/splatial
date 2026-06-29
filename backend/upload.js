@@ -18,6 +18,10 @@ const attemptPatch     = require("./handlers/attempt-patch");
 const attemptHeartbeat = require("./handlers/attempt-heartbeat");
 const adminAttemptsList = require("./handlers/admin-attempts-list");
 const adminAttemptsLogs = require("./handlers/admin-attempts-logs");
+const profileGetMe = require("./handlers/profile-get-me");
+const profileUpdateMe = require("./handlers/profile-update-me");
+const profileGetByUsername = require("./handlers/profile-get-by-username");
+const profileUsernameAvailable = require("./handlers/profile-username-available");
 const response    = require("./lib/response");
 
 exports.handler = async (event) => {
@@ -66,6 +70,16 @@ exports.handler = async (event) => {
         return await sceneUpdate.handler(event);
       case "POST /api/v1/scenes/{sceneId}/thumbnail/presign":
         return await sceneThumbnailPresign.handler(event);
+
+      // ── User Profiles ─────────────────────────────────────────────────
+      case "GET /api/v1/profile/me":
+        return await profileGetMe.handler(event);
+      case "PUT /api/v1/profile/me":
+        return await profileUpdateMe.handler(event);
+      case "GET /api/v1/profiles/{username}":
+        return await profileGetByUsername.handler(event);
+      case "GET /api/v1/profile/username-available/{username}":
+        return await profileUsernameAvailable.handler(event);
 
       // ── Admin (admin-group gated inside the handler) ─────────────────────
       case "GET /admin/attempts":

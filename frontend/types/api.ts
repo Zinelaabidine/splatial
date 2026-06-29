@@ -256,3 +256,16 @@ export interface ListScenesResponse {
   scenes: SceneSummary[];
   nextCursor?: string;
 }
+
+export type {
+  Profile,
+  UpdateProfileRequest,
+  UpdateProfileResponse,
+  UsernameAvailableResponse,
+} from "./profile";
+export {
+  USERNAME_HINT,
+  USERNAME_PATTERN,
+  isValidUsernameFormat,
+  normalizeUsernameInput,
+} from "./profile";
