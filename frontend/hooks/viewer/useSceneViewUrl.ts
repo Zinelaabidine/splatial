@@ -15,6 +15,7 @@ function formatPendingStatus(status: string): string {
 export function useSceneViewUrl(sceneId: string) {
   const [splatUrl, setSplatUrl] = useState<string | null>(null);
   const [reactionSummary, setReactionSummary] = useState<ReactionSummary | null>(null);
+  const [isBookmarked, setIsBookmarked] = useState(false);
   const [commentsCount, setCommentsCount] = useState(0);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [loading, setLoading] = useState(() => Boolean(sceneId));
@@ -30,6 +31,7 @@ export function useSceneViewUrl(sceneId: string) {
       setFetchError(null);
       setSplatUrl(null);
       setReactionSummary(null);
+      setIsBookmarked(false);
       setCommentsCount(0);
 
       try {
@@ -44,6 +46,7 @@ export function useSceneViewUrl(sceneId: string) {
             }),
           );
           setCommentsCount(scene.commentsCount ?? 0);
+          setIsBookmarked(scene.isBookmarked ?? false);
         }
 
         if (scene.status !== "READY") {
@@ -82,6 +85,7 @@ export function useSceneViewUrl(sceneId: string) {
   return {
     splatUrl: sceneId ? splatUrl : null,
     reactionSummary: sceneId ? reactionSummary : null,
+    isBookmarked: sceneId ? isBookmarked : false,
     commentsCount: sceneId ? commentsCount : 0,
     setCommentsCount,
     error: sceneId ? fetchError : "No scene selected.",

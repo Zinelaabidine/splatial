@@ -1,6 +1,7 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 
+import BookmarkButton from "@/components/viewer/BookmarkButton";
 import ReactionBar from "@/components/viewer/ReactionBar";
 import type { ReactionSummary } from "@/types/api";
 
@@ -13,6 +14,7 @@ type GaussianViewerViewProps = {
   sceneId: string;
   splatUrl: string | null;
   reactionSummary: ReactionSummary | null;
+  isBookmarked: boolean;
   error: string | null;
   loading: boolean;
 };
@@ -21,6 +23,7 @@ export default function GaussianViewerView({
   sceneId,
   splatUrl,
   reactionSummary,
+  isBookmarked,
   error,
   loading,
 }: GaussianViewerViewProps) {
@@ -51,11 +54,16 @@ export default function GaussianViewerView({
   return (
     <div className="relative h-full w-full">
       <LegacySplatViewer splatUrl={splatUrl} />
-      {reactionSummary ? (
-        <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 flex justify-center px-4">
+      <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 flex justify-center gap-3 px-4">
+        {reactionSummary ? (
           <ReactionBar key={sceneId} sceneId={sceneId} initialSummary={reactionSummary} />
-        </div>
-      ) : null}
+        ) : null}
+        <BookmarkButton
+          key={`${sceneId}-bookmark`}
+          sceneId={sceneId}
+          initialBookmarked={isBookmarked}
+        />
+      </div>
     </div>
   );
 }

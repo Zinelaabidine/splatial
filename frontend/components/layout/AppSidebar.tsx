@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  Bookmark,
   Box,
   Clock,
   Compass,
@@ -20,7 +21,7 @@ import { useAppAccount } from "@/hooks/layout/useAppAccount";
 import { useIsAdmin } from "@/lib/auth/useIsAdmin";
 import { cn } from "@/lib/utils";
 
-type NavId = "explore" | "feed" | "home" | "splats" | "training" | "activity" | "admin";
+type NavId = "explore" | "feed" | "saved" | "home" | "splats" | "training" | "activity" | "admin";
 type NavActionId = "training" | "activity";
 
 type AppSidebarProps = {
@@ -49,6 +50,13 @@ const NAV: {
     href: "/feed",
     icon: Rss,
     match: (p) => p === "/feed",
+  },
+  {
+    id: "saved",
+    label: "Saved",
+    href: "/saved",
+    icon: Bookmark,
+    match: (p) => p === "/saved",
   },
   {
     id: "home",

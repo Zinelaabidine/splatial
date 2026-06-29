@@ -27,6 +27,7 @@ export default function GaussianViewer({ sceneId }: GaussianViewerProps) {
   const {
     splatUrl,
     reactionSummary,
+    isBookmarked,
     commentsCount,
     setCommentsCount,
     error,
@@ -41,6 +42,7 @@ export default function GaussianViewer({ sceneId }: GaussianViewerProps) {
           sceneId={sceneId}
           splatUrl={splatUrl}
           reactionSummary={reactionSummary}
+          isBookmarked={isBookmarked}
           error={error}
           loading={loading}
         />

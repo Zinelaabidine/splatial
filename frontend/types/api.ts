@@ -99,6 +99,7 @@ export interface SceneStatusResponse {
   reactionsTotal?: number;
   myReaction?: ReactionType | null;
   commentsCount?: number;
+  isBookmarked?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -238,6 +239,12 @@ export interface FeedResponse {
 
 /** Newest public scenes (explore); same item shape as the personalized feed. */
 export interface ExploreResponse {
+  scenes: FeedScene[];
+  nextCursor?: string;
+}
+
+/** Caller's saved scenes, newest first. */
+export interface BookmarksResponse {
   scenes: FeedScene[];
   nextCursor?: string;
 }
