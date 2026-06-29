@@ -81,6 +81,7 @@ async function commentResponseFromItem(item) {
     authorDisplayName: item.author_display_name?.S ?? "",
     authorAvatarUrl,
     body: item.body?.S ?? "",
+    mentions: item.mention_usernames?.SS ?? [],
     createdAt: item.created_at?.S ?? "",
   };
 }
@@ -98,7 +99,7 @@ async function getComment(sceneId, commentId) {
   return result.Item ?? null;
 }
 
-async function createComment({ sceneId, userId, authorProfile, body }) {
+async function createComment({ sceneId, userId, authorProfile, body, mentions }) {
   const validatedBody = validateBody(body);
   const createdAt = new Date().toISOString();
   const commentId = `${createdAt}#${randomUUID()}`;
@@ -111,6 +112,11 @@ async function createComment({ sceneId, userId, authorProfile, body }) {
     created_at: { S: createdAt },
     ...authorFieldsFromProfile(authorProfile),
   };
+
+  if (mentions?.usernames?.length > 0 && mentions?.userIds?.length > 0) {
+    item.mention_usernames = { SS: mentions.usernames };
+    item.mention_user_ids = { SS: mentions.userIds };
+  }
 
   await dynamo.send(
     new TransactWriteItemsCommand({

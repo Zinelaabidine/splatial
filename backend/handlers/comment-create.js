@@ -3,6 +3,7 @@
 const { DynamoDBClient, GetItemCommand } = require("@aws-sdk/client-dynamodb");
 const response = require("../lib/response");
 const { createComment, validateBody } = require("../lib/comments");
+const { parseMentionHandles, resolveMentions } = require("../lib/mentions");
 const { getOwnerProfile } = require("../lib/scene-owner");
 const { sceneVisibilityFromItem } = require("../lib/scene-response");
 
@@ -59,11 +60,15 @@ exports.handler = async (event) => {
     return response(400, { error: "Profile required before commenting" });
   }
 
+  const handles = parseMentionHandles(validatedBody);
+  const mentions = await resolveMentions(dynamo, handles);
+
   const comment = await createComment({
     sceneId,
     userId,
     authorProfile,
     body: validatedBody,
+    mentions,
   });
 
   return response(200, comment);
