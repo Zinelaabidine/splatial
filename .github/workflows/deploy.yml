@@ -9,48 +9,89 @@ on:
       - "README.md"
       - "**/*.md"
       - "docs/**"
+      - ".cursor/**"
+      - "**/*.prompt.md"
 permissions:
   contents: read
   id-token: write
+concurrency:
+  group: deploy-${{ github.ref }}
+  # cancel-in-progress saves minutes on rapid pushes; a cancel mid-apply may leave
+  # a Terraform state lock — unlock with: terraform force-unlock <LOCK_ID>
+  cancel-in-progress: true
 env:
   AWS_REGION: us-east-1
   #AWS_ROLE_ARN: arn:aws:iam::886601940523:role/github-actions-s3-cloudfront-deploy
   SITE_BUCKET_NAME: splatial-dev-openspacenexus-store
-  TERRAFORM_DIR: ./infra 
+  TERRAFORM_DIR: ./infra
 jobs:
+  changes:
+    name: detect changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+      backend: ${{ steps.filter.outputs.backend }}
+      infra: ${{ steps.filter.outputs.infra }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            frontend:
+              - 'frontend/**'
+            backend:
+              - 'backend/**'
+            infra:
+              - 'infra/**'
   ci:
     name: lint and test
     runs-on: ubuntu-latest
+    needs: changes
+    timeout-minutes: 10
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
       - name: Set up Node.js
+        if: needs.changes.outputs.frontend == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
       - name: Install Frontend Dependencies
+        if: needs.changes.outputs.frontend == 'true'
         working-directory: frontend
         run: npm ci
       - name: Run Lint
+        if: needs.changes.outputs.frontend == 'true'
         working-directory: frontend
-        run: npm run lint 
+        run: npm run lint
       # - name: Run Tests
+      #   if: needs.changes.outputs.frontend == 'true'
       #   working-directory: frontend
       #   run: npm test
       - name: terraform setup
+        if: needs.changes.outputs.infra == 'true'
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.9.0
           terraform_wrapper: false
       - name: Terraform Format Check
+        if: needs.changes.outputs.infra == 'true'
         run: terraform fmt -check -recursive
         working-directory: infra
   deploy:
     name: deploy
     runs-on: ubuntu-latest
-    needs: ci
+    needs: [changes, ci]
+    if: >
+      needs.changes.outputs.frontend == 'true' ||
+      needs.changes.outputs.infra == 'true' ||
+      needs.changes.outputs.backend == 'true'
+    timeout-minutes: 35
     environment: ${{ github.ref_name == 'main' && 'prod' || github.ref_name }}
     steps:
       - name: Checkout code
@@ -79,37 +120,48 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_wrapper: false
-      - name: Terraform Init & Apply
+      - name: Terraform Init
+        working-directory: ${{ steps.set-env.outputs.tf_dir }}
+        run: terraform init
+      - name: Terraform Apply
+        if: >
+          needs.changes.outputs.infra == 'true' ||
+          needs.changes.outputs.backend == 'true'
         working-directory: ${{ steps.set-env.outputs.tf_dir }}
         run: |
-          terraform init
           # The deploy role and its trust policy are managed in infra/bootstrap
           # (bootstrap.yml workflow).  This workflow only attaches application-
           # specific IAM policies to the pre-existing role; it never modifies
           # the trust chain that allows it to run in the first place.
           terraform apply -auto-approve
       - name: Read Terraform outputs
+        if: needs.changes.outputs.frontend == 'true'
         id: tf
         working-directory: ${{ steps.set-env.outputs.tf_dir }}
         run: |
-          echo "s3_bucket_name=$(terraform output -raw s3_bucket_name)" >> "$GITHUB_OUTPUT"
-          echo "cloudfront_distribution_id=$(terraform output -raw cloudfront_distribution_id)" >> "$GITHUB_OUTPUT"
-          echo "site_url=$(terraform output -raw site_url)" >> "$GITHUB_OUTPUT"
-          echo "cognito_user_pool_id=$(terraform output -raw cognito_user_pool_id)" >> "$GITHUB_OUTPUT"
-          echo "cognito_client_id=$(terraform output -raw cognito_client_id)" >> "$GITHUB_OUTPUT"
-          echo "api_endpoint=$(terraform output -raw api_endpoint)" >> "$GITHUB_OUTPUT"
-          echo "raw_scenes_bucket_name=$(terraform output -raw raw_scenes_bucket_name)" >> "$GITHUB_OUTPUT"
-          echo "scenes_table_name=$(terraform output -raw scenes_table_name)" >> "$GITHUB_OUTPUT"
+          {
+            echo "s3_bucket_name=$(terraform output -raw s3_bucket_name)"
+            echo "cloudfront_distribution_id=$(terraform output -raw cloudfront_distribution_id)"
+            echo "site_url=$(terraform output -raw site_url)"
+            echo "cognito_user_pool_id=$(terraform output -raw cognito_user_pool_id)"
+            echo "cognito_client_id=$(terraform output -raw cognito_client_id)"
+            echo "api_endpoint=$(terraform output -raw api_endpoint)"
+            echo "raw_scenes_bucket_name=$(terraform output -raw raw_scenes_bucket_name)"
+            echo "scenes_table_name=$(terraform output -raw scenes_table_name)"
+          } >> "$GITHUB_OUTPUT"
       - name: Setup Node.js
+        if: needs.changes.outputs.frontend == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
       - name: Install Frontend Dependencies
+        if: needs.changes.outputs.frontend == 'true'
         working-directory: frontend
         run: npm ci
       - name: Build the Frontend artifacts
+        if: needs.changes.outputs.frontend == 'true'
         working-directory: frontend
         run: npm run build
         env:
@@ -120,6 +172,7 @@ jobs:
           NEXT_PUBLIC_RAW_SCENES_BUCKET: ${{ steps.tf.outputs.raw_scenes_bucket_name }}
           NEXT_PUBLIC_SCENES_TABLE: ${{ steps.tf.outputs.scenes_table_name }}
       - name: Sync Static Assets to S3
+        if: needs.changes.outputs.frontend == 'true'
         working-directory: frontend
         run: |
           aws s3 sync ./out s3://${{ steps.tf.outputs.s3_bucket_name }} \
@@ -132,10 +185,12 @@ jobs:
             --exclude "*.tfvars" \
             --exclude "README.md"
       - name: Invalidate CloudFront
+        if: needs.changes.outputs.frontend == 'true'
         run: |
           aws cloudfront create-invalidation \
             --distribution-id ${{ steps.tf.outputs.cloudfront_distribution_id }} \
             --paths "/*"
       - name: Show deployed site URL
+        if: needs.changes.outputs.frontend == 'true'
         run: |
           echo "Deployed to: ${{ steps.tf.outputs.site_url }}"
