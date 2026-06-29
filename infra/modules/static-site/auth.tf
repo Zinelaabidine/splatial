@@ -24,6 +24,8 @@ resource "aws_cognito_user_pool" "this" {
       max_length = 20
     }
   }
+
+  depends_on = [time_sleep.iam_propagation]
 }
 
 resource "aws_cognito_user_pool_client" "this" {
