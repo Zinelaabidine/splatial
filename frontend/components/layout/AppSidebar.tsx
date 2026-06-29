@@ -7,6 +7,7 @@ import {
   Clock,
   Home,
   Plus,
+  Rss,
   Settings,
   ShieldCheck,
   TrendingUp,
@@ -18,7 +19,7 @@ import { useAppAccount } from "@/hooks/layout/useAppAccount";
 import { useIsAdmin } from "@/lib/auth/useIsAdmin";
 import { cn } from "@/lib/utils";
 
-type NavId = "home" | "splats" | "training" | "activity" | "admin";
+type NavId = "feed" | "home" | "splats" | "training" | "activity" | "admin";
 type NavActionId = "training" | "activity";
 
 type AppSidebarProps = {
@@ -34,6 +35,13 @@ const NAV: {
   icon: typeof Home;
   match: (path: string) => boolean;
 }[] = [
+  {
+    id: "feed",
+    label: "Feed",
+    href: "/feed",
+    icon: Rss,
+    match: (p) => p === "/feed",
+  },
   {
     id: "home",
     label: "Home",

@@ -170,6 +170,18 @@ export interface ProfileScenesResponse {
   nextCursor?: string;
 }
 
+/** Scene in the personalized feed, with denormalized owner profile fields. */
+export type FeedScene = Scene & {
+  ownerUsername: string;
+  ownerDisplayName: string;
+  ownerAvatarUrl?: string | null;
+};
+
+export interface FeedResponse {
+  scenes: FeedScene[];
+  nextCursor?: string;
+}
+
 export interface DeleteSceneResponse {
   sceneId: string;
   deleted: true;
