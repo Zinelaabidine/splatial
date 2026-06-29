@@ -182,6 +182,12 @@ export interface FeedResponse {
   nextCursor?: string;
 }
 
+/** Newest public scenes (explore); same item shape as the personalized feed. */
+export interface ExploreResponse {
+  scenes: FeedScene[];
+  nextCursor?: string;
+}
+
 export interface DeleteSceneResponse {
   sceneId: string;
   deleted: true;

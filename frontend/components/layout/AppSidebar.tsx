@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   Box,
   Clock,
+  Compass,
   Home,
   Plus,
   Rss,
@@ -19,7 +20,7 @@ import { useAppAccount } from "@/hooks/layout/useAppAccount";
 import { useIsAdmin } from "@/lib/auth/useIsAdmin";
 import { cn } from "@/lib/utils";
 
-type NavId = "feed" | "home" | "splats" | "training" | "activity" | "admin";
+type NavId = "explore" | "feed" | "home" | "splats" | "training" | "activity" | "admin";
 type NavActionId = "training" | "activity";
 
 type AppSidebarProps = {
@@ -35,6 +36,13 @@ const NAV: {
   icon: typeof Home;
   match: (path: string) => boolean;
 }[] = [
+  {
+    id: "explore",
+    label: "Explore",
+    href: "/explore",
+    icon: Compass,
+    match: (p) => p === "/explore",
+  },
   {
     id: "feed",
     label: "Feed",

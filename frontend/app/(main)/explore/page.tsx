@@ -7,10 +7,10 @@ import PublicSceneCardGrid from "@/components/splatworks/PublicSceneCardGrid";
 import SceneCardSkeleton from "@/components/splatworks/SceneCardSkeleton";
 import { ApiRequestError } from "@/lib/api/apiErrors";
 import { feedSceneToListItem, type PublicSceneListItem } from "@/lib/scenes/feedSceneMappers";
-import { getFeed } from "@/services/feedService";
+import { getExplore } from "@/services/exploreService";
 import type { DashboardScene } from "@/types/splatworks";
 
-export default function FeedPage() {
+export default function ExplorePage() {
   const router = useRouter();
   const [items, setItems] = useState<PublicSceneListItem[]>([]);
   const [nextCursor, setNextCursor] = useState<string | undefined>(undefined);
@@ -19,7 +19,7 @@ export default function FeedPage() {
   const [error, setError] = useState<string | null>(null);
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
 
-  const fetchFeed = useCallback(async (signal: AbortSignal) => {
+  const fetchExplore = useCallback(async (signal: AbortSignal) => {
     setLoading(true);
     setError(null);
     setLoadMoreError(null);
@@ -27,7 +27,7 @@ export default function FeedPage() {
     setNextCursor(undefined);
 
     try {
-      const res = await getFeed(undefined, signal);
+      const res = await getExplore(undefined, signal);
       if (signal.aborted) return;
       setItems((res.scenes ?? []).map(feedSceneToListItem));
       setNextCursor(res.nextCursor);
@@ -38,7 +38,7 @@ export default function FeedPage() {
           ? err.message
           : err instanceof Error
             ? err.message
-            : "Failed to load feed";
+            : "Failed to load explore";
       setError(message);
     } finally {
       if (!signal.aborted) setLoading(false);
@@ -48,9 +48,9 @@ export default function FeedPage() {
   useEffect(() => {
     const controller = new AbortController();
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void fetchFeed(controller.signal);
+    void fetchExplore(controller.signal);
     return () => controller.abort();
-  }, [fetchFeed]);
+  }, [fetchExplore]);
 
   const openScene = useCallback(
     (scene: DashboardScene) => {
@@ -66,7 +66,7 @@ export default function FeedPage() {
     setLoadingMore(true);
     setLoadMoreError(null);
     try {
-      const res = await getFeed(nextCursor);
+      const res = await getExplore(nextCursor);
       setItems((prev) => [...prev, ...(res.scenes ?? []).map(feedSceneToListItem)]);
       setNextCursor(res.nextCursor);
     } catch (err) {
@@ -85,7 +85,7 @@ export default function FeedPage() {
   if (loading) {
     return (
       <div className="mx-auto w-full max-w-[1400px]">
-        <h1 className="mb-6 text-2xl font-bold tracking-tight text-white">Feed</h1>
+        <h1 className="mb-6 text-2xl font-bold tracking-tight text-white">Explore</h1>
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
             <SceneCardSkeleton key={i} />
@@ -98,14 +98,14 @@ export default function FeedPage() {
   if (error) {
     return (
       <div className="mx-auto w-full max-w-[1400px]">
-        <h1 className="mb-6 text-2xl font-bold tracking-tight text-white">Feed</h1>
+        <h1 className="mb-6 text-2xl font-bold tracking-tight text-white">Explore</h1>
         <div className="rounded-xl border border-red-900/50 bg-red-950/40 px-5 py-4 text-sm text-red-300">
           {error}{" "}
           <button
             type="button"
             onClick={() => {
               const controller = new AbortController();
-              void fetchFeed(controller.signal);
+              void fetchExplore(controller.signal);
             }}
             className="font-medium underline underline-offset-2 hover:text-red-200"
           >
@@ -118,7 +118,7 @@ export default function FeedPage() {
 
   return (
     <div className="mx-auto w-full max-w-[1400px]">
-      <h1 className="mb-6 text-2xl font-bold tracking-tight text-white">Feed</h1>
+      <h1 className="mb-6 text-2xl font-bold tracking-tight text-white">Explore</h1>
 
       {loadMoreError ? (
         <div className="mb-4 rounded-xl border border-red-900/50 bg-red-950/40 px-5 py-4 text-sm text-red-300">
@@ -135,7 +135,7 @@ export default function FeedPage() {
 
       {items.length === 0 ? (
         <p className="py-16 text-center text-sm text-[#909090]">
-          Your feed is empty — follow some creators to see their scenes here.
+          No public scenes yet — check back soon as creators publish their work.
         </p>
       ) : (
         <PublicSceneCardGrid
