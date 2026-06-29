@@ -869,3 +869,214 @@ body {
 .font-sw-mono {
   font-family: var(--font-jetbrains), ui-monospace, monospace;
 }
+
+/* ─── Splatial premium glass theme ──────────────────────────────────────────
+   Volumetric "data-field" background + glassmorphism utilities. Scoped to
+   sw-* classes so nothing leaks into the legacy viewer or auth styles.      */
+
+/* Deep, fluid volumetric gradient field — blues, purples, teals. */
+.sw-field {
+  background-color: #060812;
+  background-image:
+    radial-gradient(115% 80% at 16% 8%, rgba(86, 64, 168, 0.5), transparent 58%),
+    radial-gradient(105% 95% at 86% 14%, rgba(34, 78, 158, 0.46), transparent 56%),
+    radial-gradient(120% 105% at 78% 96%, rgba(16, 110, 122, 0.42), transparent 60%),
+    radial-gradient(95% 95% at 12% 98%, rgba(58, 38, 112, 0.4), transparent 60%),
+    linear-gradient(165deg, #070912 0%, #0a1024 46%, #08141c 100%);
+  background-attachment: fixed;
+}
+
+/* Slow swirling luminance pass layered over the field. */
+.sw-field-glow {
+  background-image:
+    radial-gradient(40% 40% at 30% 30%, rgba(99, 102, 241, 0.18), transparent 70%),
+    radial-gradient(45% 45% at 70% 65%, rgba(20, 184, 166, 0.16), transparent 70%);
+  animation: swFieldDrift 38s ease-in-out infinite alternate;
+}
+
+@keyframes swFieldDrift {
+  0% {
+    transform: translate3d(-3%, -2%, 0) scale(1.05);
+    opacity: 0.7;
+  }
+  100% {
+    transform: translate3d(4%, 3%, 0) scale(1.18);
+    opacity: 1;
+  }
+}
+
+/* Sparse glowing data points — Gaussian-splat dust. Two drifting layers. */
+.sw-field-stars,
+.sw-field-stars::after {
+  background-repeat: repeat;
+  background-image:
+    radial-gradient(1.6px 1.6px at 12% 22%, rgba(173, 216, 255, 0.9), transparent 60%),
+    radial-gradient(1.2px 1.2px at 47% 14%, rgba(196, 181, 253, 0.85), transparent 60%),
+    radial-gradient(1.8px 1.8px at 68% 38%, rgba(153, 246, 228, 0.8), transparent 60%),
+    radial-gradient(1.1px 1.1px at 83% 18%, rgba(191, 219, 254, 0.85), transparent 60%),
+    radial-gradient(1.5px 1.5px at 28% 62%, rgba(216, 180, 254, 0.7), transparent 60%),
+    radial-gradient(1.3px 1.3px at 58% 78%, rgba(165, 243, 252, 0.75), transparent 60%),
+    radial-gradient(1.7px 1.7px at 90% 70%, rgba(199, 210, 254, 0.7), transparent 60%),
+    radial-gradient(1.1px 1.1px at 8% 84%, rgba(186, 230, 253, 0.8), transparent 60%);
+  background-size: 620px 620px;
+}
+
+.sw-field-stars {
+  animation: swStarsDrift 90s linear infinite, swStarsTwinkle 6s ease-in-out infinite;
+}
+
+.sw-field-stars::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-size: 880px 880px;
+  opacity: 0.6;
+  animation: swStarsDrift 150s linear infinite reverse, swStarsTwinkle 9s ease-in-out infinite;
+}
+
+@keyframes swStarsDrift {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 620px 380px;
+  }
+}
+
+@keyframes swStarsTwinkle {
+  0%, 100% {
+    opacity: 0.85;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Frosted glass panel — translucent, refractive, soft edge highlight. */
+.sw-glass {
+  background:
+    linear-gradient(150deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02) 55%),
+    rgba(16, 20, 38, 0.42);
+  backdrop-filter: blur(22px) saturate(150%);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.25),
+    0 18px 50px -20px rgba(0, 0, 0, 0.7);
+}
+
+/* Lighter glass for the header bar. */
+.sw-glass-bar {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.015)),
+    rgba(10, 13, 26, 0.55);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Glass scene card with electric edge glow on hover. */
+.sw-glass-card {
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02) 60%),
+    rgba(14, 18, 34, 0.5);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 16px 44px -22px rgba(0, 0, 0, 0.75);
+  transition:
+    transform 220ms ease,
+    box-shadow 220ms ease,
+    border-color 220ms ease;
+}
+
+.sw-glass-card-hover:hover {
+  transform: translateY(-4px);
+  border-color: rgba(129, 140, 248, 0.45);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 0 0 1px rgba(129, 140, 248, 0.25),
+    0 22px 60px -24px rgba(76, 81, 191, 0.65),
+    0 0 40px -8px rgba(56, 189, 248, 0.35);
+}
+
+/* FAILED card — amber/red glass pulse. */
+.sw-glass-card-failed {
+  border-color: rgba(248, 113, 113, 0.3);
+  animation: swFailedPulse 3.2s ease-in-out infinite;
+}
+
+@keyframes swFailedPulse {
+  0%, 100% {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      0 0 0 1px rgba(251, 146, 60, 0.18),
+      0 18px 44px -24px rgba(0, 0, 0, 0.75);
+  }
+  50% {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      0 0 0 1px rgba(248, 113, 113, 0.4),
+      0 0 36px -6px rgba(248, 113, 113, 0.35);
+  }
+}
+
+/* "New Scene" floating glass button with a smooth gradient pulse. */
+.sw-new-scene {
+  position: relative;
+  background:
+    linear-gradient(135deg, rgba(99, 102, 241, 0.95), rgba(56, 189, 248, 0.9) 55%, rgba(20, 184, 166, 0.92));
+  background-size: 200% 200%;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 8px 24px -8px rgba(56, 189, 248, 0.6),
+    0 0 0 1px rgba(255, 255, 255, 0.08);
+  animation: swGradientPulse 6s ease infinite;
+}
+
+.sw-new-scene:hover {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    0 10px 30px -6px rgba(56, 189, 248, 0.75),
+    0 0 22px -2px rgba(129, 140, 248, 0.6);
+}
+
+@keyframes swGradientPulse {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+/* Active nav item — soft luminous halo. */
+.sw-nav-active {
+  background:
+    linear-gradient(120deg, rgba(99, 102, 241, 0.32), rgba(56, 189, 248, 0.22));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 0 0 1px rgba(129, 140, 248, 0.35),
+    0 0 22px -4px rgba(99, 102, 241, 0.6);
+}
+
+/* Subtle frosted control (pills, toggles, badges on glass). */
+.sw-control {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sw-field-glow,
+  .sw-field-stars,
+  .sw-field-stars::after,
+  .sw-new-scene,
+  .sw-glass-card-failed {
+    animation: none;
+  }
+}

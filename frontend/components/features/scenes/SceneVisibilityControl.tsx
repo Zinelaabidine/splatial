@@ -17,10 +17,10 @@ export function SceneVisibilityBadge({ visibility, className }: SceneVisibilityB
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide backdrop-blur-sm",
         isPublic
-          ? "bg-sky-950/60 text-sky-300 ring-1 ring-sky-800/60"
-          : "bg-[#303030] text-[#a3a3a3] ring-1 ring-[#404040]",
+          ? "bg-sky-400/15 text-sky-200 ring-1 ring-sky-300/40"
+          : "bg-white/10 text-[#b9c2d4] ring-1 ring-white/15",
         className,
       )}
     >
@@ -35,6 +35,8 @@ type SceneVisibilityToggleProps = {
   disabled?: boolean;
   onToggle: (nextVisibility: SceneVisibility) => void;
   className?: string;
+  /** Streamlined glass pill without the descriptive text rows (used on cards). */
+  compact?: boolean;
 };
 
 export function SceneVisibilityToggle({
@@ -42,8 +44,57 @@ export function SceneVisibilityToggle({
   disabled = false,
   onToggle,
   className,
+  compact = false,
 }: SceneVisibilityToggleProps) {
   const isPublic = visibility === "PUBLIC";
+
+  const pill = (
+    <div
+      className={cn(
+        "sw-control inline-flex rounded-full p-0.5",
+        compact && "w-full",
+      )}
+      role="group"
+      aria-label="Scene visibility"
+    >
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        disabled={disabled || !isPublic}
+        aria-pressed={!isPublic}
+        onClick={() => onToggle("PRIVATE")}
+        className={cn(
+          "h-7 flex-1 rounded-full px-3 text-xs font-medium",
+          !isPublic
+            ? "bg-white/15 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] hover:bg-white/15"
+            : "text-[#9aa6bd] hover:bg-transparent hover:text-white",
+        )}
+      >
+        Private
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        disabled={disabled || isPublic}
+        aria-pressed={isPublic}
+        onClick={() => onToggle("PUBLIC")}
+        className={cn(
+          "h-7 flex-1 rounded-full px-3 text-xs font-medium",
+          isPublic
+            ? "bg-gradient-to-r from-sky-500/70 to-indigo-500/70 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.25)] hover:from-sky-500/70 hover:to-indigo-500/70"
+            : "text-[#9aa6bd] hover:bg-transparent hover:text-white",
+        )}
+      >
+        Public
+      </Button>
+    </div>
+  );
+
+  if (compact) {
+    return <div className={cn("w-full", className)}>{pill}</div>;
+  }
 
   return (
     <div className={cn("flex flex-col gap-1.5", className)}>
@@ -56,44 +107,7 @@ export function SceneVisibilityToggle({
         </div>
         <SceneVisibilityBadge visibility={visibility} />
       </div>
-      <div
-        className="inline-flex rounded-lg border border-[#404040] bg-[#262626] p-0.5"
-        role="group"
-        aria-label="Scene visibility"
-      >
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          disabled={disabled || !isPublic}
-          aria-pressed={!isPublic}
-          onClick={() => onToggle("PRIVATE")}
-          className={cn(
-            "h-7 flex-1 rounded-md px-3 text-xs font-medium",
-            !isPublic
-              ? "bg-[#404040] text-white hover:bg-[#404040]"
-              : "text-[#909090] hover:bg-transparent hover:text-[#d4d4d4]",
-          )}
-        >
-          Private
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          disabled={disabled || isPublic}
-          aria-pressed={isPublic}
-          onClick={() => onToggle("PUBLIC")}
-          className={cn(
-            "h-7 flex-1 rounded-md px-3 text-xs font-medium",
-            isPublic
-              ? "bg-sky-900/70 text-sky-100 hover:bg-sky-900/70"
-              : "text-[#909090] hover:bg-transparent hover:text-[#d4d4d4]",
-          )}
-        >
-          Public
-        </Button>
-      </div>
+      {pill}
     </div>
   );
 }

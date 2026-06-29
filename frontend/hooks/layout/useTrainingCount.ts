@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { isActiveGpuJobStatus } from "@/lib/scenes/sceneMappers";
+import { isTransientNetworkError } from "@/lib/api/apiErrors";
 import { listScenes } from "@/services/scenesService";
 
 const POLL_MS = 15_000;
+const RETRY_MS = 1_500;
 
 export function useTrainingCount(): number {
   const [count, setCount] = useState(0);
@@ -22,8 +24,23 @@ export function useTrainingCount(): number {
         isActiveGpuJobStatus(s.status),
       ).length;
       if (!ctrl.signal.aborted) setCount(active);
-    } catch {
-      if (!ctrl.signal.aborted) setCount(0);
+    } catch (err) {
+      if (ctrl.signal.aborted) return;
+      if (isTransientNetworkError(err)) {
+        await new Promise((resolve) => setTimeout(resolve, RETRY_MS));
+        if (ctrl.signal.aborted) return;
+        try {
+          const data = await listScenes(ctrl.signal);
+          const active = (data.scenes ?? []).filter((s) =>
+            isActiveGpuJobStatus(s.status),
+          ).length;
+          if (!ctrl.signal.aborted) setCount(active);
+          return;
+        } catch {
+          /* fall through */
+        }
+      }
+      setCount(0);
     }
   }, []);
 

@@ -112,7 +112,7 @@ export default function AppSidebar({
     : NAV;
 
   return (
-    <aside className="flex h-full w-[240px] shrink-0 flex-col overflow-y-auto border-r border-[#303030] bg-[#0f0f0f] px-3 py-4">
+    <aside className="sw-glass relative z-10 my-3 ml-3 flex h-[calc(100%-1.5rem)] w-[240px] shrink-0 flex-col overflow-y-auto rounded-2xl px-3 py-4">
       <SplatworksLogo variant="dark" className="mb-5 px-1" />
 
       <nav className="flex flex-col gap-0.5">
@@ -122,13 +122,17 @@ export default function AppSidebar({
           const inner = (
             <>
               <Icon
-                className="h-5 w-5 shrink-0"
+                className={cn(
+                  "h-5 w-5 shrink-0 transition-all",
+                  isActive &&
+                    "[filter:drop-shadow(0_0_7px_rgba(129,140,248,0.85))]",
+                )}
                 strokeWidth={isActive ? 2 : 1.5}
-                color={isActive ? "#3b82f6" : "#909090"}
+                color={isActive ? "#a5b4fc" : "#aab4c8"}
               />
               <span className="flex-1 truncate">{label}</span>
               {badge != null && badge > 0 && (
-                <span className="font-sw-mono rounded-md bg-[#1e3a5f] px-1.5 py-px text-[10px] font-semibold text-[#60a5fa]">
+                <span className="font-sw-mono rounded-md bg-indigo-500/25 px-1.5 py-px text-[10px] font-semibold text-indigo-200 ring-1 ring-indigo-400/30">
                   {badge}
                 </span>
               )}
@@ -138,8 +142,8 @@ export default function AppSidebar({
           const className = cn(
             "flex items-center gap-4 rounded-xl px-3 py-2.5 text-sm transition-colors",
             isActive
-              ? "bg-[#263850]/80 font-medium text-[#93c5fd]"
-              : "font-normal text-[#e8e8e8] hover:bg-[#212121]",
+              ? "sw-nav-active font-medium text-white"
+              : "font-normal text-[#d2d8e6] hover:bg-white/10",
           );
 
           if (href === "#") {
@@ -167,26 +171,28 @@ export default function AppSidebar({
       <button
         type="button"
         onClick={() => router.push("/scenes/create")}
-        className="mt-5 flex h-10 w-full items-center justify-center gap-2 rounded-full bg-[#3b82f6] text-sm font-semibold text-white transition-colors hover:bg-[#2563eb]"
+        className="sw-new-scene mt-5 flex h-10 w-full items-center justify-center gap-2 rounded-full text-sm font-semibold text-white transition-shadow"
       >
         <Plus className="h-4 w-4" strokeWidth={2} />
         New scene
       </button>
 
-      <div className="mt-auto flex items-center gap-2.5 border-t border-[#303030] px-1 pt-4">
-        <UserAvatar initials={account.initials} size={36} />
+      <div className="sw-control mt-auto flex items-center gap-2.5 rounded-2xl px-2.5 py-2.5">
+        <div className="rounded-full ring-1 ring-white/20 [box-shadow:0_0_14px_-2px_rgba(20,184,166,0.7)]">
+          <UserAvatar initials={account.initials} size={36} />
+        </div>
         <div className="min-w-0 flex-1 leading-tight">
           <div className="truncate text-sm font-semibold text-white">
             {account.name}
           </div>
-          <div className="font-sw-mono text-[11px] text-[#909090]">
+          <div className="font-sw-mono text-[11px] text-[#9aa6bd]">
             {account.plan}
           </div>
         </div>
         <button
           type="button"
           aria-label="Settings"
-          className="rounded-lg p-1.5 text-[#909090] transition-colors hover:bg-[#212121] hover:text-white"
+          className="rounded-lg p-1.5 text-[#9aa6bd] transition-colors hover:bg-white/10 hover:text-white"
           onClick={() => onSettingsClick?.()}
         >
           <Settings className="h-4 w-4" strokeWidth={1.5} />

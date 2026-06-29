@@ -21,11 +21,32 @@ const DARK_STATUS: Record<
   SceneStatus,
   { tile: string; text: string; pulse?: boolean }
 > = {
-  draft: { tile: "#262626", text: "#a3a3a3" },
-  queued: { tile: "#2a2218", text: "#fbbf24" },
-  training: { tile: "#1a2332", text: "#60a5fa", pulse: true },
-  completed: { tile: "#0a0a0a", text: "#4ade80" },
-  failed: { tile: "#2a1515", text: "#f87171" },
+  draft: {
+    tile:
+      "linear-gradient(150deg, rgba(148,163,184,0.16), rgba(15,20,38,0.5))",
+    text: "#c3ccdb",
+  },
+  queued: {
+    tile:
+      "linear-gradient(150deg, rgba(251,191,36,0.2), rgba(30,22,12,0.55))",
+    text: "#fcd34d",
+  },
+  training: {
+    tile:
+      "linear-gradient(150deg, rgba(56,189,248,0.22), rgba(12,22,44,0.6))",
+    text: "#7dd3fc",
+    pulse: true,
+  },
+  completed: {
+    tile:
+      "linear-gradient(150deg, rgba(52,211,153,0.18), rgba(8,16,24,0.6))",
+    text: "#6ee7b7",
+  },
+  failed: {
+    tile:
+      "linear-gradient(150deg, rgba(248,113,113,0.22), rgba(40,16,16,0.6))",
+    text: "#fca5a5",
+  },
 };
 
 type DashboardSceneCardProps = {
@@ -96,10 +117,9 @@ export default function DashboardSceneCard({
           : undefined
       }
       className={cn(
-        "group relative rounded-xl bg-[#212121] transition-all duration-200",
-        isViewable
-          ? "cursor-pointer hover:-translate-y-1 hover:shadow-lg hover:shadow-black/40"
-          : "hover:bg-[#242424]",
+        "sw-glass-card group relative rounded-2xl",
+        scene.status === "failed" && "sw-glass-card-failed",
+        isViewable && "sw-glass-card-hover cursor-pointer",
         menuOpen && "z-50",
       )}
     >
@@ -110,7 +130,7 @@ export default function DashboardSceneCard({
           <img
           src={scene.thumbnailUrl}
           alt=""
-          className="h-[180px] w-full rounded-t-xl object-cover"
+          className="h-[180px] w-full rounded-t-2xl object-cover"
         />
         </>
       ) : scene.status === "completed" && scene.preview ? (
@@ -118,7 +138,7 @@ export default function DashboardSceneCard({
           preview={scene.preview}
           height={180}
           variant="dark-card"
-          className="rounded-t-xl"
+          className="rounded-t-2xl"
         />
       ) : (
         <StatusTile
@@ -129,7 +149,7 @@ export default function DashboardSceneCard({
         />
       )}
 
-      <div className="rounded-b-xl p-3">
+      <div className="rounded-b-2xl p-3">
         <div className="flex items-start gap-2">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
@@ -153,8 +173,8 @@ export default function DashboardSceneCard({
                 setMenuOpen((open) => !open);
               }}
               className={cn(
-                "rounded-full p-1.5 text-[#b3b3b3] transition-colors hover:bg-[#303030] hover:text-white",
-                menuOpen ? "bg-[#303030] text-white opacity-100" : "opacity-70 group-hover:opacity-100",
+                "rounded-full p-1.5 text-[#c3ccdb] transition-colors hover:bg-white/15 hover:text-white",
+                menuOpen ? "bg-white/15 text-white opacity-100" : "opacity-70 group-hover:opacity-100",
               )}
             >
               <MoreVertical className="h-4 w-4" />
@@ -162,7 +182,7 @@ export default function DashboardSceneCard({
             {menuOpen && (
               <div
                 role="menu"
-                className="absolute bottom-full right-0 z-50 mb-2 min-w-[140px] overflow-hidden rounded-lg border border-[#404040] bg-[#1a1a1a] py-1.5 shadow-2xl ring-1 ring-black/50"
+                className="sw-glass absolute bottom-full right-0 z-50 mb-2 min-w-[140px] overflow-hidden rounded-xl py-1.5"
                 onClick={(e) => e.stopPropagation()}
               >
                 {scene.status === "completed" && (
@@ -174,7 +194,7 @@ export default function DashboardSceneCard({
                       setMenuOpen(false);
                       onEditScene?.(scene);
                     }}
-                    className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm font-medium text-[#f0f0f0] transition-colors hover:bg-[#2a2a2a]"
+                    className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm font-medium text-[#eef1f7] transition-colors hover:bg-white/10"
                   >
                     <Pencil className="h-3.5 w-3.5" strokeWidth={1.5} />
                     Edit
@@ -202,7 +222,7 @@ export default function DashboardSceneCard({
           tags={scene.tags}
           className="mt-1.5"
         />
-        <p className="mt-1 font-sw-mono text-xs text-[#909090]">{scene.caption}</p>
+        <p className="mt-1 font-sw-mono text-xs text-[#9aa6bd]">{scene.caption}</p>
         {(scene.forksCount != null && scene.forksCount > 0) ||
         (scene.commentsCount != null && scene.commentsCount > 0) ||
         (scene.reactionsTotal != null && scene.reactionsTotal > 0) ? (
@@ -221,6 +241,7 @@ export default function DashboardSceneCard({
           onKeyDown={(e) => e.stopPropagation()}
         >
           <SceneVisibilityToggle
+            compact
             visibility={visibility}
             disabled={visibilityUpdating}
             onToggle={(nextVisibility) => onVisibilityChange?.(scene, nextVisibility)}
@@ -235,7 +256,7 @@ export default function DashboardSceneCard({
               e.stopPropagation();
               onCancelScene?.(scene);
             }}
-            className="mt-3 w-full border-amber-700/50 bg-transparent text-amber-400 hover:bg-amber-950/40 hover:text-amber-300"
+            className="mt-3 w-full rounded-full border-amber-300/40 bg-amber-400/10 text-amber-200 backdrop-blur-sm hover:bg-amber-400/20 hover:text-amber-100"
           >
             <XCircle data-icon="inline-start" />
             {cancelling ? "Cancelling…" : "Cancel processing"}
@@ -249,7 +270,12 @@ export default function DashboardSceneCard({
               e.stopPropagation();
               onSubmitScene?.(scene);
             }}
-            className="mt-3 w-full bg-emerald-600 text-white hover:bg-emerald-700"
+            className={cn(
+              "mt-3 w-full rounded-full border text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.25)] backdrop-blur-sm",
+              scene.apiStatus === "FAILED"
+                ? "border-rose-300/40 bg-gradient-to-r from-rose-500/40 to-amber-500/40 hover:from-rose-500/55 hover:to-amber-500/55"
+                : "border-white/15 bg-gradient-to-r from-emerald-500/50 to-teal-500/50 hover:from-emerald-500/65 hover:to-teal-500/65",
+            )}
           >
             <Send data-icon="inline-start" />
             {submitting
@@ -277,8 +303,8 @@ function StatusTile({
 }) {
   return (
     <div
-      className="flex h-[180px] flex-col items-center justify-center rounded-t-xl px-5 text-center"
-      style={{ backgroundColor: tileBg }}
+      className="flex h-[180px] flex-col items-center justify-center rounded-t-2xl px-5 text-center"
+      style={{ background: tileBg }}
     >
       <span
         className="inline-flex items-center gap-1.5 font-sw-mono text-[10px] font-semibold uppercase tracking-wider"

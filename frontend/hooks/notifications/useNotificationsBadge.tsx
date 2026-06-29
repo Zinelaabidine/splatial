@@ -11,8 +11,10 @@ import {
 } from "react";
 
 import { getUnreadCount } from "@/services/notificationsService";
+import { isTransientNetworkError } from "@/lib/api/apiErrors";
 
 const POLL_MS = 45_000;
+const RETRY_MS = 1_500;
 
 type NotificationsBadgeContextValue = {
   unreadCount: number;
@@ -37,9 +39,19 @@ export function NotificationsBadgeProvider({ children }: { children: ReactNode }
       if (!ctrl.signal.aborted) {
         setUnreadCount(Math.max(0, res.unreadCount ?? 0));
       }
-    } catch {
-      if (!ctrl.signal.aborted) {
-        /* keep last known count on transient failures */
+    } catch (err) {
+      if (ctrl.signal.aborted) return;
+      if (isTransientNetworkError(err)) {
+        await new Promise((resolve) => setTimeout(resolve, RETRY_MS));
+        if (ctrl.signal.aborted) return;
+        try {
+          const res = await getUnreadCount(ctrl.signal);
+          if (!ctrl.signal.aborted) {
+            setUnreadCount(Math.max(0, res.unreadCount ?? 0));
+          }
+        } catch {
+          /* keep last known count on transient failures */
+        }
       }
     }
   }, []);

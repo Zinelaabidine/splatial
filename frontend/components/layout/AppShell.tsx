@@ -30,7 +30,12 @@ function AppShellInner({ children, fullBleed: fullBleedProp }: AppShellProps) {
   const trainingCount = useTrainingCount();
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-[#121212] text-[#f1f1f1]">
+    <div className="relative flex h-screen flex-col overflow-hidden text-[#eef1f7]">
+      {/* Volumetric data-field background */}
+      <div className="sw-field pointer-events-none fixed inset-0 -z-30" />
+      <div className="sw-field-glow pointer-events-none fixed inset-0 -z-20" />
+      <div className="sw-field-stars pointer-events-none fixed inset-0 -z-10" />
+
       <AppTopBar onMenuClick={() => setMobileNavOpen((o) => !o)} />
 
       <div className="flex min-h-0 flex-1">
@@ -64,7 +69,7 @@ function AppShellInner({ children, fullBleed: fullBleedProp }: AppShellProps) {
 
         <main
           className={cn(
-            "min-w-0 flex-1 bg-[#121212]",
+            "min-w-0 flex-1 bg-transparent",
             fullBleed
               ? "overflow-y-auto overflow-x-hidden"
               : "overflow-y-auto px-4 py-5 sm:px-6 sm:py-6",

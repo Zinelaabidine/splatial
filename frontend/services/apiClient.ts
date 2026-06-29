@@ -5,7 +5,9 @@ import { fetchAuthSession } from "aws-amplify/auth";
 import { getApiBaseUrl } from "@/api/baseUrl";
 import {
   ApiRequestError,
+  isAbortError,
   isExpectedSceneConflict,
+  isTransientNetworkError,
 } from "@/lib/api/apiErrors";
 
 /**
@@ -26,11 +28,15 @@ export async function authenticatedFetch(
     const baseUrl = getApiBaseUrl();
     const url = `${baseUrl}${endpoint.startsWith("/") ? endpoint : `/${endpoint}`}`;
 
-    const headers = {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${jwtToken}`,
-      ...options.headers,
-    };
+    const headers = new Headers(options.headers);
+    headers.set("Authorization", `Bearer ${jwtToken}`);
+    if (
+      options.body != null &&
+      options.body !== "" &&
+      !headers.has("Content-Type")
+    ) {
+      headers.set("Content-Type", "application/json");
+    }
 
     const response = await fetch(url, {
       ...options,
@@ -50,10 +56,14 @@ export async function authenticatedFetch(
 
     return await response.json();
   } catch (error) {
-    const isAbort =
-      (error instanceof DOMException && error.name === "AbortError") ||
-      Boolean(options?.signal?.aborted);
-    if (!isAbort && !isExpectedSceneConflict(error)) {
+    const signal = options.signal ?? null;
+    if (isAbortError(error, signal)) {
+      throw error;
+    }
+    if (
+      !isExpectedSceneConflict(error) &&
+      !(process.env.NODE_ENV === "development" && isTransientNetworkError(error))
+    ) {
       console.error("Authenticated API call failed:", error);
     }
     throw error;

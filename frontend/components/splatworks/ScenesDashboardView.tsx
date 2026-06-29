@@ -79,7 +79,7 @@ export default function ScenesDashboardView() {
 
   return (
     <div className="mx-auto w-full max-w-[1400px]">
-      <h1 className="mb-6 text-xl font-bold tracking-tight text-white sm:text-2xl">
+      <h1 className="mb-6 bg-gradient-to-r from-white via-sky-100 to-indigo-200 bg-clip-text text-xl font-bold tracking-tight text-transparent sm:text-2xl">
         Splatworks: Scenes
       </h1>
 
