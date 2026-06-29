@@ -129,6 +129,23 @@ export interface DeleteCommentResponse {
 }
 
 // ---------------------------------------------------------------------------
+// Scene shots (saved camera viewpoints)
+// ---------------------------------------------------------------------------
+export interface Shot {
+  shotId: string;
+  sceneId: string;
+  creatorUsername: string;
+  label: string;
+  viewMatrix: number[];
+  createdAt: string;
+}
+
+export interface ShotsResponse {
+  shots: Shot[];
+  nextCursor?: string;
+}
+
+// ---------------------------------------------------------------------------
 // Client-side UI state for the upload queue / right sidebar tracker
 // ---------------------------------------------------------------------------
 export type UploadStage =

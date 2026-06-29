@@ -1,4 +1,5 @@
 import {
+  applyViewMatrix,
   clearOverrideMatrix,
   disposeControls,
   getViewMatrixSnapshot,
@@ -35,6 +36,9 @@ export function stopViewer() {
 export function readViewMatrix() {
   return getViewMatrixSnapshot();
 }
+
+/** Jump the live camera to a saved view matrix (keeps user control afterward). */
+export { applyViewMatrix, isViewerStarted };
 
 /** Overrides the view matrix every frame for trajectory playback. Pass null to release. */
 export function setViewMatrix(m) {

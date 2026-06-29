@@ -465,6 +465,148 @@ body {
 .traj-btn--stop    { border-color: rgba(249,115,22,0.6); color: #fdba74; }
 .traj-btn--clear   { border-color: rgba(255,255,255,0.14); color: #64748b; }
 
+/* ─── Shots panel (saved camera viewpoints) ─────────────────────────────── */
+.shots-panel {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 999;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: #e2e8f0;
+  font-size: 11px;
+  font-family: ui-monospace, 'Cascadia Code', monospace;
+  width: min(280px, calc(100% - 20px));
+  max-height: min(50vh, 360px);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  user-select: none;
+  pointer-events: auto;
+  overflow: hidden;
+}
+.shots-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.shots-title {
+  font-weight: 600;
+  color: #f1f5f9;
+  letter-spacing: 0.02em;
+}
+.shots-btn {
+  padding: 2px 7px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.06);
+  color: #e2e8f0;
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 100ms;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+.shots-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.14); }
+.shots-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.shots-btn--save { border-color: rgba(25, 194, 173, 0.55); color: #7eead9; }
+.shots-btn--load { align-self: center; margin-top: 2px; }
+.shots-save-form { display: flex; flex-direction: column; gap: 5px; }
+.shots-input {
+  width: 100%;
+  padding: 4px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.35);
+  color: #f8fafc;
+  font-size: 11px;
+  font-family: inherit;
+  outline: none;
+}
+.shots-input:focus { border-color: rgba(25, 194, 173, 0.55); }
+.shots-save-actions { display: flex; gap: 4px; flex-wrap: wrap; }
+.shots-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.shots-row {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.04);
+}
+.shots-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 5px 7px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 4px 0 0 4px;
+}
+.shots-row-main:hover { background: rgba(255, 255, 255, 0.08); }
+.shots-label {
+  font-weight: 500;
+  color: #f1f5f9;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.shots-creator {
+  font-size: 10px;
+  color: #19c2ad;
+  text-decoration: none;
+}
+.shots-creator:hover { text-decoration: underline; }
+.shots-row-actions {
+  display: flex;
+  align-items: center;
+  padding-right: 2px;
+}
+.shots-icon-btn {
+  color: #94a3b8 !important;
+  min-width: 24px !important;
+  height: 24px !important;
+}
+.shots-icon-btn:hover { color: #e2e8f0 !important; }
+.shots-icon-btn--delete:hover { color: #fca5a5 !important; }
+.shots-empty,
+.shots-notice,
+.shots-error {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.4;
+}
+.shots-empty { color: #64748b; }
+.shots-notice { color: #94a3b8; }
+.shots-error { color: #fca5a5; }
+.shots-loading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #64748b;
+}
+
 /* Dashboard sculpture viewport — multi-ring animation */
 .sculpture-stage {
   perspective: 900px;

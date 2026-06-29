@@ -20,10 +20,11 @@ const GaussianViewerView = dynamic(
 
 type GaussianViewerProps = {
   sceneId: string;
+  shotId?: string | null;
 };
 
 /** Resolves the presigned view URL and renders the viewer with comments below. */
-export default function GaussianViewer({ sceneId }: GaussianViewerProps) {
+export default function GaussianViewer({ sceneId, shotId }: GaussianViewerProps) {
   const {
     splatUrl,
     reactionSummary,
@@ -45,6 +46,8 @@ export default function GaussianViewer({ sceneId }: GaussianViewerProps) {
           isBookmarked={isBookmarked}
           error={error}
           loading={loading}
+          shotId={shotId}
+          isSceneOwner={isSceneOwner}
         />
       </div>
 

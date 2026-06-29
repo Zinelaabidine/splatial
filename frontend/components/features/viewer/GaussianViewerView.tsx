@@ -17,6 +17,8 @@ type GaussianViewerViewProps = {
   isBookmarked: boolean;
   error: string | null;
   loading: boolean;
+  shotId?: string | null;
+  isSceneOwner?: boolean;
 };
 
 export default function GaussianViewerView({
@@ -26,6 +28,8 @@ export default function GaussianViewerView({
   isBookmarked,
   error,
   loading,
+  shotId,
+  isSceneOwner = false,
 }: GaussianViewerViewProps) {
   if (loading) {
     return (
@@ -53,7 +57,12 @@ export default function GaussianViewerView({
 
   return (
     <div className="relative h-full w-full">
-      <LegacySplatViewer splatUrl={splatUrl} />
+      <LegacySplatViewer
+        splatUrl={splatUrl}
+        sceneId={sceneId}
+        shotId={shotId}
+        isSceneOwner={isSceneOwner}
+      />
       <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 flex justify-center gap-3 px-4">
         {reactionSummary ? (
           <ReactionBar key={sceneId} sceneId={sceneId} initialSummary={reactionSummary} />

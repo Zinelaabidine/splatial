@@ -17,11 +17,12 @@ const ViewerShell = dynamic(() => import("@/components/viewer/ViewerShell"), {
 export default function ViewerPageClient() {
   const searchParams = useSearchParams();
   const sceneId = searchParams.get("id") ?? "";
+  const shotId = searchParams.get("shot");
   usePageSearch("", false);
 
   return (
     <div className="min-h-full">
-      <ViewerShell sceneId={sceneId} />
+      <ViewerShell sceneId={sceneId} shotId={shotId} />
     </div>
   );
 }

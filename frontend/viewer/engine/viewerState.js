@@ -20,6 +20,13 @@ export function clearOverrideMatrix() {
   _overrideMatrix = null;
 }
 
+/** Jump the live camera to a saved view matrix and return control to the user. */
+export function applyViewMatrix(m) {
+  if (!_controls || !Array.isArray(m) || m.length !== 16) return;
+  clearOverrideMatrix();
+  _controls.setViewMatrix(m);
+}
+
 export function isViewerStarted() {
   return viewerStarted;
 }

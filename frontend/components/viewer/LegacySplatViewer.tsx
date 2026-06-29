@@ -2,11 +2,16 @@
 
 import { useEffect } from "react";
 import { startViewer, stopViewer } from "@/viewer/engine/viewer";
+import ShotsPanel from "@/components/viewer/ShotsPanel";
 import TrajectoryControls from "@/components/viewer/TrajectoryControls";
 
 interface LegacySplatViewerProps {
   /** Absolute, pre-signed URL pointing to a .splat or .ply file. */
   splatUrl: string;
+  /** When set, enables the Shots panel and deep-link handling. */
+  sceneId?: string;
+  shotId?: string | null;
+  isSceneOwner?: boolean;
 }
 
 /**
@@ -17,7 +22,12 @@ interface LegacySplatViewerProps {
  * the first paint.  On unmount it calls stopViewer() so the module-level
  * guard allows a fresh start if the component is re-mounted.
  */
-export default function LegacySplatViewer({ splatUrl }: LegacySplatViewerProps) {
+export default function LegacySplatViewer({
+  splatUrl,
+  sceneId,
+  shotId,
+  isSceneOwner = false,
+}: LegacySplatViewerProps) {
   useEffect(() => {
     if (!splatUrl) return;
 
@@ -80,6 +90,13 @@ export default function LegacySplatViewer({ splatUrl }: LegacySplatViewerProps) 
       </div>
 
       <TrajectoryControls />
+      {sceneId ? (
+        <ShotsPanel
+          sceneId={sceneId}
+          shotId={shotId}
+          isSceneOwner={isSceneOwner}
+        />
+      ) : null}
     </div>
   );
 }

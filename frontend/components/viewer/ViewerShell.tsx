@@ -11,6 +11,12 @@ const GaussianViewer = dynamic(() => import("@/components/viewer/GaussianViewer"
   ),
 });
 
-export default function ViewerShell({ sceneId }: { sceneId: string }) {
-  return <GaussianViewer sceneId={sceneId} />;
+export default function ViewerShell({
+  sceneId,
+  shotId,
+}: {
+  sceneId: string;
+  shotId?: string | null;
+}) {
+  return <GaussianViewer sceneId={sceneId} shotId={shotId} />;
 }

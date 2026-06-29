@@ -30,3 +30,9 @@ export function updateCameraMatrix(m: number[] | null): void;
 
 /** Releases any external view matrix override. */
 export function clearViewMatrix(): void;
+
+/** Jump the live camera to a saved view matrix (keeps user control afterward). */
+export function applyViewMatrix(m: number[]): void;
+
+/** True after startViewer has begun initialising the engine. */
+export function isViewerStarted(): boolean;
