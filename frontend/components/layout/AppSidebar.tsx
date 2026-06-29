@@ -24,6 +24,7 @@ type NavActionId = "training" | "activity";
 type AppSidebarProps = {
   trainingCount?: number;
   onNavAction?: (id: NavActionId) => void;
+  onSettingsClick?: () => void;
 };
 
 const NAV: {
@@ -66,6 +67,7 @@ const NAV: {
 export default function AppSidebar({
   trainingCount = 0,
   onNavAction,
+  onSettingsClick,
 }: AppSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
@@ -161,9 +163,7 @@ export default function AppSidebar({
           type="button"
           aria-label="Settings"
           className="rounded-lg p-1.5 text-[#909090] transition-colors hover:bg-[#212121] hover:text-white"
-          onClick={() => {
-            // TODO: open account settings
-          }}
+          onClick={() => onSettingsClick?.()}
         >
           <Settings className="h-4 w-4" strokeWidth={1.5} />
         </button>

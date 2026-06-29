@@ -11,6 +11,7 @@ type SlideOverPanelProps = {
   title: string;
   children: ReactNode;
   headerAction?: ReactNode;
+  panelClassName?: string;
 };
 
 export default function SlideOverPanel({
@@ -19,6 +20,7 @@ export default function SlideOverPanel({
   title,
   children,
   headerAction,
+  panelClassName,
 }: SlideOverPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -61,6 +63,7 @@ export default function SlideOverPanel({
         className={cn(
           "fixed inset-y-0 right-0 z-50 flex w-[360px] flex-col border-l border-[#303030] bg-[#0f0f0f] transition-transform duration-300 ease-out",
           open ? "translate-x-0" : "translate-x-full",
+          panelClassName,
         )}
       >
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-[#303030] px-4">

@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
 
 import ActivityPanel from "@/components/layout/panels/ActivityPanel";
+import SettingsPanel from "@/components/layout/panels/SettingsPanel";
 import TrainingPanel from "@/components/layout/panels/TrainingPanel";
 import AppSidebar from "@/components/layout/AppSidebar";
 import { AppShellProvider } from "@/components/layout/AppShellContext";
@@ -24,6 +25,7 @@ function AppShellInner({ children, fullBleed: fullBleedProp }: AppShellProps) {
   const [openPanel, setOpenPanel] = useState<"training" | "activity" | null>(
     null,
   );
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const trainingCount = useTrainingCount();
 
   return (
@@ -52,6 +54,10 @@ function AppShellInner({ children, fullBleed: fullBleedProp }: AppShellProps) {
               setOpenPanel(id);
               setMobileNavOpen(false);
             }}
+            onSettingsClick={() => {
+              setSettingsOpen(true);
+              setMobileNavOpen(false);
+            }}
           />
         </div>
 
@@ -74,6 +80,10 @@ function AppShellInner({ children, fullBleed: fullBleedProp }: AppShellProps) {
       <ActivityPanel
         open={openPanel === "activity"}
         onClose={() => setOpenPanel(null)}
+      />
+      <SettingsPanel
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
       />
     </div>
   );

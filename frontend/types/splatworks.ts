@@ -91,6 +91,7 @@ export type DashboardStats = {
 export type UserAccount = {
   name: string;
   initials: string;
+  email: string;
   plan: string;
 };
 

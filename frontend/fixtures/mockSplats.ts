@@ -3,6 +3,7 @@ import type { Splat, UserAccount } from "@/types/splatworks";
 export const MOCK_ACCOUNT: UserAccount = {
   name: "Mara Köhler",
   initials: "MK",
+  email: "mara@example.com",
   plan: "Pro plan",
 };
 
