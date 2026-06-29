@@ -44,6 +44,7 @@ data "aws_iam_policy_document" "github_deploy_policy" {
       "cognito-idp:CreateUserPool",
       "cognito-idp:DescribeUserPool",
       "cognito-idp:UpdateUserPool",
+      "cognito-idp:AddCustomAttributes",
       "cognito-idp:DeleteUserPool",
       "cognito-idp:SetUserPoolMfaConfig",
       "cognito-idp:GetUserPoolMfaConfig",
@@ -645,6 +646,9 @@ data "aws_iam_policy_document" "github_deploy_network_policy" {
       # Constructed ARNs — table does not exist yet on first apply.
       "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-scenes",
       "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-scenes/index/*",
+      "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-profiles",
+      "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-profiles/index/*",
+      "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-usernames",
     ]
   }
 
