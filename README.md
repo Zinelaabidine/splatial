@@ -37,6 +37,18 @@ Splatial demonstrates end-to-end **Cloud and DevOps engineering**: multi-environ
 
 > For the full as-built reference — network topology, IAM boundaries, DynamoDB schema, worker lifecycle, and remediation plan — see [`docs/ARCHITECTURE_REFERENCE.md`](./docs/ARCHITECTURE_REFERENCE.md).
 
+### Project status & scope
+
+**Status:** actively developed; deployed and running in the `dev` environment at
+**[splatial-dev.openspacenexus.store](https://splatial-dev.openspacenexus.store)**
+*(research/portfolio project — the dev environment may be rebuilt at any time).*
+
+This repository is the full stack — **Terraform infrastructure, the Node.js Lambda
+backend, the Python GPU worker, and the Next.js frontend** — covering the core
+upload→train→view pipeline and a 15-feature [social & interaction layer](#-social--interaction-layer).
+Design rationale is recorded in [`docs/DESIGN_DECISIONS.md`](./docs/DESIGN_DECISIONS.md);
+engineering practices in [`docs/ENGINEERING.md`](./docs/ENGINEERING.md).
+
 ---
 
 ## 🏗️ Architecture Deep-Dive
@@ -331,6 +343,9 @@ Focused on the media pipeline, 3D rendering experience, and spatial content work
 |---|---|
 | [`docs/ARCHITECTURE_REFERENCE.md`](./docs/ARCHITECTURE_REFERENCE.md) | Definitive as-built reference: network topology, IAM, data flows, known gaps, remediation plan |
 | [`docs/SOCIAL_FEATURES_REFERENCE.md`](./docs/SOCIAL_FEATURES_REFERENCE.md) | As-built reference for the social & interaction layer (features 1–15): data model, API, per-feature invariants, upgrade paths |
+| [`docs/DESIGN_DECISIONS.md`](./docs/DESIGN_DECISIONS.md) | ADR-style decision log: problem → options → decision → trade-off |
+| [`docs/ENGINEERING.md`](./docs/ENGINEERING.md) | Environments, CI/CD, local validation gate, testing strategy, coding standards |
+| [`SECURITY.md`](./SECURITY.md) | Security posture: auth/authorization, secrets, IAM, reporting |
 | [`docs/architecture.md`](./docs/architecture.md) | System design narrative and cost model |
 | [`docs/logging-spec.md`](./docs/logging-spec.md) | Logging & observability contract across backend, worker, infra, frontend |
 | [`docs/CHANGELOG.md`](./docs/CHANGELOG.md) | Dated change log (what changed, why, where, how to verify) |
