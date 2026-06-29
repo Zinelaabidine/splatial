@@ -3,6 +3,7 @@
 import { authenticatedFetch } from "@/services/apiClient";
 import type {
   Profile,
+  ProfileScenesResponse,
   UpdateProfileRequest,
   UpdateProfileResponse,
   UsernameAvailableResponse,
@@ -32,6 +33,19 @@ export async function getProfileByUsername(
   return authenticatedFetch(`/api/v1/profiles/${encodeURIComponent(username)}`, {
     signal,
   }) as Promise<Profile>;
+}
+
+export async function getProfileScenes(
+  username: string,
+  cursor?: string,
+  signal?: AbortSignal,
+): Promise<ProfileScenesResponse> {
+  const base = `/api/v1/profiles/${encodeURIComponent(username)}/scenes`;
+  const path =
+    cursor != null && cursor !== ""
+      ? `${base}?cursor=${encodeURIComponent(cursor)}`
+      : base;
+  return authenticatedFetch(path, { signal }) as Promise<ProfileScenesResponse>;
 }
 
 export async function checkUsernameAvailable(

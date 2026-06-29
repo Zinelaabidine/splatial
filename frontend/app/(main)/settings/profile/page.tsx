@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -141,6 +142,17 @@ export default function ProfileSettingsPage() {
       <p className="mb-8 text-sm text-[#909090]">
         Update your public handle and profile details.
       </p>
+
+      {profile?.username ? (
+        <p className="mb-8">
+          <Link
+            href={`/u/${profile.username}`}
+            className="text-sm text-[#3b82f6] hover:underline"
+          >
+            View my public profile
+          </Link>
+        </p>
+      ) : null}
 
       <div className="space-y-5 rounded-2xl border border-[#303030] bg-[#0f0f0f] p-6">
         <div>

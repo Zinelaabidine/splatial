@@ -165,6 +165,11 @@ export interface ListScenesV1Response {
   scenes: Scene[];
 }
 
+export interface ProfileScenesResponse {
+  scenes: Scene[];
+  nextCursor?: string;
+}
+
 export interface DeleteSceneResponse {
   sceneId: string;
   deleted: true;
