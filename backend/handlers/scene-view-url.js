@@ -4,6 +4,7 @@ const { S3Client, GetObjectCommand } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { DynamoDBClient, GetItemCommand } = require("@aws-sdk/client-dynamodb");
 const response = require("../lib/response");
+const { sceneVisibilityFromItem } = require("../lib/scene-response");
 const { resolveSceneViewObject } = require("../lib/scene-view-key");
 
 const s3 = new S3Client({});
@@ -40,7 +41,9 @@ exports.handler = async (event) => {
   const item = result.Item;
   if (!item) return response(404, { error: "Scene not found" });
 
-  if (item.user_id?.S !== userId) {
+  const isOwner = item.user_id?.S === userId;
+  const isPublic = sceneVisibilityFromItem(item) === "PUBLIC";
+  if (!isOwner && !isPublic) {
     return response(403, { error: "Forbidden: scene does not belong to this user" });
   }
 

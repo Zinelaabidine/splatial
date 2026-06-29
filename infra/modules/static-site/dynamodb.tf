@@ -35,6 +35,11 @@ resource "aws_dynamodb_table" "scenes" {
     type = "S"
   }
 
+  attribute {
+    name = "public_owner_id"
+    type = "S"
+  }
+
   # GSI for listing a user's scenes by status (e.g. PENDING_UPLOAD, READY).
   global_secondary_index {
     name            = "user_id-status-index"
@@ -47,6 +52,14 @@ resource "aws_dynamodb_table" "scenes" {
   global_secondary_index {
     name            = "visibility-created_at-index"
     hash_key        = "visibility"
+    range_key       = "created_at"
+    projection_type = "ALL"
+  }
+
+  # Sparse GSI: public_owner_id is set only on PUBLIC scenes — lists each owner's public scenes.
+  global_secondary_index {
+    name            = "public_owner-created_at-index"
+    hash_key        = "public_owner_id"
     range_key       = "created_at"
     projection_type = "ALL"
   }

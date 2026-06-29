@@ -1,16 +1,15 @@
 "use strict";
 
-const {
-  DynamoDBClient,
-  GetItemCommand,
-  QueryCommand,
-} = require("@aws-sdk/client-dynamodb");
+const { DynamoDBClient, GetItemCommand } = require("@aws-sdk/client-dynamodb");
 const response = require("../lib/response");
-const { profileResponseFromItem, validateUsername } = require("../lib/profile");
+const {
+  profileResponseFromItem,
+  validateUsername,
+  resolveUserIdByUsername,
+} = require("../lib/profile");
 
 const dynamo = new DynamoDBClient({});
 const PROFILES_TABLE = process.env.PROFILES_TABLE_NAME;
-const USERNAMES_TABLE = process.env.USERNAMES_TABLE_NAME;
 
 /**
  * GET /api/v1/profiles/{username}
@@ -31,28 +30,7 @@ exports.handler = async (event) => {
   if (!check.ok) return response(404, { error: "Profile not found" });
   const username = check.username;
 
-  const usernameRow = await dynamo.send(
-    new GetItemCommand({
-      TableName: USERNAMES_TABLE,
-      Key: { username: { S: username } },
-    })
-  );
-
-  let ownerId = usernameRow.Item?.user_id?.S;
-
-  if (!ownerId) {
-    const gsi = await dynamo.send(
-      new QueryCommand({
-        TableName: PROFILES_TABLE,
-        IndexName: "username-index",
-        KeyConditionExpression: "username = :username",
-        ExpressionAttributeValues: { ":username": { S: username } },
-        Limit: 1,
-      })
-    );
-    ownerId = gsi.Items?.[0]?.user_id?.S;
-  }
-
+  const ownerId = await resolveUserIdByUsername(dynamo, username);
   if (!ownerId) return response(404, { error: "Profile not found" });
 
   const profile = await dynamo.send(

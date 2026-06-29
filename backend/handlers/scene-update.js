@@ -156,6 +156,15 @@ exports.handler = async (event) => {
     Object.assign(exprValues, ownerRefresh.values);
   }
 
+  if (visibilityChanging) {
+    if (visibility === "PUBLIC") {
+      exprParts.push("public_owner_id = :pubOwner");
+      exprValues[":pubOwner"] = { S: userId };
+    } else {
+      removeParts.push("public_owner_id");
+    }
+  }
+
   let updateExpression = `SET ${exprParts.join(", ")}`;
   if (removeParts.length > 0) {
     updateExpression += ` REMOVE ${removeParts.join(", ")}`;

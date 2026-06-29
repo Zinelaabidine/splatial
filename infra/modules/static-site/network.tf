@@ -375,6 +375,16 @@ resource "aws_apigatewayv2_route" "profile_get_by_username" {
   target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
 }
 
+resource "aws_apigatewayv2_route" "profile_scenes_list" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "GET /api/v1/profiles/{username}/scenes"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
 resource "aws_apigatewayv2_route" "profile_username_available" {
   api_id    = aws_apigatewayv2_api.http_api.id
   route_key = "GET /api/v1/profile/username-available/{username}"

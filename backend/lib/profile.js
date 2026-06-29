@@ -1,6 +1,7 @@
 "use strict";
 
 const { S3Client, GetObjectCommand } = require("@aws-sdk/client-s3");
+const { GetItemCommand, QueryCommand } = require("@aws-sdk/client-dynamodb");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 
 const s3 = new S3Client({});
@@ -117,6 +118,35 @@ function buildMinimalProfileItem(userId, displayName, now) {
   };
 }
 
+async function resolveUserIdByUsername(dynamo, username) {
+  const usernamesTable = process.env.USERNAMES_TABLE_NAME;
+  const profilesTable = process.env.PROFILES_TABLE_NAME;
+
+  const usernameRow = await dynamo.send(
+    new GetItemCommand({
+      TableName: usernamesTable,
+      Key: { username: { S: username } },
+    })
+  );
+
+  let ownerId = usernameRow.Item?.user_id?.S;
+
+  if (!ownerId) {
+    const gsi = await dynamo.send(
+      new QueryCommand({
+        TableName: profilesTable,
+        IndexName: "username-index",
+        KeyConditionExpression: "username = :username",
+        ExpressionAttributeValues: { ":username": { S: username } },
+        Limit: 1,
+      })
+    );
+    ownerId = gsi.Items?.[0]?.user_id?.S;
+  }
+
+  return ownerId ?? null;
+}
+
 module.exports = {
   RESERVED_USERNAMES,
   normalizeUsername,
@@ -126,4 +156,5 @@ module.exports = {
   displayNameFromClaims,
   profileResponseFromItem,
   buildMinimalProfileItem,
+  resolveUserIdByUsername,
 };

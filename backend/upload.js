@@ -21,6 +21,7 @@ const adminAttemptsLogs = require("./handlers/admin-attempts-logs");
 const profileGetMe = require("./handlers/profile-get-me");
 const profileUpdateMe = require("./handlers/profile-update-me");
 const profileGetByUsername = require("./handlers/profile-get-by-username");
+const profileScenesList = require("./handlers/profile-scenes-list");
 const profileUsernameAvailable = require("./handlers/profile-username-available");
 const response    = require("./lib/response");
 
@@ -78,6 +79,8 @@ exports.handler = async (event) => {
         return await profileUpdateMe.handler(event);
       case "GET /api/v1/profiles/{username}":
         return await profileGetByUsername.handler(event);
+      case "GET /api/v1/profiles/{username}/scenes":
+        return await profileScenesList.handler(event);
       case "GET /api/v1/profile/username-available/{username}":
         return await profileUsernameAvailable.handler(event);
 
