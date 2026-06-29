@@ -6,7 +6,7 @@ resource "aws_dynamodb_table" "reactions" {
   hash_key     = "scene_id"
   range_key    = "user_id"
 
-  depends_on = [time_sleep.iam_propagation]
+  depends_on = [time_sleep.network_iam_propagation]
 
   attribute {
     name = "scene_id"
