@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { MoreVertical, Pencil, Send, Trash2, XCircle } from "lucide-react";
+import { MoreVertical, Pencil, RefreshCw, Send, Trash2, XCircle } from "lucide-react";
 
 import PointCloudThumbnail from "@/components/splatworks/PointCloudThumbnail";
 import StatusDot, { STATUS_LABELS } from "@/components/splatworks/StatusDot";
@@ -211,7 +211,7 @@ export default function DashboardSceneCard({
             {submitting
               ? "Submitting…"
               : scene.apiStatus === "FAILED"
-                ? "Retry"
+                ? "Retry training"
                 : "Submit for processing"}
           </Button>
         )}
@@ -312,7 +312,7 @@ function StatusTile({
       {scene.status === "failed" && scene.errorMessage && (
         <>
           <div
-            className="my-3 font-sw-mono text-xs leading-snug"
+            className="my-3 max-w-[180px] font-sw-mono text-[11px] leading-snug opacity-90"
             style={{ color: textColor }}
           >
             {scene.errorMessage}
@@ -323,6 +323,13 @@ function StatusTile({
             </div>
           )}
         </>
+      )}
+
+      {scene.status === "failed" && (
+        <div className="mt-3 flex items-center gap-1.5 font-sw-mono text-[11px] text-[#f87171]/70">
+          <RefreshCw className="h-3 w-3" strokeWidth={1.5} />
+          Click Retry below to resubmit
+        </div>
       )}
     </div>
   );
