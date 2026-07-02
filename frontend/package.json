@@ -1,6 +1,7 @@
 {
   "name": "splatial-frontend",
   "version": "0.1.0",
+  "description": "Splatial web frontend",
   "private": true,
   "scripts": {
     "dev": "next dev --webpack",
