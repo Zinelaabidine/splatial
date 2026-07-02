@@ -88,6 +88,13 @@ const NAV: {
   },
 ];
 
+const navItemClassName = (isActive: boolean) =>
+  cn(
+    "relative flex items-center gap-3 rounded-xl py-2.5 pr-3 text-sm transition-colors",
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/45 focus-visible:ring-offset-0",
+    isActive ? "sw-nav-active pl-5 font-medium text-white" : "pl-3 font-normal text-[#d2d8e6] hover:bg-white/10",
+  );
+
 export default function AppSidebar({
   trainingCount = 0,
   onNavAction,
@@ -111,40 +118,48 @@ export default function AppSidebar({
       ]
     : NAV;
 
-  return (
-    <aside className="sw-glass relative z-10 my-3 ml-3 flex h-[calc(100%-1.5rem)] w-[240px] shrink-0 flex-col overflow-y-auto rounded-2xl px-3 py-4">
-      <SplatworksLogo variant="dark" className="mb-5 px-1" />
+  const hasTrainingActivity = trainingCount > 0;
 
-      <nav className="flex flex-col gap-0.5">
+  return (
+    <aside
+      aria-label="Main navigation"
+      className="sw-glass sw-glass-border relative z-10 my-3 ml-3 flex h-[calc(100%-1.5rem)] w-[240px] shrink-0 flex-col overflow-y-auto rounded-2xl px-3 py-4"
+    >
+      <SplatworksLogo variant="dark" className="relative z-[1] mb-5 px-1" />
+
+      <nav aria-label="Primary" className="relative z-[1] flex flex-col gap-0.5">
         {navItems.map(({ id, label, href, icon: Icon, match }) => {
           const isActive = match(pathname);
-          const badge = id === "training" ? trainingCount : undefined;
+          const showTrainingBadge = id === "training" && trainingCount > 0;
+
           const inner = (
             <>
               <Icon
+                aria-hidden
                 className={cn(
-                  "h-5 w-5 shrink-0 transition-all",
-                  isActive &&
-                    "[filter:drop-shadow(0_0_7px_rgba(129,140,248,0.85))]",
+                  "h-5 w-5 shrink-0 transition-all duration-200",
+                  isActive
+                    ? "sw-icon-glow text-indigo-300"
+                    : "text-[#aab4c8] group-hover:text-[#c5cde0]",
                 )}
                 strokeWidth={isActive ? 2 : 1.5}
-                color={isActive ? "#a5b4fc" : "#aab4c8"}
               />
-              <span className="flex-1 truncate">{label}</span>
-              {badge != null && badge > 0 && (
-                <span className="font-sw-mono rounded-md bg-indigo-500/25 px-1.5 py-px text-[10px] font-semibold text-indigo-200 ring-1 ring-indigo-400/30">
-                  {badge}
+              <span className="min-w-0 flex-1 truncate">{label}</span>
+              {showTrainingBadge && (
+                <span
+                  className="sw-training-badge shrink-0"
+                  aria-label={`${trainingCount} training ${trainingCount === 1 ? "job" : "jobs"} in progress`}
+                >
+                  <span className="sw-training-dot" aria-hidden />
+                  <span className="font-sw-mono text-[10px] font-medium tabular-nums text-amber-100/90">
+                    {trainingCount}
+                  </span>
                 </span>
               )}
             </>
           );
 
-          const className = cn(
-            "flex items-center gap-4 rounded-xl px-3 py-2.5 text-sm transition-colors",
-            isActive
-              ? "sw-nav-active font-medium text-white"
-              : "font-normal text-[#d2d8e6] hover:bg-white/10",
-          );
+          const className = cn(navItemClassName(isActive), "group");
 
           if (href === "#") {
             const actionId = id as NavActionId;
@@ -153,6 +168,7 @@ export default function AppSidebar({
                 key={id}
                 type="button"
                 className={className}
+                aria-label={showTrainingBadge ? `${label}, ${trainingCount} in progress` : label}
                 onClick={() => onNavAction?.(actionId)}
               >
                 {inner}
@@ -161,7 +177,12 @@ export default function AppSidebar({
           }
 
           return (
-            <Link key={id} href={href} className={className}>
+            <Link
+              key={id}
+              href={href}
+              className={className}
+              aria-current={isActive ? "page" : undefined}
+            >
               {inner}
             </Link>
           );
@@ -171,31 +192,32 @@ export default function AppSidebar({
       <button
         type="button"
         onClick={() => router.push("/scenes/create")}
-        className="sw-new-scene mt-5 flex h-10 w-full items-center justify-center gap-2 rounded-full text-sm font-semibold text-white transition-shadow"
+        className="sw-new-scene relative z-[1] mt-5 flex h-10 w-full items-center justify-center gap-2 rounded-full text-sm font-semibold text-white transition-[filter,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 focus-visible:ring-offset-0"
       >
-        <Plus className="h-4 w-4" strokeWidth={2} />
-        New scene
+        <Plus className="relative z-[1] h-4 w-4" strokeWidth={2} aria-hidden />
+        <span className="relative z-[1]">New scene</span>
       </button>
 
-      <div className="sw-control mt-auto flex items-center gap-2.5 rounded-2xl px-2.5 py-2.5">
-        <div className="rounded-full ring-1 ring-white/20 [box-shadow:0_0_14px_-2px_rgba(20,184,166,0.7)]">
+      <div
+        className={cn(
+          "sw-control sw-profile-card relative z-[1] mt-auto flex items-center gap-2.5 rounded-2xl px-2.5 py-2.5",
+          hasTrainingActivity && "sw-profile-attention",
+        )}
+      >
+        <div className="sw-profile-avatar-ring shrink-0">
           <UserAvatar initials={account.initials} size={36} />
         </div>
         <div className="min-w-0 flex-1 leading-tight">
-          <div className="truncate text-sm font-semibold text-white">
-            {account.name}
-          </div>
-          <div className="font-sw-mono text-[11px] text-[#9aa6bd]">
-            {account.plan}
-          </div>
+          <div className="truncate text-sm font-semibold text-white">{account.name}</div>
+          <div className="font-sw-mono truncate text-[11px] text-[#9aa6bd]">{account.plan}</div>
         </div>
         <button
           type="button"
           aria-label="Settings"
-          className="rounded-lg p-1.5 text-[#9aa6bd] transition-colors hover:bg-white/10 hover:text-white"
+          className="shrink-0 rounded-lg p-1.5 text-[#9aa6bd] transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/45"
           onClick={() => onSettingsClick?.()}
         >
-          <Settings className="h-4 w-4" strokeWidth={1.5} />
+          <Settings className="h-4 w-4" strokeWidth={1.5} aria-hidden />
         </button>
       </div>
     </aside>

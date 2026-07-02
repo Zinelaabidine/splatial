@@ -25,6 +25,16 @@ interface RenderMetrics {
   renderTime: number;
 }
 
+type PerformanceWithMemory = Performance & {
+  memory?: {
+    usedJSHeapSize: number;
+  };
+};
+
+function getUsedJsHeapSize(): number {
+  return (performance as PerformanceWithMemory).memory?.usedJSHeapSize ?? 0;
+}
+
 export const SplatPreviewRenderer: React.FC<SplatPreviewProps> = ({
   splatUrl,
   sceneId,
@@ -40,7 +50,7 @@ export const SplatPreviewRenderer: React.FC<SplatPreviewProps> = ({
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const animationIdRef = useRef<number | null>(null);
 
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<RenderMetrics>({
     fps: 0,
@@ -92,62 +102,6 @@ export const SplatPreviewRenderer: React.FC<SplatPreviewProps> = ({
     return { scene, camera, renderer };
   }, [width, height]);
 
-  // Load Gaussian Splats
-  const loadSplats = useCallback(async (scene: THREE.Scene) => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      // TODO: Integrate with @mkkellogg/gaussian-splats-3d
-      // This is a placeholder implementation
-      // In production, use the actual gaussian-splats-3d loader
-
-      // Example placeholder geometry
-      const geometry = new THREE.BoxGeometry(1, 1, 1);
-      const material = new THREE.MeshPhongMaterial({
-        color: 0x0088ff,
-        transparent: true,
-        opacity: 0.8,
-      });
-      const mesh = new THREE.Mesh(geometry, material);
-      scene.add(mesh);
-
-      setIsLoading(false);
-      onRenderComplete?.();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load splats');
-      setIsLoading(false);
-    }
-  }, [onRenderComplete]);
-
-  // Animation loop with metrics
-  const animate = useCallback(() => {
-    if (!rendererRef.current || !sceneRef.current || !cameraRef.current) return;
-
-    const startTime = performance.now();
-
-    // Rotation animation
-    sceneRef.current.children.forEach((child) => {
-      if (child instanceof THREE.Mesh) {
-        child.rotation.x += 0.005;
-        child.rotation.y += 0.01;
-      }
-    });
-
-    rendererRef.current.render(sceneRef.current, cameraRef.current);
-    const renderTime = performance.now() - startTime;
-
-    // Update metrics
-    setMetrics((prev) => ({
-      ...prev,
-      renderTime,
-      fps: Math.round(1000 / renderTime),
-      memoryUsage: (performance as any).memory?.usedJSHeapSize || 0,
-    }));
-
-    animationIdRef.current = requestAnimationFrame(animate);
-  }, []);
-
   // Export canvas to PNG with transparency
   const exportToPNG = useCallback(() => {
     if (!canvasRef.current) return;
@@ -182,13 +136,68 @@ export const SplatPreviewRenderer: React.FC<SplatPreviewProps> = ({
     if (!setup) return;
 
     const { scene, camera, renderer } = setup;
+    const container = containerRef.current;
+    let cancelled = false;
 
-    loadSplats(scene);
-    animate();
+    const loadSplats = async () => {
+      await Promise.resolve();
+      if (cancelled) return;
 
-    // Handle window resize
+      try {
+        setError(null);
+
+        // TODO: Integrate with @mkkellogg/gaussian-splats-3d using splatUrl
+        void splatUrl;
+
+        const geometry = new THREE.BoxGeometry(1, 1, 1);
+        const material = new THREE.MeshPhongMaterial({
+          color: 0x0088ff,
+          transparent: true,
+          opacity: 0.8,
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+        scene.add(mesh);
+
+        if (cancelled) return;
+        setIsLoading(false);
+        onRenderComplete?.();
+      } catch (err) {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : 'Failed to load splats');
+        setIsLoading(false);
+      }
+    };
+
+    void loadSplats();
+
+    const tick = () => {
+      if (!rendererRef.current || !sceneRef.current || !cameraRef.current) return;
+
+      const startTime = performance.now();
+
+      sceneRef.current.children.forEach((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.rotation.x += 0.005;
+          child.rotation.y += 0.01;
+        }
+      });
+
+      rendererRef.current.render(sceneRef.current, cameraRef.current);
+      const renderTime = performance.now() - startTime;
+
+      setMetrics((prev) => ({
+        ...prev,
+        renderTime,
+        fps: Math.round(1000 / renderTime),
+        memoryUsage: getUsedJsHeapSize(),
+      }));
+
+      animationIdRef.current = requestAnimationFrame(tick);
+    };
+
+    animationIdRef.current = requestAnimationFrame(tick);
+
     const handleResize = () => {
-      if (!renderer) return;
       renderer.setSize(width, height);
       if (camera instanceof THREE.PerspectiveCamera) {
         camera.aspect = width / height;
@@ -199,14 +208,17 @@ export const SplatPreviewRenderer: React.FC<SplatPreviewProps> = ({
     window.addEventListener('resize', handleResize);
 
     return () => {
+      cancelled = true;
       window.removeEventListener('resize', handleResize);
       if (animationIdRef.current) {
         cancelAnimationFrame(animationIdRef.current);
       }
       renderer.dispose();
-      containerRef.current?.removeChild(renderer.domElement);
+      if (container?.contains(renderer.domElement)) {
+        container.removeChild(renderer.domElement);
+      }
     };
-  }, [initializeScene, loadSplats, animate, width, height]);
+  }, [initializeScene, width, height, splatUrl, onRenderComplete]);
 
   return (
     <div className="flex flex-col gap-4">
