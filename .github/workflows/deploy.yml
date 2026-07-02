@@ -52,6 +52,7 @@ jobs:
               - 'backend/**'
             infra:
               - 'infra/**'
+              - '.github/workflows/deploy.yml'
   ci:
     name: lint and test
     runs-on: ubuntu-latest
@@ -129,6 +130,34 @@ jobs:
       - name: Terraform Init
         working-directory: ${{ steps.set-env.outputs.tf_dir }}
         run: terraform init
+      # Deploy-role policy updates do not affect the already-assumed OIDC session.
+      # Apply IAM policies first, then re-assume the role so later API calls (e.g.
+      # autoscaling:EnableMetricsCollection) see the updated permissions.
+      - name: Terraform Apply deploy IAM policies
+        if: needs.changes.outputs.infra == 'true'
+        working-directory: ${{ steps.set-env.outputs.tf_dir }}
+        run: |
+          DEPLOY_IAM_TARGETS=(
+            -target=module.static_site.aws_iam_policy.github_deploy_core_policy
+            -target=module.static_site.aws_iam_role_policy_attachment.github_deploy_core
+            -target=module.static_site.time_sleep.iam_propagation
+            -target=module.static_site.aws_iam_policy.github_deploy_compute_policy
+            -target=module.static_site.aws_iam_role_policy_attachment.github_deploy_compute
+            -target=module.static_site.time_sleep.compute_iam_propagation
+            -target=module.static_site.aws_iam_policy.github_deploy_network_policy
+            -target=module.static_site.aws_iam_role_policy_attachment.github_deploy_network
+            -target=module.static_site.time_sleep.network_iam_propagation
+            -target=module.static_site.aws_iam_policy.github_deploy_cdn_policy
+            -target=module.static_site.aws_iam_role_policy_attachment.github_deploy_cdn
+            -target=module.static_site.time_sleep.cdn_iam_propagation
+          )
+          terraform apply -auto-approve "${DEPLOY_IAM_TARGETS[@]}"
+      - name: Refresh AWS credentials after IAM policy update
+        if: needs.changes.outputs.infra == 'true'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::886601940523:role/splatial-${{ github.ref_name == 'main' && 'prod' || github.ref_name }}-github-deploy-role
+          aws-region: ${{ env.AWS_REGION }}
       - name: Terraform Apply
         if: >
           needs.changes.outputs.infra == 'true' ||
