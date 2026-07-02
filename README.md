@@ -4,7 +4,7 @@
 
 **Cloud-native 3D Gaussian Splatting platform — ingest, train, and serve photorealistic scenes at scale.**
 
-[![Deploy](https://github.com/zinelaabidinenadir/splatial/actions/workflows/deploy.yml/badge.svg)](https://github.com/zinelaabidinenadir/splatial/actions/workflows/deploy.yml)
+[![Deploy](https://github.com/Zinelaabidine/splatial/actions/workflows/deploy.yml/badge.svg)](https://github.com/Zinelaabidine/splatial/actions/workflows/deploy.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](#-license)
 [![IaC](https://img.shields.io/badge/IaC-Terraform-7B42BC?logo=terraform&logoColor=white)](https://www.terraform.io/)
 [![AWS](https://img.shields.io/badge/Cloud-AWS-FF9900?logo=amazonaws&logoColor=white)](https://aws.amazon.com/)
@@ -302,7 +302,7 @@ splatial/
 
 ## 🗺️ Roadmap & Upcoming Features
 
-> **📌 Tracking:** Each item below corresponds to an active [GitHub Issue](https://github.com/zinelaabidinenadir/splatial/issues). Issues are the source of truth for scope, acceptance criteria, and assignment.
+> **📌 Tracking:** Each item below corresponds to an active [GitHub Issue](https://github.com/Zinelaabidine/splatial/issues). Issues are the source of truth for scope, acceptance criteria, and assignment.
 
 ### Infrastructure & Cloud Operations
 
