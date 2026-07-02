@@ -175,7 +175,7 @@ resource "aws_autoscaling_group" "worker" {
 
   # IAM policy must grant EnableMetricsCollection before this resource can
   # enable ASG metrics; without depends_on Terraform applies both in parallel.
-  depends_on = [aws_iam_policy.github_deploy_compute_policy]
+  depends_on = [time_sleep.compute_iam_propagation]
 }
 
 # ── Step Scaling — Scale Out ──────────────────────────────────────────────────

@@ -611,6 +611,17 @@ resource "aws_iam_role_policy_attachment" "local_dev_compute" {
   policy_arn = aws_iam_policy.github_deploy_compute_policy.arn
 }
 
+# Compute policy updates must propagate before ASG metrics APIs in the same apply.
+resource "time_sleep" "compute_iam_propagation" {
+  create_duration = "15s"
+
+  triggers = {
+    compute_policy_hash = sha256(aws_iam_policy.github_deploy_compute_policy.policy)
+  }
+
+  depends_on = [aws_iam_role_policy_attachment.github_deploy_compute]
+}
+
 # ── Network / data-plane permissions (split out to stay under 6144-byte policy limit) ──
 
 data "aws_iam_policy_document" "github_deploy_network_policy" {
