@@ -311,6 +311,26 @@ resource "aws_apigatewayv2_route" "scenes_thumbnail_presign" {
   target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
 }
 
+resource "aws_apigatewayv2_route" "scenes_edit_presign" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "POST /api/v1/scenes/{sceneId}/edit/presign"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
+resource "aws_apigatewayv2_route" "scenes_edit_complete" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "POST /api/v1/scenes/{sceneId}/edit/complete"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
 resource "aws_apigatewayv2_route" "scenes_fork" {
   api_id    = aws_apigatewayv2_api.http_api.id
   route_key = "POST /api/v1/scenes/{sceneId}/fork"
