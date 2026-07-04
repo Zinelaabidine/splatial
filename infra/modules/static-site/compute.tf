@@ -58,8 +58,12 @@ resource "aws_launch_template" "worker" {
     }
   }
 
+  # Worker subnet is public (see network-worker.tf) — direct IGW route instead
+  # of a NAT Gateway. The SG has zero inbound rules, so a public IP here adds
+  # no reachable attack surface; it only makes the public-IPv4 charge
+  # usage-based instead of paying for an always-on NAT Gateway + EIP.
   network_interfaces {
-    associate_public_ip_address = false
+    associate_public_ip_address = true
     security_groups             = [aws_security_group.worker.id]
     delete_on_termination       = true
   }

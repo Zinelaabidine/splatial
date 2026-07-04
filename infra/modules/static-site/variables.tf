@@ -81,12 +81,7 @@ variable "worker_spot_availability_zone" {
 }
 
 variable "worker_spot_subnet_cidr" {
-  description = "Private CIDR for the GPU Spot worker subnet in the app VPC."
-  type        = string
-}
-
-variable "worker_nat_public_subnet_cidr" {
-  description = "Public CIDR in the same AZ as worker_spot_subnet_cidr; hosts the worker NAT gateway."
+  description = "Public CIDR for the GPU Spot worker subnet in the app VPC (direct IGW route, no NAT Gateway)."
   type        = string
 }
 

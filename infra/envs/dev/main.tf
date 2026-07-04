@@ -27,7 +27,6 @@ module "static_site" {
   private_cidrs = ["10.0.11.0/24", "10.0.12.0/24"]
 
   worker_spot_availability_zone = "us-east-1d"
-  worker_nat_public_subnet_cidr = "10.0.20.0/28"
   worker_spot_subnet_cidr       = "10.0.21.0/24"
 
   cors_extra_origins = [
