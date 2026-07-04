@@ -120,6 +120,7 @@ exports.handler = async (event) => {
     new GetItemCommand({
       TableName: TABLE,
       Key: { scene_id: { S: sceneId } },
+      ConsistentRead: true,
     })
   );
 
@@ -179,15 +180,18 @@ exports.handler = async (event) => {
   }
 
   if (hasVisibility) {
-    exprParts.push("visibility = :visibility");
+    exprParts.push("#vis = :visibility");
+    exprNames["#vis"] = "visibility";
     exprValues[":visibility"] = { S: visibility };
   }
 
   if (hasCategory) {
     if (clearCategory) {
-      removeParts.push("category");
+      removeParts.push("#cat");
+      exprNames["#cat"] = "category";
     } else {
-      exprParts.push("category = :category");
+      exprParts.push("#cat = :category");
+      exprNames["#cat"] = "category";
       exprValues[":category"] = { S: validatedCategory };
     }
   }
@@ -221,17 +225,39 @@ exports.handler = async (event) => {
     updateExpression += ` REMOVE ${removeParts.join(", ")}`;
   }
 
-  const updateResult = await dynamo.send(
-    new UpdateItemCommand({
-      TableName: TABLE,
-      Key: { scene_id: { S: sceneId } },
-      UpdateExpression: updateExpression,
-      ConditionExpression: "user_id = :uid",
-      ExpressionAttributeNames: Object.keys(exprNames).length > 0 ? exprNames : undefined,
-      ExpressionAttributeValues: exprValues,
-      ReturnValues: "ALL_NEW",
-    })
-  );
+  let conditionExpression = "user_id = :uid";
+  if (hasVisibility) {
+    exprNames["#vis"] = "visibility";
+    exprValues[":currentVis"] = { S: currentVisibility };
+    if (currentVisibility === "PUBLIC") {
+      conditionExpression += " AND #vis = :currentVis";
+    } else {
+      conditionExpression +=
+        " AND (attribute_not_exists(#vis) OR #vis = :currentVis)";
+    }
+  }
+
+  let updateResult;
+  try {
+    updateResult = await dynamo.send(
+      new UpdateItemCommand({
+        TableName: TABLE,
+        Key: { scene_id: { S: sceneId } },
+        UpdateExpression: updateExpression,
+        ConditionExpression: conditionExpression,
+        ExpressionAttributeNames: Object.keys(exprNames).length > 0 ? exprNames : undefined,
+        ExpressionAttributeValues: exprValues,
+        ReturnValues: "ALL_NEW",
+      })
+    );
+  } catch (err) {
+    if (err.name === "ConditionalCheckFailedException") {
+      return response(409, {
+        error: "Scene was modified by another request, please retry",
+      });
+    }
+    throw err;
+  }
 
   if (visibilityChanging) {
     if (visibility === "PUBLIC") {

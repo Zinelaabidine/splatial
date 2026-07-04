@@ -235,7 +235,14 @@ export function useScenesDashboardGrid(search: string) {
       );
 
       try {
-        await updateScene(sceneId, { visibility: nextVisibility });
+        const updated = await updateScene(sceneId, { visibility: nextVisibility });
+        setScenes((prev) =>
+          prev.map((s) =>
+            s.id === scene.id
+              ? { ...s, visibility: updated.visibility ?? nextVisibility }
+              : s,
+          ),
+        );
       } catch (err) {
         console.error("[useScenesDashboardGrid] visibility update failed", err);
         setScenes((prev) =>
@@ -243,16 +250,21 @@ export function useScenesDashboardGrid(search: string) {
             s.id === scene.id ? { ...s, visibility: currentVisibility } : s,
           ),
         );
-        setActionError(
-          err instanceof ApiRequestError
-            ? err.message
-            : "Failed to update scene visibility. Please try again.",
-        );
+        if (err instanceof ApiRequestError && err.statusCode === 409) {
+          setActionError("This scene was just updated — please try again.");
+        } else {
+          setActionError(
+            err instanceof ApiRequestError
+              ? err.message
+              : "Failed to update scene visibility. Please try again.",
+          );
+        }
+        await fetchScenes(true);
       } finally {
         setVisibilityUpdatingId(null);
       }
     },
-    [visibilityUpdatingId],
+    [fetchScenes, visibilityUpdatingId],
   );
 
   const dismissDeleteModal = useCallback(() => {

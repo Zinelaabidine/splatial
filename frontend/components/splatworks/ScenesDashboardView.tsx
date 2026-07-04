@@ -144,7 +144,9 @@ export default function ScenesDashboardView() {
               }}
               submitting={submittingId === scene.sceneId}
               cancelling={cancellingId === scene.sceneId}
-              visibilityUpdating={visibilityUpdatingId === scene.sceneId}
+              visibilityUpdating={
+                visibilityUpdatingId === (scene.sceneId ?? scene.id)
+              }
             />
           ))}
         </div>

@@ -47,3 +47,4 @@ out/
 # Old application code (to be removed after migration)
 # ----------------------------------------------------------------------
 oldApp/
+cursor_fix_prompt_scene_visibility_500.txt
