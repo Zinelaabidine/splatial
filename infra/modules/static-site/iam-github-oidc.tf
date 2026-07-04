@@ -458,6 +458,27 @@ data "aws_iam_policy_document" "github_deploy_compute_policy" {
     resources = ["*"]
   }
 
+  # mixed_instances_policy ASG updates validate that the caller can use the
+  # launch template (ec2:RunInstances) before accepting the change.
+  statement {
+    sid    = "EC2RunInstancesWorker"
+    effect = "Allow"
+    actions = [
+      "ec2:RunInstances",
+    ]
+    resources = concat(
+      [
+        "arn:aws:ec2:${var.aws_region}:886601940523:launch-template/${aws_launch_template.worker.id}",
+        "arn:aws:ec2:${var.aws_region}:886601940523:launch-template/${aws_launch_template.worker.id}/*",
+        "arn:aws:ec2:${var.aws_region}:886601940523:security-group/${aws_security_group.worker.id}",
+        "arn:aws:ec2:${var.aws_region}:886601940523:volume/*",
+        "arn:aws:ec2:${var.aws_region}:886601940523:network-interface/*",
+        "arn:aws:ec2:${var.aws_region}::image/${var.worker_ami_id}",
+      ],
+      [for subnet_id in local.worker_asg_subnet_ids : "arn:aws:ec2:${var.aws_region}:886601940523:subnet/${subnet_id}"]
+    )
+  }
+
   # ─── Auto Scaling ──────────────────────────────────────────────────────────
 
   statement {
