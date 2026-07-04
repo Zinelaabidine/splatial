@@ -155,6 +155,13 @@ function InstancesPanel({ instances }: { instances: AdminAsgInstance[] }) {
   );
 }
 
+/**
+ * Admin page for the GPU worker ASG: live AMI/instance-type/max-size config,
+ * a manual boot/release control for smoke-testing without waiting on a real
+ * SQS job, an SSM-only connect panel (workers have no SSH path), queue-depth
+ * and Spot-price context, and Slack/email alerts on changes or a manual
+ * session left active too long.
+ */
 export default function AdminAsgConfigView() {
   const isAdmin = useIsAdmin();
 
