@@ -26,6 +26,8 @@ resource "aws_sns_topic" "admin_notifications" {
     Project     = var.project_name
     ManagedBy   = "terraform"
   }
+
+  depends_on = [time_sleep.network_iam_propagation]
 }
 
 resource "aws_sns_topic_subscription" "admin_email" {
@@ -75,6 +77,8 @@ resource "aws_cloudwatch_event_rule" "asg_manual_mode_check" {
     Project     = var.project_name
     ManagedBy   = "terraform"
   }
+
+  depends_on = [time_sleep.network_iam_propagation]
 }
 
 resource "aws_cloudwatch_event_target" "asg_manual_mode_check" {

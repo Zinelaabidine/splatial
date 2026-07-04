@@ -788,6 +788,51 @@ data "aws_iam_policy_document" "github_deploy_network_policy" {
       "arn:aws:lambda:${var.aws_region}:886601940523:function:${var.name}-gdrive-import-lambda",
     ]
   }
+
+  # ─── SNS (admin notifications topic) ───────────────────────────────────────
+
+  statement {
+    sid    = "SNSAdminNotificationsManage"
+    effect = "Allow"
+    actions = [
+      "sns:CreateTopic",
+      "sns:DeleteTopic",
+      "sns:GetTopicAttributes",
+      "sns:SetTopicAttributes",
+      "sns:Subscribe",
+      "sns:Unsubscribe",
+      "sns:ListSubscriptionsByTopic",
+      "sns:TagResource",
+      "sns:UntagResource",
+      "sns:ListTagsForResource",
+    ]
+    resources = [
+      "arn:aws:sns:${var.aws_region}:886601940523:${local.name_prefix}-admin-notifications",
+    ]
+  }
+
+  # ─── EventBridge (scheduled manual-mode check) ─────────────────────────────
+
+  statement {
+    sid    = "EventBridgeManualModeCheckManage"
+    effect = "Allow"
+    actions = [
+      "events:PutRule",
+      "events:DeleteRule",
+      "events:DescribeRule",
+      "events:EnableRule",
+      "events:DisableRule",
+      "events:PutTargets",
+      "events:RemoveTargets",
+      "events:ListTargetsByRule",
+      "events:TagResource",
+      "events:UntagResource",
+      "events:ListTagsForResource",
+    ]
+    resources = [
+      "arn:aws:events:${var.aws_region}:886601940523:rule/${local.name_prefix}-asg-manual-mode-check",
+    ]
+  }
 }
 
 resource "aws_iam_policy" "github_deploy_network_policy" {
