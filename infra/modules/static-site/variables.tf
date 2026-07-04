@@ -66,7 +66,7 @@ variable "cors_extra_origins" {
 variable "worker_ami_id" {
   description = "AMI for GPU Spot workers (WorkerGaussianSplattingARM_V1, us-east-1)."
   type        = string
-  default     = "ami-0512a845e4b778621"
+  default     = "ami-0df365a537b0734b8"
 }
 
 variable "worker_spot_availability_zone" {
