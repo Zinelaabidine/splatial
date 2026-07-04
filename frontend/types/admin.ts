@@ -27,6 +27,24 @@ export type AdminAttemptsResponse = {
 
 /** Mirrors GET /admin/asg-config in the backend. */
 
+/**
+ * Workers have no inbound security group rules or SSH key pair by design —
+ * access is exclusively via SSM Session Manager. ssmCommand/consoleUrl are
+ * the only connection info the backend ever returns (no SSH host/key).
+ */
+export type AdminAsgInstance = {
+  instanceId: string;
+  lifecycleState: string;
+  healthStatus: string | null;
+  availabilityZone: string | null;
+  instanceType: string | null;
+  privateIp: string | null;
+  publicIp: string | null;
+  launchTime: string | null;
+  ssmCommand: string;
+  consoleUrl: string;
+};
+
 export type AdminAsgSummary = {
   name: string;
   minSize: number;
@@ -36,6 +54,7 @@ export type AdminAsgSummary = {
   inServiceInstances: number;
   /** True while a manual "boot a worker now" test session is active. */
   manualModeActive: boolean;
+  instances: AdminAsgInstance[];
 };
 
 export type AdminLaunchTemplateSummary = {

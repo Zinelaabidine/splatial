@@ -10,6 +10,10 @@ import {
   Power,
   StopCircle,
   AlertTriangle,
+  Terminal,
+  ExternalLink,
+  Copy,
+  Check,
 } from "lucide-react";
 
 import { useIsAdmin } from "@/lib/auth/useIsAdmin";
@@ -19,7 +23,7 @@ import {
   bootWorker,
   releaseWorker,
 } from "@/services/adminService";
-import type { AdminAsgConfigResponse } from "@/types/admin";
+import type { AdminAsgConfigResponse, AdminAsgInstance } from "@/types/admin";
 
 function formatWhen(iso: string | null): string {
   if (!iso) return "—";
@@ -38,6 +42,99 @@ function StatCard({ label, value }: { label: string; value: string | number }) {
     <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-4 py-3">
       <div className="text-xs uppercase tracking-wide text-[#808080]">{label}</div>
       <div className="mt-1 text-lg font-semibold text-[#f1f1f1]">{value}</div>
+    </div>
+  );
+}
+
+function InstancesPanel({ instances }: { instances: AdminAsgInstance[] }) {
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  async function copyCommand(instanceId: string, command: string) {
+    try {
+      await navigator.clipboard.writeText(command);
+      setCopiedId(instanceId);
+      setTimeout(() => setCopiedId((cur) => (cur === instanceId ? null : cur)), 2000);
+    } catch {
+      /* clipboard API unavailable (non-secure context, permissions) — ignore */
+    }
+  }
+
+  return (
+    <div className="mb-6 rounded-xl border border-[#2a2a2a]">
+      <div className="border-b border-[#2a2a2a] bg-[#1a1a1a] px-4 py-3">
+        <div className="flex items-center gap-2">
+          <Terminal className="h-4 w-4 text-[#808080]" />
+          <h2 className="text-sm font-semibold text-[#f1f1f1]">Connect to a worker</h2>
+        </div>
+        <p className="mt-1 text-xs text-[#808080]">
+          Workers have no inbound security group rules or SSH key pair — SSH isn&apos;t
+          possible. Access is via SSM Session Manager instead (AWS CLI with the Session
+          Manager plugin, or the EC2 console&apos;s &quot;Connect&quot; tab).
+        </p>
+      </div>
+
+      {instances.length === 0 ? (
+        <div className="px-4 py-6 text-center text-sm text-[#707070]">
+          No instances running. Boot one below, or wait for a real job to trigger
+          scale-out.
+        </div>
+      ) : (
+        <table className="w-full border-collapse text-left text-sm">
+          <thead>
+            <tr className="text-xs uppercase tracking-wide text-[#808080]">
+              <th className="px-4 py-2 font-medium">Instance</th>
+              <th className="px-4 py-2 font-medium">State</th>
+              <th className="px-4 py-2 font-medium">AZ</th>
+              <th className="px-4 py-2 font-medium">Private IP</th>
+              <th className="px-4 py-2 font-medium">Connect</th>
+            </tr>
+          </thead>
+          <tbody>
+            {instances.map((inst) => (
+              <tr key={inst.instanceId} className="border-t border-[#242424]">
+                <td className="px-4 py-2 align-middle font-mono text-xs text-[#e8e8e8]">
+                  {inst.instanceId}
+                </td>
+                <td className="px-4 py-2 align-middle text-xs text-[#b0b0b0]">
+                  {inst.lifecycleState}
+                </td>
+                <td className="px-4 py-2 align-middle text-xs text-[#b0b0b0]">
+                  {inst.availabilityZone ?? "—"}
+                </td>
+                <td className="px-4 py-2 align-middle font-mono text-xs text-[#b0b0b0]">
+                  {inst.privateIp ?? "—"}
+                </td>
+                <td className="px-4 py-2 align-middle">
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => copyCommand(inst.instanceId, inst.ssmCommand)}
+                      title={inst.ssmCommand}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-[#2a2a2a] px-2 py-1 text-xs text-[#e8e8e8] hover:bg-[#1a1a1a]"
+                    >
+                      {copiedId === inst.instanceId ? (
+                        <Check className="h-3.5 w-3.5 text-[#8fd6a3]" />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5" />
+                      )}
+                      {copiedId === inst.instanceId ? "Copied" : "Copy SSM command"}
+                    </button>
+                    <a
+                      href={inst.consoleUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-[#2a2a2a] px-2 py-1 text-xs text-[#e8e8e8] hover:bg-[#1a1a1a]"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      Console
+                    </a>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }
@@ -267,6 +364,8 @@ export default function AdminAsgConfigView() {
               {releaseError}
             </div>
           )}
+
+          <InstancesPanel instances={config.asg.instances} />
 
           <div className="mb-6 rounded-xl border border-[#2a2a2a] bg-[#161616] p-5">
             <h2 className="mb-1 text-sm font-semibold text-[#f1f1f1]">

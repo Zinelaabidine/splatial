@@ -4,6 +4,7 @@ const {
   EC2Client,
   DescribeLaunchTemplateVersionsCommand,
   DescribeImagesCommand,
+  DescribeInstancesCommand,
 } = require("@aws-sdk/client-ec2");
 const {
   AutoScalingClient,
@@ -18,6 +19,8 @@ const autoscaling = new AutoScalingClient({});
 const ASG_NAME = process.env.WORKER_ASG_NAME;
 const LAUNCH_TEMPLATE_ID = process.env.WORKER_LAUNCH_TEMPLATE_ID;
 const MAX_SIZE_CAP = Number(process.env.WORKER_ASG_MAX_SIZE_CAP || 5);
+// Lambda always sets this reserved env var; used to build ssm/console links.
+const REGION = process.env.AWS_REGION || "us-east-1";
 
 const HISTORY_LIMIT = 10;
 
@@ -29,11 +32,19 @@ const HISTORY_LIMIT = 10;
  * history for rollback. Read-only — no mutation happens here.
  *
  * Success (200): {
- *   asg: { name, minSize, maxSize, maxSizeCap, desiredCapacity, inServiceInstances, manualModeActive },
+ *   asg: { name, minSize, maxSize, maxSizeCap, desiredCapacity, inServiceInstances,
+ *          manualModeActive, instances: [{ instanceId, lifecycleState, healthStatus,
+ *          availabilityZone, instanceType, privateIp, publicIp, launchTime,
+ *          ssmCommand, consoleUrl }] },
  *   launchTemplate: { id, latestVersion, defaultVersion },
  *   current: { amiId, amiName, amiState, architecture, instanceType, versionDescription },
  *   history: [{ version, amiId, instanceType, description, createdAt }]
  * }
+ *
+ * Workers have no inbound security group rules or SSH key pair by design —
+ * access is exclusively via SSM Session Manager (see iam-worker.tf). The
+ * `instances` list carries a ready-to-copy `aws ssm start-session` command
+ * per instance instead of any SSH connection info.
  */
 exports.handler = async (event) => {
   if (!isAdmin(event)) {
@@ -101,6 +112,48 @@ exports.handler = async (event) => {
     createdAt: v.CreateTime ? new Date(v.CreateTime).toISOString() : null,
   }));
 
+  // Enrich the ASG's instance list (id/lifecycle/AZ only) with IPs, EC2
+  // state, and a ready-to-copy SSM connect command. Best-effort: an instance
+  // can vanish between the two calls (self-terminated) without failing the
+  // whole request.
+  const asgInstances = asg.Instances ?? [];
+  const ec2InstanceById = {};
+  if (asgInstances.length > 0) {
+    try {
+      const instOut = await ec2.send(
+        new DescribeInstancesCommand({
+          InstanceIds: asgInstances.map((i) => i.InstanceId),
+        }),
+      );
+      for (const reservation of instOut.Reservations ?? []) {
+        for (const inst of reservation.Instances ?? []) {
+          ec2InstanceById[inst.InstanceId] = inst;
+        }
+      }
+    } catch {
+      /* one or more instances may have just terminated; fall back below */
+    }
+  }
+
+  const instances = asgInstances.map((i) => {
+    const inst = ec2InstanceById[i.InstanceId];
+    return {
+      instanceId: i.InstanceId,
+      lifecycleState: i.LifecycleState,
+      healthStatus: i.HealthStatus ?? null,
+      availabilityZone: i.AvailabilityZone ?? null,
+      instanceType: inst?.InstanceType ?? null,
+      privateIp: inst?.PrivateIpAddress ?? null,
+      publicIp: inst?.PublicIpAddress ?? null,
+      launchTime: inst?.LaunchTime ? new Date(inst.LaunchTime).toISOString() : null,
+      // No SSH — workers have zero inbound SG rules and no key pair.
+      // AmazonSSMManagedInstanceCore is attached, so Session Manager works
+      // without opening any ports.
+      ssmCommand: `aws ssm start-session --target ${i.InstanceId} --region ${REGION}`,
+      consoleUrl: `https://${REGION}.console.aws.amazon.com/ec2/home?region=${REGION}#InstanceDetails:instanceId=${i.InstanceId}`,
+    };
+  });
+
   return response(200, {
     asg: {
       name: asg.AutoScalingGroupName,
@@ -117,6 +170,7 @@ exports.handler = async (event) => {
       manualModeActive: (asg.SuspendedProcesses ?? []).some(
         (p) => p.ProcessName === "AlarmNotification",
       ),
+      instances,
     },
     launchTemplate: {
       id: LAUNCH_TEMPLATE_ID,

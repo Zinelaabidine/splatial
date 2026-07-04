@@ -38,6 +38,10 @@ resource "aws_iam_role_policy" "admin_asg_config" {
           "ec2:DescribeInstanceTypes",
           "ec2:DescribeLaunchTemplates",
           "ec2:DescribeLaunchTemplateVersions",
+          # Used to enrich the admin page with per-instance IPs/state so an
+          # admin can copy an `aws ssm start-session` command — workers have
+          # no inbound SG rules or SSH key pair by design (SSM-only access).
+          "ec2:DescribeInstances",
         ]
         # No resource-level permission available for these actions.
         Resource = "*"
