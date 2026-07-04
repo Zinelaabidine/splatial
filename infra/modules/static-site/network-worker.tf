@@ -47,6 +47,13 @@ resource "aws_route" "worker_spot_igw" {
   gateway_id             = aws_internet_gateway.static_site.id
 }
 
+# NAT → IGW migration: keep the same route resource so Terraform calls
+# ReplaceRoute instead of destroy+create (which races on 0.0.0.0/0).
+moved {
+  from = aws_route.worker_spot_nat
+  to   = aws_route.worker_spot_igw
+}
+
 resource "aws_route_table_association" "worker_spot" {
   provider = aws.this
 
