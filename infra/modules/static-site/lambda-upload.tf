@@ -173,6 +173,10 @@ resource "aws_lambda_function" "upload_lambda" {
       WORKER_ASG_NAME             = aws_autoscaling_group.worker.name
       WORKER_LAUNCH_TEMPLATE_ID   = aws_launch_template.worker.id
       WORKER_ASG_MAX_SIZE_CAP     = tostring(var.worker_asg_max_size_cap)
+      WORKER_SPOT_AZS             = join(",", var.worker_spot_availability_zones)
+      SLACK_WEBHOOK_URL           = var.slack_webhook_url
+      ADMIN_SNS_TOPIC_ARN         = aws_sns_topic.admin_notifications.arn
+      MANUAL_MODE_ALERT_MINUTES   = tostring(var.manual_mode_alert_minutes)
       NODE_ENV                    = "production"
     }
   }

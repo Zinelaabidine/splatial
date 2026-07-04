@@ -13,6 +13,7 @@ const {
 } = require("@aws-sdk/client-auto-scaling");
 const response = require("../lib/response");
 const { isAdmin, getClaims } = require("../lib/admin-auth");
+const { notifyAdmins } = require("../lib/notify");
 
 const ec2 = new EC2Client({});
 const autoscaling = new AutoScalingClient({});
@@ -208,6 +209,13 @@ exports.handler = async (event) => {
     actorSub,
     asgName: ASG_NAME,
     changes: result,
+  });
+
+  await notifyAdmins({
+    title: "Worker ASG config changed",
+    message:
+      `${actorSub} updated ${ASG_NAME}: ${JSON.stringify(result)}` +
+      (reason ? ` — ${reason}` : ""),
   });
 
   return response(200, result);

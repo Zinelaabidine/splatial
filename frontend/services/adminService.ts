@@ -9,6 +9,7 @@ import type {
   BootWorkerPayload,
   BootWorkerResponse,
   ReleaseWorkerResponse,
+  SpotPriceResponse,
 } from "@/types/admin";
 
 export type ListAttemptsParams = {
@@ -88,4 +89,18 @@ export async function releaseWorker(): Promise<ReleaseWorkerResponse> {
   return authenticatedFetch("/admin/asg/release", {
     method: "POST",
   }) as Promise<ReleaseWorkerResponse>;
+}
+
+/**
+ * GET /admin/asg/spot-price?instanceType=... — last-hour Spot price per AZ,
+ * for context before applying an instance type change or booting a worker.
+ */
+export async function getSpotPrice(
+  instanceType: string,
+  signal?: AbortSignal,
+): Promise<SpotPriceResponse> {
+  const qs = new URLSearchParams({ instanceType }).toString();
+  return authenticatedFetch(`/admin/asg/spot-price?${qs}`, {
+    signal,
+  }) as Promise<SpotPriceResponse>;
 }

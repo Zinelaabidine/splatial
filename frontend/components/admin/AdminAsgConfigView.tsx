@@ -22,8 +22,13 @@ import {
   updateAsgConfig,
   bootWorker,
   releaseWorker,
+  getSpotPrice,
 } from "@/services/adminService";
-import type { AdminAsgConfigResponse, AdminAsgInstance } from "@/types/admin";
+import type {
+  AdminAsgConfigResponse,
+  AdminAsgInstance,
+  SpotPriceResponse,
+} from "@/types/admin";
 
 function formatWhen(iso: string | null): string {
   if (!iso) return "—";
@@ -36,6 +41,17 @@ function formatWhen(iso: string | null): string {
     minute: "2-digit",
   });
 }
+
+function formatElapsed(sinceIso: string | null): string | null {
+  if (!sinceIso) return null;
+  const since = new Date(sinceIso).getTime();
+  if (Number.isNaN(since)) return null;
+  const minutes = Math.max(0, Math.round((Date.now() - since) / 60000));
+  if (minutes < 60) return `${minutes}m`;
+  return `${(minutes / 60).toFixed(1)}h`;
+}
+
+const INSTANCE_TYPE_RE = /^[a-z0-9]+\.[a-z0-9]+$/;
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
   return (
@@ -164,7 +180,11 @@ export default function AdminAsgConfigView() {
   const [releaseSubmitting, setReleaseSubmitting] = useState(false);
   const [releaseError, setReleaseError] = useState<string | null>(null);
 
+  const [spotPrice, setSpotPrice] = useState<SpotPriceResponse | null>(null);
+  const [spotPriceLoading, setSpotPriceLoading] = useState(false);
+
   const abortRef = useRef<AbortController | null>(null);
+  const spotAbortRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async () => {
     abortRef.current?.abort();
@@ -194,6 +214,35 @@ export default function AdminAsgConfigView() {
     }
     return () => abortRef.current?.abort();
   }, [isAdmin, load]);
+
+  // Debounced live Spot price lookup — fires whenever the instance type field
+  // settles on a valid value (initial load included), so the estimate is
+  // visible before the admin applies a change or boots a worker.
+  useEffect(() => {
+    const trimmed = instanceType.trim();
+    if (!INSTANCE_TYPE_RE.test(trimmed)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSpotPrice(null);
+      return;
+    }
+    const timer = setTimeout(() => {
+      spotAbortRef.current?.abort();
+      const controller = new AbortController();
+      spotAbortRef.current = controller;
+      setSpotPriceLoading(true);
+      getSpotPrice(trimmed, controller.signal)
+        .then((res) => {
+          if (!controller.signal.aborted) setSpotPrice(res);
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) setSpotPrice(null);
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setSpotPriceLoading(false);
+        });
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [instanceType]);
 
   const changed =
     !!config &&
@@ -327,11 +376,19 @@ export default function AdminAsgConfigView() {
         </div>
       ) : config ? (
         <>
-          <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
             <StatCard label="In service" value={config.asg.inServiceInstances} />
             <StatCard label="Desired" value={config.asg.desiredCapacity} />
             <StatCard label="Max size" value={config.asg.maxSize} />
             <StatCard label="Min size" value={config.asg.minSize} />
+            <StatCard
+              label="Queue visible"
+              value={config.queue.visible ?? "—"}
+            />
+            <StatCard
+              label="Queue in-flight"
+              value={config.queue.inFlight ?? "—"}
+            />
           </div>
 
           {config.asg.manualModeActive && (
@@ -339,9 +396,14 @@ export default function AdminAsgConfigView() {
               <div className="flex items-start gap-2">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[#e8b84a]" />
                 <div className="text-sm text-[#e8d98a]">
-                  <span className="font-medium">Manual mode active.</span> SQS-driven
-                  auto-scaling is paused — real jobs will queue but won&apos;t launch a
-                  worker until you release.
+                  <span className="font-medium">
+                    Manual mode active
+                    {formatElapsed(config.asg.manualModeSince) &&
+                      ` (${formatElapsed(config.asg.manualModeSince)})`}
+                    .
+                  </span>{" "}
+                  SQS-driven auto-scaling is paused — real jobs will queue but
+                  won&apos;t launch a worker until you release.
                 </div>
               </div>
               <button
@@ -490,6 +552,22 @@ export default function AdminAsgConfigView() {
                 <p className="mt-1 text-xs text-[#707070]">
                   Must match the AMI&apos;s CPU architecture (validated on submit).
                 </p>
+                {spotPriceLoading ? (
+                  <p className="mt-1 text-xs text-[#707070]">
+                    Checking Spot price…
+                  </p>
+                ) : spotPrice?.cheapest ? (
+                  <p className="mt-1 text-xs text-[#8fd6a3]">
+                    Est. Spot: ${spotPrice.cheapest.pricePerHour.toFixed(4)}/hr in{" "}
+                    {spotPrice.cheapest.az}
+                    {spotPrice.prices.length > 1 &&
+                      ` (cheapest of ${spotPrice.prices.length} AZs)`}
+                  </p>
+                ) : spotPrice && spotPrice.prices.length === 0 ? (
+                  <p className="mt-1 text-xs text-[#707070]">
+                    No recent Spot price history for this type/AZ combination.
+                  </p>
+                ) : null}
               </div>
 
               <div>
@@ -549,6 +627,13 @@ export default function AdminAsgConfigView() {
               <div className="mt-4 rounded-lg border border-[#3a3312] bg-[#211d0d] px-4 py-3 text-sm text-[#e8d98a]">
                 <p className="mb-3">
                   This affects every new GPU worker instance launched from now on.
+                  {spotPrice?.cheapest && (
+                    <>
+                      {" "}
+                      Estimated Spot cost: ~$
+                      {spotPrice.cheapest.pricePerHour.toFixed(4)}/hr per instance.
+                    </>
+                  )}{" "}
                   Confirm the change?
                 </p>
                 <div className="flex justify-end gap-2">

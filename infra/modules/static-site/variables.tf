@@ -127,3 +127,27 @@ variable "attach_deploy_policies_to_local_dev_role" {
   default     = false
 }
 
+variable "slack_webhook_url" {
+  description = "Slack incoming webhook URL for admin ASG notifications (config changes, manual-mode-active-too-long alerts). Empty string disables Slack notifications."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "admin_notification_email" {
+  description = "Email address subscribed to the admin ASG notifications SNS topic. Empty string means no email subscription is created (Slack-only, or add subscriptions manually later)."
+  type        = string
+  default     = ""
+}
+
+variable "manual_mode_alert_minutes" {
+  description = "Minutes a manual ASG boot session (POST /admin/asg/boot) can stay active before the scheduled check sends a Slack/email alert that SQS-driven scale-out is still paused."
+  type        = number
+  default     = 30
+
+  validation {
+    condition     = var.manual_mode_alert_minutes >= 1
+    error_message = "manual_mode_alert_minutes must be at least 1."
+  }
+}
+

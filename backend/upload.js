@@ -24,6 +24,8 @@ const adminAsgConfigGet = require("./handlers/admin-asg-config-get");
 const adminAsgConfigUpdate = require("./handlers/admin-asg-config-update");
 const adminAsgBoot = require("./handlers/admin-asg-boot");
 const adminAsgRelease = require("./handlers/admin-asg-release");
+const adminAsgSpotPrice = require("./handlers/admin-asg-spot-price");
+const adminAsgCheckManualMode = require("./handlers/admin-asg-check-manual-mode");
 const profileGetMe = require("./handlers/profile-get-me");
 const profileUpdateMe = require("./handlers/profile-update-me");
 const profileGetByUsername = require("./handlers/profile-get-by-username");
@@ -187,6 +189,13 @@ exports.handler = async (event) => {
         return await adminAsgBoot.handler(event);
       case "POST /admin/asg/release":
         return await adminAsgRelease.handler(event);
+      case "GET /admin/asg/spot-price":
+        return await adminAsgSpotPrice.handler(event);
+
+      // ── Internal (EventBridge-invoked only — not an API Gateway route) ────
+      case "INTERNAL /asg/check-manual-mode":
+        await adminAsgCheckManualMode.handler(event);
+        return response(200, { ok: true });
 
       default:
         return response(404, { error: "Not found" });

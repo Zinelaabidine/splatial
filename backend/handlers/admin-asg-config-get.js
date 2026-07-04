@@ -10,15 +10,18 @@ const {
   AutoScalingClient,
   DescribeAutoScalingGroupsCommand,
 } = require("@aws-sdk/client-auto-scaling");
+const { SQSClient, GetQueueAttributesCommand } = require("@aws-sdk/client-sqs");
 const response = require("../lib/response");
 const { isAdmin } = require("../lib/admin-auth");
 
 const ec2 = new EC2Client({});
 const autoscaling = new AutoScalingClient({});
+const sqs = new SQSClient({});
 
 const ASG_NAME = process.env.WORKER_ASG_NAME;
 const LAUNCH_TEMPLATE_ID = process.env.WORKER_LAUNCH_TEMPLATE_ID;
 const MAX_SIZE_CAP = Number(process.env.WORKER_ASG_MAX_SIZE_CAP || 5);
+const QUEUE_URL = process.env.SQS_QUEUE_URL;
 // Lambda always sets this reserved env var; used to build ssm/console links.
 const REGION = process.env.AWS_REGION || "us-east-1";
 
@@ -33,12 +36,13 @@ const HISTORY_LIMIT = 10;
  *
  * Success (200): {
  *   asg: { name, minSize, maxSize, maxSizeCap, desiredCapacity, inServiceInstances,
- *          manualModeActive, instances: [{ instanceId, lifecycleState, healthStatus,
- *          availabilityZone, instanceType, privateIp, publicIp, launchTime,
+ *          manualModeActive, manualModeSince, instances: [{ instanceId, lifecycleState,
+ *          healthStatus, availabilityZone, instanceType, privateIp, publicIp, launchTime,
  *          ssmCommand, consoleUrl }] },
  *   launchTemplate: { id, latestVersion, defaultVersion },
  *   current: { amiId, amiName, amiState, architecture, instanceType, versionDescription },
- *   history: [{ version, amiId, instanceType, description, createdAt }]
+ *   history: [{ version, amiId, instanceType, description, createdAt }],
+ *   queue: { visible, inFlight }
  * }
  *
  * Workers have no inbound security group rules or SSH key pair by design —
@@ -57,7 +61,7 @@ exports.handler = async (event) => {
     });
   }
 
-  const [asgOut, versionsOut] = await Promise.all([
+  const [asgOut, versionsOut, queueAttrs] = await Promise.all([
     autoscaling.send(
       new DescribeAutoScalingGroupsCommand({ AutoScalingGroupNames: [ASG_NAME] }),
     ),
@@ -66,6 +70,24 @@ exports.handler = async (event) => {
         LaunchTemplateId: LAUNCH_TEMPLATE_ID,
       }),
     ),
+    QUEUE_URL
+      ? sqs
+          .send(
+            new GetQueueAttributesCommand({
+              QueueUrl: QUEUE_URL,
+              AttributeNames: [
+                "ApproximateNumberOfMessages",
+                "ApproximateNumberOfMessagesNotVisible",
+              ],
+            }),
+          )
+          .catch((err) => {
+            console.error("admin-asg-config: GetQueueAttributes failed", {
+              err: err.message,
+            });
+            return null;
+          })
+      : Promise.resolve(null),
   ]);
 
   const asg = asgOut.AutoScalingGroups?.[0];
@@ -170,6 +192,12 @@ exports.handler = async (event) => {
       manualModeActive: (asg.SuspendedProcesses ?? []).some(
         (p) => p.ProcessName === "AlarmNotification",
       ),
+      // Stamped by POST /admin/asg/boot, cleared by POST /admin/asg/release —
+      // there's no AWS-native "process suspended since" timestamp, so this is
+      // tracked via an ASG tag instead. Used by the frontend to show elapsed
+      // time and by the scheduled check in admin-notifications.tf.
+      manualModeSince:
+        (asg.Tags ?? []).find((t) => t.Key === "ManualModeSince")?.Value ?? null,
       instances,
     },
     launchTemplate: {
@@ -189,5 +217,14 @@ exports.handler = async (event) => {
       versionDescription: latest?.VersionDescription ?? null,
     },
     history,
+    queue: {
+      visible: queueAttrs?.Attributes?.ApproximateNumberOfMessages != null
+        ? Number(queueAttrs.Attributes.ApproximateNumberOfMessages)
+        : null,
+      inFlight:
+        queueAttrs?.Attributes?.ApproximateNumberOfMessagesNotVisible != null
+          ? Number(queueAttrs.Attributes.ApproximateNumberOfMessagesNotVisible)
+          : null,
+    },
   });
 };

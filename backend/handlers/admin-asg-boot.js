@@ -5,6 +5,7 @@ const {
   DescribeAutoScalingGroupsCommand,
   SuspendProcessesCommand,
   UpdateAutoScalingGroupCommand,
+  CreateOrUpdateTagsCommand,
 } = require("@aws-sdk/client-auto-scaling");
 const response = require("../lib/response");
 const { isAdmin, getClaims } = require("../lib/admin-auth");
@@ -83,6 +84,26 @@ exports.handler = async (event) => {
       DesiredCapacity: count,
     }),
   );
+
+  // Stamp when this manual session started — but only if one isn't already
+  // running (re-booting with a new count shouldn't reset the clock the
+  // scheduled "active too long" check relies on).
+  const alreadyTracking = (asg.Tags ?? []).some((t) => t.Key === "ManualModeSince");
+  if (!alreadyTracking) {
+    await autoscaling.send(
+      new CreateOrUpdateTagsCommand({
+        Tags: [
+          {
+            ResourceId: ASG_NAME,
+            ResourceType: "auto-scaling-group",
+            Key: "ManualModeSince",
+            Value: new Date().toISOString(),
+            PropagateAtLaunch: false,
+          },
+        ],
+      }),
+    );
+  }
 
   const actorSub = getClaims(event)?.sub ?? "unknown";
   console.log("admin-asg-boot: manual boot requested", {

@@ -42,6 +42,9 @@ resource "aws_iam_role_policy" "admin_asg_config" {
           # admin can copy an `aws ssm start-session` command — workers have
           # no inbound SG rules or SSH key pair by design (SSM-only access).
           "ec2:DescribeInstances",
+          # Live Spot price lookup shown before an admin applies an instance
+          # type change.
+          "ec2:DescribeSpotPriceHistory",
         ]
         # No resource-level permission available for these actions.
         Resource = "*"
@@ -80,6 +83,25 @@ resource "aws_iam_role_policy" "admin_asg_config" {
         Effect   = "Allow"
         Action   = ["autoscaling:SuspendProcesses", "autoscaling:ResumeProcesses"]
         Resource = aws_autoscaling_group.worker.arn
+      },
+      {
+        # Tags the ASG with a ManualModeSince timestamp on boot (there's no
+        # AWS-native "suspended since" field) and clears it on release, so the
+        # scheduled check in admin-notifications.tf knows how long a manual
+        # session has been active. Both Tagging actions support resource-level
+        # permission — scope to the worker ASG only.
+        Sid      = "TagWorkerAsgForManualModeTracking"
+        Effect   = "Allow"
+        Action   = ["autoscaling:CreateOrUpdateTags", "autoscaling:DeleteTags"]
+        Resource = aws_autoscaling_group.worker.arn
+      },
+      {
+        # Queue-depth readout on the admin page, for context before deciding
+        # to boot a worker manually.
+        Sid      = "ReadProcessingQueueDepth"
+        Effect   = "Allow"
+        Action   = ["sqs:GetQueueAttributes"]
+        Resource = aws_sqs_queue.processing_queue.arn
       },
     ]
   })
@@ -121,6 +143,16 @@ resource "aws_apigatewayv2_route" "admin_asg_boot" {
 resource "aws_apigatewayv2_route" "admin_asg_release" {
   api_id    = aws_apigatewayv2_api.http_api.id
   route_key = "POST /admin/asg/release"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
+resource "aws_apigatewayv2_route" "admin_asg_spot_price" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "GET /admin/asg/spot-price"
 
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id

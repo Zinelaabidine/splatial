@@ -5,3 +5,9 @@ github_repo  = "splatial"
 
 domain_name      = "splatial-dev.openspacenexus.store"
 hosted_zone_name = "openspacenexus.store"
+
+# Optional: admin ASG notifications (config changes, manual-mode-active alerts).
+# Leave blank to disable either channel.
+# slack_webhook_url         = "https://hooks.slack.com/services/T000/B000/XXXX"
+# admin_notification_email  = "ops@example.com"
+# manual_mode_alert_minutes = 30

@@ -4,6 +4,7 @@ const {
   AutoScalingClient,
   ResumeProcessesCommand,
   UpdateAutoScalingGroupCommand,
+  DeleteTagsCommand,
 } = require("@aws-sdk/client-auto-scaling");
 const response = require("../lib/response");
 const { isAdmin, getClaims } = require("../lib/admin-auth");
@@ -41,6 +42,14 @@ exports.handler = async (event) => {
     new ResumeProcessesCommand({
       AutoScalingGroupName: ASG_NAME,
       ScalingProcesses: ["AlarmNotification"],
+    }),
+  );
+  await autoscaling.send(
+    new DeleteTagsCommand({
+      Tags: [
+        { ResourceId: ASG_NAME, ResourceType: "auto-scaling-group", Key: "ManualModeSince" },
+        { ResourceId: ASG_NAME, ResourceType: "auto-scaling-group", Key: "ManualModeAlerted" },
+      ],
     }),
   );
 

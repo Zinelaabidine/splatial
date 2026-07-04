@@ -54,7 +54,14 @@ export type AdminAsgSummary = {
   inServiceInstances: number;
   /** True while a manual "boot a worker now" test session is active. */
   manualModeActive: boolean;
+  /** ISO timestamp of when the current manual session started, or null. */
+  manualModeSince: string | null;
   instances: AdminAsgInstance[];
+};
+
+export type AdminQueueDepth = {
+  visible: number | null;
+  inFlight: number | null;
 };
 
 export type AdminLaunchTemplateSummary = {
@@ -86,6 +93,7 @@ export type AdminAsgConfigResponse = {
   launchTemplate: AdminLaunchTemplateSummary;
   current: AdminAsgCurrent;
   history: AdminAsgHistoryItem[];
+  queue: AdminQueueDepth;
 };
 
 export type UpdateAsgConfigPayload = {
@@ -115,4 +123,16 @@ export type BootWorkerResponse = {
 export type ReleaseWorkerResponse = {
   desiredCapacity: number;
   manualModeActive: boolean;
+};
+
+export type SpotPriceEntry = {
+  az: string;
+  pricePerHour: number;
+  timestamp: string | null;
+};
+
+export type SpotPriceResponse = {
+  instanceType: string;
+  prices: SpotPriceEntry[];
+  cheapest: SpotPriceEntry | null;
 };
