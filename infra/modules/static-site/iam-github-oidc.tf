@@ -703,6 +703,8 @@ data "aws_iam_policy_document" "github_deploy_network_policy" {
       "ec2:DisassociateRouteTable",
       "ec2:ReplaceRoute",
       "ec2:AllocateAddress",
+      "ec2:AssociateAddress",
+      "ec2:DisassociateAddress",
       "ec2:ReleaseAddress",
       "ec2:CreateNatGateway",
       "ec2:DeleteNatGateway",
