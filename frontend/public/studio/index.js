@@ -133172,10 +133172,20 @@ const initFileHandler = (scene, events, dropTarget) => {
                 if (f.contents)
                     fileSystem.addFile(f.filename, f.contents);
             });
-            // For URL-only single file, use full URL as filename
-            const filename = (files.length === 1 && !mainFile.contents && mainFile.url) ?
-                mainFile.url :
-                mainFile.filename;
+            // Presigned URLs embed '/' in query params (X-Amz-Credential), which
+            // breaks format detection when the full URL is used as filename.
+            let filename = mainFile.filename;
+            if (files.length === 1 && !mainFile.contents && mainFile.url) {
+                if (!filename || !/\.(splat|ply|spz|ksplat)$/i.test(filename)) {
+                    const pathOnly = mainFile.url.split(/[?#]/)[0];
+                    filename = pathOnly.split('/').pop() || 'scene.splat';
+                }
+                const response = await fetch(mainFile.url);
+                if (!response.ok) {
+                    throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
+                }
+                fileSystem.addFile(filename, await response.blob());
+            }
             const model = await scene.assetLoader.load(filename, fileSystem, animationFrame);
             await scene.add(model);
             return model;
