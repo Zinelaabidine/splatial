@@ -12,6 +12,8 @@ const sceneSeed   = require("./handlers/scene-seed");
 const sceneViewUrl = require("./handlers/scene-view-url");
 const sceneUpdate = require("./handlers/scene-update");
 const sceneThumbnailPresign = require("./handlers/scene-thumbnail-presign");
+const sceneEditPresign = require("./handlers/scene-edit-presign");
+const sceneEditComplete = require("./handlers/scene-edit-complete");
 const submitJob        = require("./handlers/submit-job");
 const cancelJob        = require("./handlers/cancel-job");
 const attemptPatch     = require("./handlers/attempt-patch");
@@ -95,6 +97,10 @@ exports.handler = async (event) => {
         return await sceneUpdate.handler(event);
       case "POST /api/v1/scenes/{sceneId}/thumbnail/presign":
         return await sceneThumbnailPresign.handler(event);
+      case "POST /api/v1/scenes/{sceneId}/edit/presign":
+        return await sceneEditPresign.handler(event);
+      case "POST /api/v1/scenes/{sceneId}/edit/complete":
+        return await sceneEditComplete.handler(event);
       case "POST /api/v1/scenes/{sceneId}/fork":
         return await forkCreate.handler(event);
 

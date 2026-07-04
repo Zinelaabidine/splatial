@@ -15,6 +15,7 @@ type DashboardGridViewProps = {
   onSortSelect: (option: SortOption) => void;
   onRetry: () => void;
   onViewScene: (scene: MockScene) => void;
+  onEditScene: (scene: MockScene) => void;
   onSubmitScene: (scene: MockScene) => void;
   onCancelScene?: (scene: MockScene) => void;
   onDeleteScene: (scene: MockScene) => void;
@@ -32,6 +33,7 @@ export default function DashboardGridView({
   onSortSelect,
   onRetry,
   onViewScene,
+  onEditScene,
   onSubmitScene,
   onCancelScene,
   onDeleteScene,
@@ -111,6 +113,7 @@ export default function DashboardGridView({
               key={scene.id}
               scene={scene}
               onViewScene={onViewScene}
+              onEditScene={onEditScene}
               onSubmitScene={onSubmitScene}
               onCancelScene={onCancelScene}
               onDeleteScene={onDeleteScene}

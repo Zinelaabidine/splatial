@@ -23,6 +23,7 @@ export default function ScenesLibraryContainer() {
     setSortOpen,
     fetchScenes,
     handleViewScene,
+    handleEditScene,
     handleDeleteScene,
     handleSubmitScene,
     handleCancelScene,
@@ -62,6 +63,7 @@ export default function ScenesLibraryContainer() {
         }}
         onRetry={() => fetchScenes()}
         onViewScene={handleViewScene}
+        onEditScene={handleEditScene}
         onSubmitScene={handleSubmitScene}
         onCancelScene={handleCancelScene}
         onDeleteScene={handleDeleteScene}

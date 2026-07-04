@@ -20,6 +20,7 @@ import type { MockScene } from "@/types/dashboard";
 type SceneCardProps = {
   scene: MockScene;
   onViewScene?: (scene: MockScene) => void;
+  onEditScene?: (scene: MockScene) => void;
   onSubmitScene?: (scene: MockScene) => void;
   onCancelScene?: (scene: MockScene) => void;
   onDeleteScene?: (scene: MockScene) => void;
@@ -274,6 +275,7 @@ function PrimaryAction({
 export default function SceneCard({
   scene,
   onViewScene,
+  onEditScene,
   onSubmitScene,
   onCancelScene,
   onDeleteScene,
@@ -325,6 +327,17 @@ export default function SceneCard({
               onCancelScene={onCancelScene}
               cancelling={cancelling}
             />
+            {scene.state === "complete" && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-purple-200 text-purple-700 hover:bg-purple-50"
+                onClick={() => onEditScene?.(scene)}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                Edit Splat
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"

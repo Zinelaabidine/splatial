@@ -87,6 +87,15 @@ export function useDashboardScenes() {
     [router],
   );
 
+  const handleEditScene = useCallback(
+    (scene: MockScene) => {
+      if (scene.sceneId) {
+        router.push(`/scenes/edit?id=${scene.sceneId}`);
+      }
+    },
+    [router],
+  );
+
   const handleDeleteScene = useCallback((scene: MockScene) => {
     setDeleteError(null);
     setDeleteTarget(scene);
@@ -209,6 +218,7 @@ export function useDashboardScenes() {
     setSortOpen,
     fetchScenes,
     handleViewScene,
+    handleEditScene,
     handleDeleteScene,
     handleSubmitScene,
     handleCancelScene,

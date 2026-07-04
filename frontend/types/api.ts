@@ -337,6 +337,22 @@ export interface ThumbnailPresignResponse {
 }
 
 // ---------------------------------------------------------------------------
+// Splat editor: presign an edited-splat upload, then finalize (repoint ply_key)
+// ---------------------------------------------------------------------------
+export interface EditPresignResponse {
+  sceneId: string;
+  /** New S3 key the edited .splat must be PUT to. */
+  key: string;
+  /** Presigned S3 PUT URL, valid for 1 hour. */
+  putUrl: string;
+  expiresIn: number;
+}
+
+export interface EditCompleteRequest {
+  key: string;
+}
+
+// ---------------------------------------------------------------------------
 // Seed a READY scene for a manually-uploaded PLY file
 // ---------------------------------------------------------------------------
 export interface SeedSceneRequest {

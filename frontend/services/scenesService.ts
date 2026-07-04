@@ -3,6 +3,7 @@
 import { authenticatedFetch } from "@/services/apiClient";
 import type {
   DeleteSceneResponse,
+  EditPresignResponse,
   ListScenesV1Response,
   Scene,
   SceneStatusResponse,
@@ -77,6 +78,28 @@ export async function forkScene(
   return authenticatedFetch(`/api/v1/scenes/${sceneId}/fork`, {
     method: "POST",
     ...(body ? { body } : {}),
+    signal,
+  }) as Promise<Scene>;
+}
+
+export async function presignSceneEdit(
+  sceneId: string,
+  signal?: AbortSignal,
+): Promise<EditPresignResponse> {
+  return authenticatedFetch(`/api/v1/scenes/${sceneId}/edit/presign`, {
+    method: "POST",
+    signal,
+  }) as Promise<EditPresignResponse>;
+}
+
+export async function completeSceneEdit(
+  sceneId: string,
+  key: string,
+  signal?: AbortSignal,
+): Promise<Scene> {
+  return authenticatedFetch(`/api/v1/scenes/${sceneId}/edit/complete`, {
+    method: "POST",
+    body: JSON.stringify({ key }),
     signal,
   }) as Promise<Scene>;
 }

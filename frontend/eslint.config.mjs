@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Vendored SuperSplat editor bundle (static assets, not app source)
+    "public/studio/**",
   ]),
 ]);
 
