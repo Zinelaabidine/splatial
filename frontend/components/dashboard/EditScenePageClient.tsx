@@ -6,6 +6,7 @@ import { ArrowLeft, Loader2, Save } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useSceneViewUrl } from "@/hooks/viewer/useSceneViewUrl";
+import { splatFilenameFromUrl } from "@/lib/viewer/splatFilenameFromUrl";
 import { completeSceneEdit, presignSceneEdit } from "@/services/scenesService";
 
 type SaveState =
@@ -109,9 +110,9 @@ export default function EditScenePageClient() {
 
   const editorSrc =
     splatUrl && studioOrigin
-      ? `/studio/index.html?load=${encodeURIComponent(splatUrl)}&sceneId=${encodeURIComponent(
-          sceneId,
-        )}&parentOrigin=${encodeURIComponent(studioOrigin)}`
+      ? `/studio/index.html?load=${encodeURIComponent(splatUrl)}&filename=${encodeURIComponent(
+          splatFilenameFromUrl(splatUrl),
+        )}&sceneId=${encodeURIComponent(sceneId)}&parentOrigin=${encodeURIComponent(studioOrigin)}`
       : "";
 
   return (
