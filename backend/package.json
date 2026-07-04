@@ -4,6 +4,8 @@
   "description": "Multipart upload init Lambda",
   "main": "upload.js",
   "dependencies": {
+    "@aws-sdk/client-auto-scaling": "^3.0.0",
+    "@aws-sdk/client-ec2": "^3.0.0",
     "@aws-sdk/client-s3": "^3.0.0",
     "@aws-sdk/client-cloudwatch-logs": "^3.0.0",
     "@aws-sdk/client-dynamodb": "^3.0.0",

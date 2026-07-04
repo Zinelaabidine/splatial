@@ -24,3 +24,59 @@ export type AdminAttemptsResponse = {
   items: AdminAttempt[];
   cursor?: string;
 };
+
+/** Mirrors GET /admin/asg-config in the backend. */
+
+export type AdminAsgSummary = {
+  name: string;
+  minSize: number;
+  maxSize: number;
+  maxSizeCap: number;
+  desiredCapacity: number;
+  inServiceInstances: number;
+};
+
+export type AdminLaunchTemplateSummary = {
+  id: string;
+  latestVersion: number | null;
+  defaultVersion: number | null;
+};
+
+export type AdminAsgCurrent = {
+  amiId: string | null;
+  amiName: string | null;
+  amiState: string | null;
+  architecture: string | null;
+  instanceType: string | null;
+  versionDescription: string | null;
+};
+
+export type AdminAsgHistoryItem = {
+  version: number;
+  isDefault: boolean;
+  amiId: string | null;
+  instanceType: string | null;
+  description: string | null;
+  createdAt: string | null;
+};
+
+export type AdminAsgConfigResponse = {
+  asg: AdminAsgSummary;
+  launchTemplate: AdminLaunchTemplateSummary;
+  current: AdminAsgCurrent;
+  history: AdminAsgHistoryItem[];
+};
+
+export type UpdateAsgConfigPayload = {
+  amiId?: string;
+  instanceType?: string;
+  maxSize?: number;
+  reason?: string;
+};
+
+export type UpdateAsgConfigResponse = {
+  launchTemplateVersion?: number;
+  amiId?: string;
+  instanceType?: string;
+  maxSize?: number;
+};

@@ -170,6 +170,9 @@ resource "aws_lambda_function" "upload_lambda" {
       API_BASE_URL                = "https://api-${var.environment}.openspacenexus.store"
       GDRIVE_IMPORT_FUNCTION_NAME = aws_lambda_function.gdrive_import_lambda.function_name
       WORKER_LOG_GROUP            = local.worker_log_group
+      WORKER_ASG_NAME             = aws_autoscaling_group.worker.name
+      WORKER_LAUNCH_TEMPLATE_ID   = aws_launch_template.worker.id
+      WORKER_ASG_MAX_SIZE_CAP     = tostring(var.worker_asg_max_size_cap)
       NODE_ENV                    = "production"
     }
   }

@@ -177,7 +177,12 @@ resource "aws_autoscaling_group" "worker" {
   }
 
   lifecycle {
-    ignore_changes = [desired_capacity]
+    # desired_capacity: managed by SQS-driven step scaling, not Terraform.
+    # max_size: managed live from the admin page (POST /admin/asg-config) via
+    # autoscaling:UpdateAutoScalingGroup — see admin-asg.tf. Terraform still
+    # sets the initial value from var.worker_asg_max_size on first apply, but
+    # never reverts an admin-driven change afterwards.
+    ignore_changes = [desired_capacity, max_size]
   }
 
   # IAM policy must grant EnableMetricsCollection before this resource can

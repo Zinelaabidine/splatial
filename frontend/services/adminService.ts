@@ -1,7 +1,12 @@
 "use client";
 
 import { authenticatedFetch } from "@/services/apiClient";
-import type { AdminAttemptsResponse } from "@/types/admin";
+import type {
+  AdminAttemptsResponse,
+  AdminAsgConfigResponse,
+  UpdateAsgConfigPayload,
+  UpdateAsgConfigResponse,
+} from "@/types/admin";
 
 export type ListAttemptsParams = {
   status?: string;
@@ -29,4 +34,30 @@ export async function listAdminAttempts(
   return authenticatedFetch(endpoint, {
     signal: params.signal,
   }) as Promise<AdminAttemptsResponse>;
+}
+
+/**
+ * GET /admin/asg-config — read the live GPU worker ASG / launch template
+ * state (current AMI, instance type, capacity, and recent version history).
+ */
+export async function getAsgConfig(
+  signal?: AbortSignal,
+): Promise<AdminAsgConfigResponse> {
+  return authenticatedFetch("/admin/asg-config", {
+    signal,
+  }) as Promise<AdminAsgConfigResponse>;
+}
+
+/**
+ * POST /admin/asg-config — update the worker AMI / instance type / ASG max
+ * size at runtime. No Terraform apply or deploy required; takes effect on
+ * the next scale-out.
+ */
+export async function updateAsgConfig(
+  payload: UpdateAsgConfigPayload,
+): Promise<UpdateAsgConfigResponse> {
+  return authenticatedFetch("/admin/asg-config", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  }) as Promise<UpdateAsgConfigResponse>;
 }

@@ -20,6 +20,8 @@ const attemptPatch     = require("./handlers/attempt-patch");
 const attemptHeartbeat = require("./handlers/attempt-heartbeat");
 const adminAttemptsList = require("./handlers/admin-attempts-list");
 const adminAttemptsLogs = require("./handlers/admin-attempts-logs");
+const adminAsgConfigGet = require("./handlers/admin-asg-config-get");
+const adminAsgConfigUpdate = require("./handlers/admin-asg-config-update");
 const profileGetMe = require("./handlers/profile-get-me");
 const profileUpdateMe = require("./handlers/profile-update-me");
 const profileGetByUsername = require("./handlers/profile-get-by-username");
@@ -175,6 +177,10 @@ exports.handler = async (event) => {
         return await adminAttemptsList.handler(event);
       case "GET /admin/attempts/{attemptId}/logs":
         return await adminAttemptsLogs.handler(event);
+      case "GET /admin/asg-config":
+        return await adminAsgConfigGet.handler(event);
+      case "POST /admin/asg-config":
+        return await adminAsgConfigUpdate.handler(event);
 
       default:
         return response(404, { error: "Not found" });

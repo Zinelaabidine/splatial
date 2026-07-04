@@ -1,5 +1,5 @@
-import AdminAttemptsView from "@/components/admin/AdminAttemptsView";
+import AdminShell from "@/components/admin/AdminShell";
 
 export default function AdminPage() {
-  return <AdminAttemptsView />;
+  return <AdminShell />;
 }
