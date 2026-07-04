@@ -29,7 +29,7 @@ const HISTORY_LIMIT = 10;
  * history for rollback. Read-only — no mutation happens here.
  *
  * Success (200): {
- *   asg: { name, minSize, maxSize, maxSizeCap, desiredCapacity, inServiceInstances },
+ *   asg: { name, minSize, maxSize, maxSizeCap, desiredCapacity, inServiceInstances, manualModeActive },
  *   launchTemplate: { id, latestVersion, defaultVersion },
  *   current: { amiId, amiName, amiState, architecture, instanceType, versionDescription },
  *   history: [{ version, amiId, instanceType, description, createdAt }]
@@ -111,6 +111,12 @@ exports.handler = async (event) => {
       inServiceInstances: (asg.Instances ?? []).filter(
         (i) => i.LifecycleState === "InService",
       ).length,
+      // True when a manual "boot a worker now" test session (POST
+      // /admin/asg/boot) is active — SQS-driven scale-out/scale-in is paused
+      // until an admin calls POST /admin/asg/release.
+      manualModeActive: (asg.SuspendedProcesses ?? []).some(
+        (p) => p.ProcessName === "AlarmNotification",
+      ),
     },
     launchTemplate: {
       id: LAUNCH_TEMPLATE_ID,

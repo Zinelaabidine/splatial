@@ -66,6 +66,17 @@ resource "aws_iam_role_policy" "admin_asg_config" {
         Action   = ["autoscaling:UpdateAutoScalingGroup"]
         Resource = aws_autoscaling_group.worker.arn
       },
+      {
+        # Manual "boot a worker now" testing flow (POST /admin/asg/boot and
+        # /release): suspends the AlarmNotification process so the SQS
+        # scale-in alarm doesn't race to reclaim the manually-requested
+        # capacity, then resumes it on release. Both actions support
+        # resource-level permission — scope to the worker ASG only.
+        Sid      = "SuspendResumeWorkerAsgAlarms"
+        Effect   = "Allow"
+        Action   = ["autoscaling:SuspendProcesses", "autoscaling:ResumeProcesses"]
+        Resource = aws_autoscaling_group.worker.arn
+      },
     ]
   })
 }
@@ -83,6 +94,29 @@ resource "aws_apigatewayv2_route" "admin_asg_config_get" {
 resource "aws_apigatewayv2_route" "admin_asg_config_update" {
   api_id    = aws_apigatewayv2_api.http_api.id
   route_key = "POST /admin/asg-config"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
+# Manual worker boot/release — force capacity from 0 to N right now (e.g. to
+# smoke-test a newly-selected AMI) without waiting for a real SQS job.
+
+resource "aws_apigatewayv2_route" "admin_asg_boot" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "POST /admin/asg/boot"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
+resource "aws_apigatewayv2_route" "admin_asg_release" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "POST /admin/asg/release"
 
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id

@@ -6,6 +6,9 @@ import type {
   AdminAsgConfigResponse,
   UpdateAsgConfigPayload,
   UpdateAsgConfigResponse,
+  BootWorkerPayload,
+  BootWorkerResponse,
+  ReleaseWorkerResponse,
 } from "@/types/admin";
 
 export type ListAttemptsParams = {
@@ -60,4 +63,29 @@ export async function updateAsgConfig(
     method: "POST",
     body: JSON.stringify(payload),
   }) as Promise<UpdateAsgConfigResponse>;
+}
+
+/**
+ * POST /admin/asg/boot — force the worker ASG's desired capacity up right
+ * now (e.g. to smoke-test a newly-selected AMI) instead of waiting for a
+ * real SQS job. Suspends SQS-driven scaling until /admin/asg/release is
+ * called — the caller is responsible for surfacing that clearly.
+ */
+export async function bootWorker(
+  payload: BootWorkerPayload = {},
+): Promise<BootWorkerResponse> {
+  return authenticatedFetch("/admin/asg/boot", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  }) as Promise<BootWorkerResponse>;
+}
+
+/**
+ * POST /admin/asg/release — end a manual boot session: desired capacity
+ * back to 0, SQS-driven scaling resumes.
+ */
+export async function releaseWorker(): Promise<ReleaseWorkerResponse> {
+  return authenticatedFetch("/admin/asg/release", {
+    method: "POST",
+  }) as Promise<ReleaseWorkerResponse>;
 }

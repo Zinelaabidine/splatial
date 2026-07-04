@@ -34,6 +34,8 @@ export type AdminAsgSummary = {
   maxSizeCap: number;
   desiredCapacity: number;
   inServiceInstances: number;
+  /** True while a manual "boot a worker now" test session is active. */
+  manualModeActive: boolean;
 };
 
 export type AdminLaunchTemplateSummary = {
@@ -79,4 +81,19 @@ export type UpdateAsgConfigResponse = {
   amiId?: string;
   instanceType?: string;
   maxSize?: number;
+};
+
+export type BootWorkerPayload = {
+  count?: number;
+  reason?: string;
+};
+
+export type BootWorkerResponse = {
+  desiredCapacity: number;
+  manualModeActive: boolean;
+};
+
+export type ReleaseWorkerResponse = {
+  desiredCapacity: number;
+  manualModeActive: boolean;
 };

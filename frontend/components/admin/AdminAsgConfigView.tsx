@@ -1,10 +1,24 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, RefreshCw, ShieldAlert, Rocket, History } from "lucide-react";
+import {
+  Loader2,
+  RefreshCw,
+  ShieldAlert,
+  Rocket,
+  History,
+  Power,
+  StopCircle,
+  AlertTriangle,
+} from "lucide-react";
 
 import { useIsAdmin } from "@/lib/auth/useIsAdmin";
-import { getAsgConfig, updateAsgConfig } from "@/services/adminService";
+import {
+  getAsgConfig,
+  updateAsgConfig,
+  bootWorker,
+  releaseWorker,
+} from "@/services/adminService";
 import type { AdminAsgConfigResponse } from "@/types/admin";
 
 function formatWhen(iso: string | null): string {
@@ -44,6 +58,14 @@ export default function AdminAsgConfigView() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const [bootCount, setBootCount] = useState("1");
+  const [bootReason, setBootReason] = useState("");
+  const [bootConfirmOpen, setBootConfirmOpen] = useState(false);
+  const [bootSubmitting, setBootSubmitting] = useState(false);
+  const [bootError, setBootError] = useState<string | null>(null);
+  const [releaseSubmitting, setReleaseSubmitting] = useState(false);
+  const [releaseError, setReleaseError] = useState<string | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
 
@@ -119,6 +141,37 @@ export default function AdminAsgConfigView() {
     if (instanceType2) setInstanceType(instanceType2);
   }
 
+  async function doBoot() {
+    setBootSubmitting(true);
+    setBootError(null);
+    try {
+      await bootWorker({
+        count: Number(bootCount) || 1,
+        reason: bootReason.trim() || undefined,
+      });
+      setBootConfirmOpen(false);
+      setBootReason("");
+      await load();
+    } catch (e) {
+      setBootError(e instanceof Error ? e.message : "Failed to boot worker");
+    } finally {
+      setBootSubmitting(false);
+    }
+  }
+
+  async function doRelease() {
+    setReleaseSubmitting(true);
+    setReleaseError(null);
+    try {
+      await releaseWorker();
+      await load();
+    } catch (e) {
+      setReleaseError(e instanceof Error ? e.message : "Failed to release");
+    } finally {
+      setReleaseSubmitting(false);
+    }
+  }
+
   if (isAdmin === null) {
     return (
       <div className="flex h-64 items-center justify-center text-[#909090]">
@@ -182,6 +235,124 @@ export default function AdminAsgConfigView() {
             <StatCard label="Desired" value={config.asg.desiredCapacity} />
             <StatCard label="Max size" value={config.asg.maxSize} />
             <StatCard label="Min size" value={config.asg.minSize} />
+          </div>
+
+          {config.asg.manualModeActive && (
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#5b4a1a] bg-[#2a2210] px-4 py-3">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[#e8b84a]" />
+                <div className="text-sm text-[#e8d98a]">
+                  <span className="font-medium">Manual mode active.</span> SQS-driven
+                  auto-scaling is paused — real jobs will queue but won&apos;t launch a
+                  worker until you release.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={doRelease}
+                disabled={releaseSubmitting}
+                className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-[#e8b84a] px-3 py-1.5 text-sm font-medium text-[#2a2210] hover:bg-[#f0c65e] disabled:opacity-50"
+              >
+                {releaseSubmitting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <StopCircle className="h-4 w-4" />
+                )}
+                Release
+              </button>
+            </div>
+          )}
+          {releaseError && (
+            <div className="mb-6 rounded-lg border border-[#5b2626] bg-[#2a1414] px-4 py-3 text-sm text-[#f0a8a8]">
+              {releaseError}
+            </div>
+          )}
+
+          <div className="mb-6 rounded-xl border border-[#2a2a2a] bg-[#161616] p-5">
+            <h2 className="mb-1 text-sm font-semibold text-[#f1f1f1]">
+              Manual worker boot
+            </h2>
+            <p className="mb-4 text-sm text-[#909090]">
+              Force capacity up right now — e.g. to smoke-test the current AMI/instance
+              type before real jobs hit the queue. Suspends SQS-driven scaling until you
+              release.
+            </p>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs uppercase tracking-wide text-[#808080]">
+                  Worker count
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={config.asg.maxSize}
+                  value={bootCount}
+                  onChange={(e) => setBootCount(e.target.value)}
+                  className="w-full rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-2 text-sm text-[#e8e8e8] outline-none focus:border-[#3b82f6]"
+                />
+                <p className="mt-1 text-xs text-[#707070]">
+                  Capped at the current max size ({config.asg.maxSize}).
+                </p>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs uppercase tracking-wide text-[#808080]">
+                  Reason (optional)
+                </label>
+                <input
+                  value={bootReason}
+                  onChange={(e) => setBootReason(e.target.value)}
+                  placeholder="e.g. smoke-test new AMI"
+                  className="w-full rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-2 text-sm text-[#e8e8e8] outline-none focus:border-[#3b82f6]"
+                />
+              </div>
+            </div>
+
+            {bootError && (
+              <div className="mt-4 rounded-lg border border-[#5b2626] bg-[#2a1414] px-3 py-2 text-sm text-[#f0a8a8]">
+                {bootError}
+              </div>
+            )}
+
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                disabled={bootSubmitting || config.asg.maxSize < 1}
+                onClick={() => setBootConfirmOpen(true)}
+                className="inline-flex items-center gap-2 rounded-lg bg-[#3b82f6] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#2f6fd6] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Power className="h-4 w-4" />
+                Boot worker now
+              </button>
+            </div>
+
+            {bootConfirmOpen && (
+              <div className="mt-4 rounded-lg border border-[#3a3312] bg-[#211d0d] px-4 py-3 text-sm text-[#e8d98a]">
+                <p className="mb-3">
+                  This pauses SQS-driven auto-scaling until you click Release. Real jobs
+                  submitted in the meantime will queue but won&apos;t launch a worker.
+                  Continue?
+                </p>
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setBootConfirmOpen(false)}
+                    className="rounded-lg border border-[#2a2a2a] px-3 py-1.5 text-[#e8e8e8] hover:bg-[#1a1a1a]"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={doBoot}
+                    disabled={bootSubmitting}
+                    className="inline-flex items-center gap-2 rounded-lg bg-[#3b82f6] px-3 py-1.5 font-medium text-white hover:bg-[#2f6fd6] disabled:opacity-50"
+                  >
+                    {bootSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                    Confirm boot
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="mb-6 rounded-xl border border-[#2a2a2a] bg-[#161616] p-5">
