@@ -500,17 +500,6 @@ data "aws_iam_policy_document" "github_deploy_compute_policy" {
   # ─── IAM — Worker Instance Profile ─────────────────────────────────────────
 
   statement {
-    sid    = "IAMWorkerInstanceProfileRead"
-    effect = "Allow"
-    actions = [
-      "iam:GetInstanceProfile",
-    ]
-    resources = [
-      "arn:aws:iam::886601940523:instance-profile/${var.worker_instance_profile_name}",
-    ]
-  }
-
-  statement {
     sid    = "IAMInstanceProfileManage"
     effect = "Allow"
     actions = [
@@ -534,7 +523,6 @@ data "aws_iam_policy_document" "github_deploy_compute_policy" {
     actions = ["iam:PassRole"]
     resources = [
       "arn:aws:iam::886601940523:role/${local.name_prefix}-splat-worker-instance-role",
-      "arn:aws:iam::886601940523:role/backend-ec2-role",
     ]
     condition {
       test     = "StringEquals"

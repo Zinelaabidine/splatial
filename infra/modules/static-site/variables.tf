@@ -90,12 +90,6 @@ variable "worker_nat_public_subnet_cidr" {
   type        = string
 }
 
-variable "worker_instance_profile_name" {
-  description = "Existing IAM instance profile attached to worker EC2 instances."
-  type        = string
-  default     = "backend-ec2-role"
-}
-
 variable "worker_instance_type" {
   description = "EC2 instance type for ARM GPU Spot workers (must match worker AMI architecture)."
   type        = string

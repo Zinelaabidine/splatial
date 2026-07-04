@@ -1,7 +1,3 @@
-data "aws_iam_instance_profile" "worker" {
-  name = var.worker_instance_profile_name
-}
-
 # ── Security Group ────────────────────────────────────────────────────────────
 
 resource "aws_security_group" "worker" {
@@ -42,7 +38,7 @@ resource "aws_launch_template" "worker" {
   instance_initiated_shutdown_behavior = "terminate"
 
   iam_instance_profile {
-    name = data.aws_iam_instance_profile.worker.name
+    name = aws_iam_instance_profile.worker_instance_profile.name
   }
 
   # Request Spot capacity
@@ -231,8 +227,8 @@ resource "aws_cloudwatch_metric_alarm" "sqs_scale_out" {
 # ── Step Scaling — Scale In (ASG termination on empty queue) ─────────────────
 # Complements worker self-termination: when the queue is fully drained but the
 # ASG still requests capacity, set desired=0 so Auto Scaling terminates any
-# running or pending Spot instances. Uses total queue depth (not visible-only)
-# so in-flight messages during active jobs do not trigger premature scale-in.
+# running or pending Spot instances. Sums visible + in-flight (not the
+# ApproximateNumberOfMessages aggregate, which often stops publishing when empty).
 
 resource "aws_autoscaling_policy" "sqs_step_scale_in" {
   provider = aws.this
@@ -261,11 +257,27 @@ resource "aws_cloudwatch_metric_alarm" "sqs_scale_in" {
   treat_missing_data  = "notBreaching"
 
   metric_query {
-    id          = "queue_total"
+    id          = "queue_visible"
     return_data = false
 
     metric {
-      metric_name = "ApproximateNumberOfMessages"
+      metric_name = "ApproximateNumberOfMessagesVisible"
+      namespace   = "AWS/SQS"
+      period      = 60
+      stat        = "Maximum"
+
+      dimensions = {
+        QueueName = aws_sqs_queue.processing_queue.name
+      }
+    }
+  }
+
+  metric_query {
+    id          = "queue_inflight"
+    return_data = false
+
+    metric {
+      metric_name = "ApproximateNumberOfMessagesNotVisible"
       namespace   = "AWS/SQS"
       period      = 60
       stat        = "Maximum"
@@ -309,10 +321,10 @@ resource "aws_cloudwatch_metric_alarm" "sqs_scale_in" {
   }
 
   # Fire when queue is empty AND the ASG still has requested or running workers.
-  # In-flight SQS messages (invisible during processing) keep queue_total > 0.
+  # In-flight SQS messages keep queue_inflight > 0 during active jobs.
   metric_query {
     id          = "queue_empty_workers_still_up"
-    expression  = "IF(queue_total <= 0 AND (asg_desired > 0 OR asg_in_service > 0), 1, 0)"
+    expression  = "IF((queue_visible + queue_inflight) <= 0 AND (asg_desired > 0 OR asg_in_service > 0), 1, 0)"
     label       = "QueueEmptyWorkersStillUp"
     return_data = true
   }
