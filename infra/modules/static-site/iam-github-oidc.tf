@@ -459,7 +459,7 @@ data "aws_iam_policy_document" "github_deploy_compute_policy" {
   }
 
   # mixed_instances_policy ASG updates validate that the caller can use the
-  # launch template (ec2:RunInstances) before accepting the change.
+  # launch template (ec2:RunInstances dry-run) before accepting the change.
   statement {
     sid    = "EC2RunInstancesWorker"
     effect = "Allow"
@@ -468,6 +468,7 @@ data "aws_iam_policy_document" "github_deploy_compute_policy" {
     ]
     resources = concat(
       [
+        "arn:aws:ec2:${var.aws_region}:886601940523:instance/*",
         "arn:aws:ec2:${var.aws_region}:886601940523:launch-template/${aws_launch_template.worker.id}",
         "arn:aws:ec2:${var.aws_region}:886601940523:launch-template/${aws_launch_template.worker.id}/*",
         "arn:aws:ec2:${var.aws_region}:886601940523:security-group/${aws_security_group.worker.id}",
@@ -477,6 +478,24 @@ data "aws_iam_policy_document" "github_deploy_compute_policy" {
       ],
       [for subnet_id in local.worker_asg_subnet_ids : "arn:aws:ec2:${var.aws_region}:886601940523:subnet/${subnet_id}"]
     )
+  }
+
+  # Launch template tag_specifications require CreateTags at RunInstances time.
+  statement {
+    sid    = "EC2CreateTagsWorker"
+    effect = "Allow"
+    actions = [
+      "ec2:CreateTags",
+    ]
+    resources = [
+      "arn:aws:ec2:${var.aws_region}:886601940523:instance/*",
+      "arn:aws:ec2:${var.aws_region}:886601940523:volume/*",
+    ]
+    condition {
+      test     = "StringEquals"
+      variable = "ec2:CreateAction"
+      values   = ["RunInstances"]
+    }
   }
 
   # ─── Auto Scaling ──────────────────────────────────────────────────────────
