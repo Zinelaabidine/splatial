@@ -133172,20 +133172,10 @@ const initFileHandler = (scene, events, dropTarget) => {
                 if (f.contents)
                     fileSystem.addFile(f.filename, f.contents);
             });
-            // Presigned URLs embed '/' in query params (X-Amz-Credential), which
-            // breaks format detection when the full URL is used as filename.
-            let filename = mainFile.filename;
-            if (files.length === 1 && !mainFile.contents && mainFile.url) {
-                if (!filename || !/\.(splat|ply|spz|ksplat)$/i.test(filename)) {
-                    const pathOnly = mainFile.url.split(/[?#]/)[0];
-                    filename = pathOnly.split('/').pop() || 'scene.splat';
-                }
-                const response = await fetch(mainFile.url);
-                if (!response.ok) {
-                    throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
-                }
-                fileSystem.addFile(filename, await response.blob());
-            }
+            // For URL-only single file, use full URL as filename
+            const filename = (files.length === 1 && !mainFile.contents && mainFile.url) ?
+                mainFile.url :
+                mainFile.filename;
             const model = await scene.assetLoader.load(filename, fileSystem, animationFrame);
             await scene.add(model);
             return model;
@@ -133521,28 +133511,7 @@ const handleSaveTarget = async (events, msg, origin) => {
         window.parent.postMessage({ type: 'save-error', message }, origin);
     }
 };
-
-const LOAD_SPLAT = 'load-splat';
-const isLoadSplatMessage = (data) => {
-    return (data &&
-        typeof data === 'object' &&
-        data.type === LOAD_SPLAT &&
-        typeof data.filename === 'string' &&
-        data.buffer instanceof ArrayBuffer);
-};
-const handleLoadSplat = async (events, msg, origin) => {
-    try {
-        const blob = new Blob([msg.buffer]);
-        await events.invoke('import', [{ filename: msg.filename, contents: blob }]);
-        window.parent.postMessage({ type: 'load-splat-complete' }, origin);
-    }
-    catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        window.parent.postMessage({ type: 'load-splat-error', message }, origin);
-    }
-};
 const registerIframeApi = (events) => {
-    const parentOrigin = new URLSearchParams(window.location.search).get('parentOrigin') || window.location.origin;
     window.addEventListener('message', (event) => {
         const source = event.source;
         if (!source) {
@@ -133554,13 +133523,6 @@ const registerIframeApi = (events) => {
                 result: events.invoke('scene.dirty')
             };
             source.postMessage(response, event.origin);
-            return;
-        }
-        if (isLoadSplatMessage(event.data)) {
-            if (event.origin !== parentOrigin && event.origin !== window.location.origin) {
-                return;
-            }
-            void handleLoadSplat(events, event.data, parentOrigin);
             return;
         }
         if (isSaveTargetMessage(event.data)) {
@@ -158333,10 +158295,6 @@ const main = async () => {
                     }]);
             }
         });
-    }
-    const parentOrigin = url.searchParams.get('parentOrigin') || window.location.origin;
-    if (window.parent !== window) {
-        window.parent.postMessage({ type: 'studio-ready' }, parentOrigin);
     }
 };
 
