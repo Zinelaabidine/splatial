@@ -260,10 +260,18 @@ exports.handler = async (event) => {
   }
 
   if (visibilityChanging) {
-    if (visibility === "PUBLIC") {
-      await adjustPublicScenesCount(userId, 1);
-    } else {
-      await adjustPublicScenesCount(userId, -1);
+    try {
+      if (visibility === "PUBLIC") {
+        await adjustPublicScenesCount(userId, 1);
+      } else {
+        await adjustPublicScenesCount(userId, -1);
+      }
+    } catch (err) {
+      console.error("scene visibility saved but scenes_count adjustment failed", {
+        errName: err.name,
+        errMessage: err.message,
+        errCode: err.$metadata?.httpStatusCode,
+      });
     }
   }
 

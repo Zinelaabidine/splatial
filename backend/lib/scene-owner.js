@@ -86,7 +86,9 @@ async function adjustPublicScenesCount(userId, delta) {
         Key: { user_id: { S: userId } },
         UpdateExpression:
           "SET scenes_count = if_not_exists(scenes_count, :zero) + :delta, updated_at = :now",
-        ConditionExpression: "if_not_exists(scenes_count, :zero) >= :one",
+        // if_not_exists() is valid in UpdateExpression but rejected in ConditionExpression
+        // (ValidationException). Use attribute_exists + numeric compare instead.
+        ConditionExpression: "attribute_exists(scenes_count) AND scenes_count >= :one",
         ExpressionAttributeValues: {
           ":delta": { N: String(delta) },
           ":zero": { N: "0" },
