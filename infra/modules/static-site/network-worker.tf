@@ -1,6 +1,8 @@
-# ── GPU Worker networking (us-east-1d / use1-az6) ─────────────────────────────
-# Mirrors the legacy spot-instance-us-east-1d-subnet layout inside the app VPC.
-# us-east-1d is pinned for lower Spot prices in that AZ.
+# ── GPU Worker networking ─────────────────────────────────────────────────────
+# Dedicated public subnet in worker_spot_dedicated_availability_zone (default
+# us-east-1d) with S3/DynamoDB gateway endpoints. Other worker_spot_availability_zones
+# use the module's existing public subnets; the ASG mixed-instances policy lets EC2
+# Fleet pick the best AZ via price-capacity-optimized Spot allocation.
 #
 # Worker subnet is public (direct IGW route, public IP per instance) rather than
 # NAT-gated. The worker SG is outbound-only with zero inbound rules (management
@@ -14,11 +16,11 @@ resource "aws_subnet" "worker_spot" {
 
   vpc_id                  = aws_vpc.static_site.id
   cidr_block              = var.worker_spot_subnet_cidr
-  availability_zone       = var.worker_spot_availability_zone
+  availability_zone       = var.worker_spot_dedicated_availability_zone
   map_public_ip_on_launch = true
 
   tags = {
-    Name        = "${var.name}-spot-instance-${var.worker_spot_availability_zone}-subnet"
+    Name        = "${var.name}-spot-instance-${var.worker_spot_dedicated_availability_zone}-subnet"
     Environment = var.environment
     Project     = var.project_name
     ManagedBy   = "terraform"

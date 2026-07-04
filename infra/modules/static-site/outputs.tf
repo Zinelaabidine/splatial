@@ -164,6 +164,11 @@ output "worker_launch_template_id" {
 }
 
 output "worker_spot_subnet_id" {
-  description = "Private Spot worker subnet in us-east-1d (use1-az6) inside the app VPC"
+  description = "Dedicated Spot worker subnet (gateway endpoints) in worker_spot_dedicated_availability_zone"
   value       = aws_subnet.worker_spot.id
+}
+
+output "worker_asg_subnet_ids" {
+  description = "Subnet IDs passed to the worker ASG vpc_zone_identifier (multi-AZ Spot placement)"
+  value       = local.worker_asg_subnet_ids
 }

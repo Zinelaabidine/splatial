@@ -41,13 +41,7 @@ resource "aws_launch_template" "worker" {
     name = aws_iam_instance_profile.worker_instance_profile.name
   }
 
-  # Request Spot capacity
-  instance_market_options {
-    market_type = "spot"
-    spot_options {
-      spot_instance_type = "one-time"
-    }
-  }
+  # Spot market type is set by the ASG mixed_instances_policy (price-capacity-optimized).
 
   block_device_mappings {
     device_name = "/dev/xvda"
@@ -118,6 +112,8 @@ resource "aws_launch_template" "worker" {
 
 # ── Auto Scaling Group ────────────────────────────────────────────────────────
 # Scale out when SQS visible messages > 0; scale to zero when the queue is empty.
+# mixed_instances_policy + price-capacity-optimized lets EC2 Fleet pick the AZ/subnet
+# with the best Spot price and capacity across worker_asg_subnet_ids.
 
 resource "aws_autoscaling_group" "worker" {
   provider = aws.this
@@ -128,11 +124,22 @@ resource "aws_autoscaling_group" "worker" {
   max_size         = var.worker_asg_max_size
   desired_capacity = 0
 
-  vpc_zone_identifier = [aws_subnet.worker_spot.id]
+  vpc_zone_identifier = local.worker_asg_subnet_ids
+  capacity_rebalance  = true
 
-  launch_template {
-    id      = aws_launch_template.worker.id
-    version = "$Latest"
+  mixed_instances_policy {
+    launch_template {
+      launch_template_specification {
+        launch_template_id = aws_launch_template.worker.id
+        version            = "$Latest"
+      }
+    }
+
+    instances_distribution {
+      on_demand_base_capacity                  = 0
+      on_demand_percentage_above_base_capacity = 0
+      spot_allocation_strategy                 = "price-capacity-optimized"
+    }
   }
 
   instance_refresh {

@@ -69,14 +69,27 @@ variable "worker_ami_id" {
   default     = "ami-0a6913682d6d953eb"
 }
 
-variable "worker_spot_availability_zone" {
-  description = "Availability zone for GPU Spot workers (us-east-1d = use1-az6, lower Spot prices)."
+variable "worker_spot_dedicated_availability_zone" {
+  description = "AZ for the dedicated worker Spot subnet (S3/DynamoDB gateway endpoints, IGW route). Typically us-east-1d."
   type        = string
   default     = "us-east-1d"
+}
+
+variable "worker_spot_availability_zones" {
+  description = "AZs the worker ASG may launch g5g.xlarge Spot instances in. EC2 Fleet price-capacity-optimized picks the best AZ/subnet at launch time."
+  type        = list(string)
+  default     = ["us-east-1a", "us-east-1b", "us-east-1d"]
 
   validation {
-    condition     = var.worker_spot_availability_zone == "us-east-1d"
-    error_message = "Worker spot subnet must stay in us-east-1d (use1-az6) for Spot pricing."
+    condition = alltrue([
+      for az in var.worker_spot_availability_zones : can(regex("^us-east-1[a-z]$", az))
+    ])
+    error_message = "worker_spot_availability_zones must be us-east-1 AZ identifiers (e.g. us-east-1a)."
+  }
+
+  validation {
+    condition     = contains(var.worker_spot_availability_zones, var.worker_spot_dedicated_availability_zone)
+    error_message = "worker_spot_dedicated_availability_zone must appear in worker_spot_availability_zones."
   }
 }
 
