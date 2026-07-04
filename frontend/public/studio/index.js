@@ -133172,20 +133172,10 @@ const initFileHandler = (scene, events, dropTarget) => {
                 if (f.contents)
                     fileSystem.addFile(f.filename, f.contents);
             });
-            // Presigned URLs embed '/' in query params (X-Amz-Credential), which
-            // breaks format detection when the full URL is used as filename.
-            let filename = mainFile.filename;
-            if (files.length === 1 && !mainFile.contents && mainFile.url) {
-                if (!filename || !/\.(splat|ply|spz|ksplat)$/i.test(filename)) {
-                    const pathOnly = mainFile.url.split(/[?#]/)[0];
-                    filename = pathOnly.split('/').pop() || 'scene.splat';
-                }
-                const response = await fetch(mainFile.url);
-                if (!response.ok) {
-                    throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
-                }
-                fileSystem.addFile(filename, await response.blob());
-            }
+            // For URL-only single file, use full URL as filename
+            const filename = (files.length === 1 && !mainFile.contents && mainFile.url) ?
+                mainFile.url :
+                mainFile.filename;
             const model = await scene.assetLoader.load(filename, fileSystem, animationFrame);
             await scene.add(model);
             return model;
@@ -144680,4 +144670,13636 @@ class PointerController {
         // synthetic-Ctrl pinch.
         window.addEventListener('keydown', keydown, { capture: true });
         window.addEventListener('keyup', keyup, { capture: true });
-        this.destroy = () => 
+        this.destroy = () => {
+            destroy?.();
+            window.removeEventListener('keydown', keydown, { capture: true });
+            window.removeEventListener('keyup', keyup, { capture: true });
+            events.off('camera.fly.forward', onFlyForward);
+            events.off('camera.fly.backward', onFlyBackward);
+            events.off('camera.fly.left', onFlyLeft);
+            events.off('camera.fly.right', onFlyRight);
+            events.off('camera.fly.down', onFlyDown);
+            events.off('camera.fly.up', onFlyUp);
+            events.off('camera.modifier.fast', onModifierFast);
+            events.off('camera.modifier.slow', onModifierSlow);
+        };
+    }
+}
+
+const idClearColor = new Color(1, 1, 1, 1);
+const depthClearColor = new Color(0, 0, 0, 1);
+// Shared buffer for half-to-float conversion
+const float32 = new Float32Array(1);
+const uint32 = new Uint32Array(float32.buffer);
+// Convert 16-bit half-float to 32-bit float using bit manipulation
+const half2Float = (h) => {
+    const sign = (h & 0x8000) << 16; // Move sign to bit 31
+    const exponent = (h & 0x7C00) >> 10; // Extract 5-bit exponent
+    const mantissa = h & 0x03FF; // Extract 10-bit mantissa
+    if (exponent === 0) {
+        if (mantissa === 0) {
+            // Zero
+            uint32[0] = sign;
+        }
+        else {
+            // Denormalized: convert to normalized float32
+            let e = -1;
+            let m = mantissa;
+            do {
+                e++;
+                m <<= 1;
+            } while ((m & 0x0400) === 0);
+            uint32[0] = sign | ((127 - 15 - e) << 23) | ((m & 0x03FF) << 13);
+        }
+    }
+    else if (exponent === 31) {
+        // Infinity or NaN
+        uint32[0] = sign | 0x7F800000 | (mantissa << 13);
+    }
+    else {
+        // Normalized: adjust exponent bias from 15 to 127
+        uint32[0] = sign | ((exponent + 127 - 15) << 23) | (mantissa << 13);
+    }
+    return float32[0];
+};
+class Picker {
+    device;
+    scene;
+    // Render targets (provided by camera)
+    depthRenderTarget = null;
+    idRenderTarget = null;
+    // Render pass (shared for depth and ID picking)
+    renderPass;
+    // Blend state for depth accumulation
+    depthBlendState;
+    constructor(scene) {
+        this.scene = scene;
+        this.device = scene.graphicsDevice;
+        // Create shared render pass for picking
+        this.renderPass = new RenderPassPicker(this.device, this.scene.app.renderer);
+        // Blend state for depth accumulation:
+        // RGB: additive depth accumulation (ONE, ONE_MINUS_SRC_ALPHA)
+        // Alpha: multiplicative transmittance (ZERO, ONE_MINUS_SRC_ALPHA) -> T = T * (1 - alpha)
+        this.depthBlendState = new BlendState(true, BLENDEQUATION_ADD, BLENDMODE_ONE, BLENDMODE_ONE_MINUS_SRC_ALPHA, // RGB blend
+        BLENDEQUATION_ADD, BLENDMODE_ZERO, BLENDMODE_ONE_MINUS_SRC_ALPHA // Alpha blend (transmittance)
+        );
+    }
+    // Set render targets from camera
+    setRenderTargets(depthRT, idRT) {
+        this.depthRenderTarget = depthRT;
+        this.idRenderTarget = idRT;
+    }
+    // Prepare for ID picking by rendering the specified splat
+    prepareId(splat, mode) {
+        if (!this.idRenderTarget) {
+            return;
+        }
+        const { splatLayer } = this.scene;
+        // Hide non-selected elements
+        const splats = this.scene.getElementsByType(ElementType.splat);
+        splats.forEach((s) => {
+            s.entity.enabled = s === splat;
+        });
+        // Set picker uniforms
+        this.device.scope.resolve('pickOp').setValue(['add', 'remove', 'set'].indexOf(mode));
+        this.device.scope.resolve('pickMode').setValue(0);
+        // Render ID picking pass
+        const emptyMap = new Map();
+        this.renderPass.blendState = BlendState.NOBLEND;
+        this.renderPass.init(this.idRenderTarget);
+        this.renderPass.setClearColor(idClearColor);
+        this.renderPass.update(this.scene.camera.camera, this.scene.app.scene, [splatLayer], emptyMap, false);
+        this.renderPass.render();
+        // Re-enable all splats
+        splats.forEach((s) => {
+            s.entity.enabled = true;
+        });
+    }
+    // Read single splat ID at normalized screen position (after prepareId)
+    async readId(x, y) {
+        if (!this.idRenderTarget) {
+            return -1;
+        }
+        // For single pixel read, use a minimal normalized size
+        const rt = this.idRenderTarget;
+        const ids = await this.readIds(x, y, 1 / rt.width, 1 / rt.height);
+        return ids[0];
+    }
+    // Read rectangle of splat IDs using normalized coordinates (0-1 range) (after prepareId)
+    async readIds(x, y, width, height) {
+        if (!this.idRenderTarget) {
+            return [];
+        }
+        const rt = this.idRenderTarget;
+        const colorBuffer = rt.colorBuffer;
+        // Convert normalized coordinates to render target pixels
+        const px = Math.floor(x * rt.width);
+        const py = Math.floor(y * rt.height);
+        const pw = Math.max(1, Math.ceil((x + width) * rt.width) - px);
+        const ph = Math.max(1, Math.ceil((y + height) * rt.height) - py);
+        // Flip Y for texture read on WebGL (texture origin is bottom-left)
+        const texY = this.device.isWebGL2 ? rt.height - py - ph : py;
+        // Read pixels using texture.read() API
+        const pixels = await colorBuffer.read(px, texY, pw, ph, {
+            renderTarget: rt,
+            immediate: false
+        });
+        const result = [];
+        for (let i = 0; i < pw * ph; i++) {
+            // Use >>> 0 to convert signed 32-bit to unsigned (so 0xffffffff instead of -1)
+            result.push((pixels[i * 4] |
+                (pixels[i * 4 + 1] << 8) |
+                (pixels[i * 4 + 2] << 16) |
+                (pixels[i * 4 + 3] << 24)) >>> 0);
+        }
+        return result;
+    }
+    // Prepare for depth picking by rendering the specified splat
+    prepareDepth(splat) {
+        if (!this.depthRenderTarget) {
+            return;
+        }
+        const { scene } = this;
+        const { app, camera, splatLayer } = scene;
+        const emptyMap = new Map();
+        // Hide non-selected elements
+        const splats = scene.getElementsByType(ElementType.splat);
+        splats.forEach((s) => {
+            s.entity.enabled = s === splat;
+        });
+        // Set depth estimation mode uniform
+        this.device.scope.resolve('pickOp').setValue(2); // 'set' mode - don't skip any visible splats
+        this.device.scope.resolve('pickMode').setValue(1);
+        // Render scene with depth pass
+        this.renderPass.blendState = this.depthBlendState;
+        this.renderPass.init(this.depthRenderTarget);
+        this.renderPass.setClearColor(depthClearColor);
+        this.renderPass.update(camera.camera, app.scene, [splatLayer], emptyMap, false);
+        this.renderPass.render();
+        // Re-enable all splats
+        splats.forEach((s) => {
+            s.entity.enabled = true;
+        });
+    }
+    // Read normalized depth (0-1) at normalized screen position (0-1 range) (after prepareDepth)
+    async readDepth(x, y) {
+        if (!this.depthRenderTarget) {
+            return null;
+        }
+        const rt = this.depthRenderTarget;
+        const colorBuffer = rt.colorBuffer;
+        // Convert normalized coordinates to render target pixels
+        const px = Math.floor(x * rt.width);
+        const py = Math.floor(y * rt.height);
+        // Flip Y for texture read on WebGL (texture origin is bottom-left)
+        const texY = this.device.isWebGL2 ? rt.height - py - 1 : py;
+        // Read the pixel using Texture.read() which handles RGBA16F format
+        const pixels = await colorBuffer.read(px, texY, 1, 1, { renderTarget: rt });
+        // Convert half-float values to floats
+        // R channel: accumulated depth * alpha
+        // A channel: transmittance (1 - alpha)
+        const r = half2Float(pixels[0]);
+        const transmittance = half2Float(pixels[3]);
+        const alpha = 1 - transmittance;
+        // Check alpha (transmittance close to 1 means nothing visible)
+        if (alpha < 1e-6) {
+            return null;
+        }
+        // Return normalized depth (0-1 range)
+        return r / alpha;
+    }
+    // Clean up resources
+    destroy() {
+        this.renderPass?.destroy();
+    }
+}
+
+const vertexShader$a = /* glsl*/ `
+    attribute vec2 vertex_position;
+    void main(void) {
+        gl_Position = vec4(vertex_position, 0.0, 1.0);
+    }
+`;
+const fragmentShader$a = /* glsl*/ `
+    uniform sampler2D srcTexture;
+    void main(void) {
+        ivec2 texel = ivec2(gl_FragCoord.xy);
+        gl_FragColor = texelFetch(srcTexture, texel, 0);
+    }
+`;
+
+// possible interpolation functions
+const Interp = {
+    sinosidal: (n) => Math.sin((n * Math.PI) / 2.0),
+    quadratic: (n) => n * (2 - n),
+    quartic: (n) => 1 - --n * n * n * n,
+    quintic: (n) => Math.pow(n - 1, 5) + 1,
+    vertebrae: (n) => -Math.pow((Math.cos(n * Math.PI) + 1) / 2, 2) + 1
+};
+class Ops {
+    keys;
+    constructor(value) {
+        this.keys = Object.keys(value);
+    }
+    clone(obj) {
+        const result = {};
+        this.keys.forEach((key) => {
+            result[key] = obj[key];
+        });
+        return result;
+    }
+    copy(target, source) {
+        this.keys.forEach((key) => {
+            target[key] = source[key];
+        });
+    }
+    lerp(target, a, b, t) {
+        this.keys.forEach((key) => {
+            target[key] = a[key] + t * (b[key] - a[key]);
+        });
+    }
+}
+class TweenValue {
+    ops;
+    value;
+    source;
+    target;
+    timer;
+    transitionTime;
+    constructor(value) {
+        this.ops = new Ops(value);
+        this.value = value;
+        this.source = this.ops.clone(value);
+        this.target = this.ops.clone(value);
+        this.timer = 0;
+        this.transitionTime = 0;
+    }
+    goto(target, transitionTime = 0.25) {
+        if (transitionTime === 0) {
+            this.ops.copy(this.value, target);
+        }
+        this.ops.copy(this.source, this.value);
+        this.ops.copy(this.target, target);
+        this.timer = 0;
+        this.transitionTime = transitionTime;
+    }
+    update(deltaTime) {
+        if (this.timer < this.transitionTime) {
+            this.timer = Math.min(this.timer + deltaTime, this.transitionTime);
+            this.ops.lerp(this.value, this.source, this.target, Interp.quintic(this.timer / this.transitionTime));
+        }
+        else {
+            this.ops.copy(this.value, this.target);
+        }
+    }
+}
+
+const resolve$7 = (scope, values) => {
+    for (const [key, value] of Object.entries(values)) {
+        scope.resolve(key).setValue(value);
+    }
+};
+
+class ShaderQuad {
+    shader;
+    quadRender;
+    constructor(device, vertexGLSL, fragmentGLSL, uniqueName) {
+        this.shader = ShaderUtils.createShader(device, {
+            uniqueName,
+            attributes: {
+                vertex_position: SEMANTIC_POSITION
+            },
+            vertexGLSL,
+            fragmentGLSL
+        });
+        this.quadRender = new QuadRender(this.shader);
+    }
+    render(viewport, scissor) {
+        this.quadRender.render(viewport, scissor);
+    }
+    destroy() {
+        this.shader.destroy();
+        this.quadRender.destroy();
+    }
+}
+class SimpleRenderPass extends RenderPass {
+    blendState = BlendState.NOBLEND;
+    cullMode = CULLFACE_NONE;
+    depthState = DepthState.NODEPTH;
+    stencilFront = null;
+    stencilBack = null;
+    viewport = null;
+    scissor = null;
+    renderable;
+    vars = null;
+    constructor(device, renderable, args) {
+        super(device);
+        this.renderable = renderable;
+        Object.assign(this, args);
+    }
+    execute(vars = {}) {
+        const { device, blendState, cullMode, depthState, stencilFront, stencilBack, viewport, scissor } = this;
+        if (this.vars) {
+            resolve$7(device.scope, this.vars());
+        }
+        resolve$7(device.scope, vars);
+        device.setBlendState(blendState);
+        device.setCullMode(cullMode);
+        device.setDepthState(depthState);
+        device.setStencilState(stencilFront, stencilBack);
+        this.renderable.render(viewport, scissor);
+    }
+}
+
+// work globals
+const forwardVec = new Vec3();
+const cameraPosition = new Vec3();
+const ray = new Ray();
+const vec = new Vec3();
+const vecb = new Vec3();
+const va = new Vec3();
+const m = new Mat4();
+const v4$1 = new Vec4();
+// modulo dealing with negative numbers
+const mod = (n, m) => ((n % m) + m) % m;
+class Camera extends Element {
+    /**
+     * Calculate the forward vector given azimuth and elevation angles.
+     *
+     * @param {Vec3} result - The Vec3 to store the result in.
+     * @param {number} azim - Azimuth angle in degrees.
+     * @param {number} elev - Elevation angle in degrees.
+     */
+    static calcForwardVec(result, azim, elev) {
+        const ex = elev * math.DEG_TO_RAD;
+        const ey = azim * math.DEG_TO_RAD;
+        const s1 = Math.sin(-ex);
+        const c1 = Math.cos(-ex);
+        const s2 = Math.sin(-ey);
+        const c2 = Math.cos(-ey);
+        result.set(-c1 * s2, s1, c1 * c2);
+    }
+    controller;
+    focalPointTween = new TweenValue({ x: 0, y: 0.5, z: 0 });
+    azimElevTween = new TweenValue({ azim: 30, elev: -15 });
+    distanceTween = new TweenValue({ distance: 1 });
+    minElev = -90;
+    maxElev = 90;
+    sceneRadius = 1;
+    flySpeed = 1;
+    controlMode = 'orbit';
+    // during fly-mode look, stores the camera position that must stay fixed
+    // while the azim/elev tween smoothly converges
+    lookCameraPos = null;
+    picker;
+    mainCamera;
+    mainTarget;
+    splatTarget;
+    colorTarget;
+    workTarget;
+    // Render passes
+    clearPass;
+    mainPass;
+    splatPass;
+    gizmoPass;
+    finalPass;
+    // overridden target size
+    targetSizeOverride = null;
+    // when set, overrides the tween-driven pose, fov and clipping planes each
+    // update (used by 360 capture to render arbitrary face orientations that
+    // the azim/elev pose system cannot express)
+    poseOverride = null;
+    // world transform of the user-facing camera pose. while a pose override
+    // is active this holds the last tween-driven pose, so ui elements (view
+    // cube, overlays) don't track the internal capture poses
+    displayTransform = new Mat4();
+    renderOverlays = true;
+    updateCameraUniforms;
+    constructor() {
+        super(ElementType.camera);
+        // create the camera entity
+        this.mainCamera = new Entity('Camera');
+        this.mainCamera.addComponent('camera');
+    }
+    // ortho
+    set ortho(value) {
+        if (value !== this.ortho) {
+            this.camera.projection = value ? PROJECTION_ORTHOGRAPHIC : PROJECTION_PERSPECTIVE;
+            this.scene.events.fire('camera.ortho', value);
+        }
+    }
+    get ortho() {
+        return this.camera.projection === PROJECTION_ORTHOGRAPHIC;
+    }
+    // fov
+    set fov(value) {
+        this.camera.fov = value;
+    }
+    get fov() {
+        return this.camera.fov;
+    }
+    // tonemapping
+    set tonemapping(value) {
+        const mapping = {
+            linear: TONEMAP_LINEAR,
+            neutral: TONEMAP_NEUTRAL,
+            aces: TONEMAP_ACES,
+            aces2: TONEMAP_ACES2,
+            filmic: TONEMAP_FILMIC,
+            hejl: TONEMAP_HEJL
+        };
+        const tvalue = mapping[value];
+        if (tvalue !== undefined && tvalue !== this.camera.toneMapping) {
+            this.camera.toneMapping = tvalue;
+            this.scene.events.fire('camera.tonemapping', value);
+        }
+    }
+    get tonemapping() {
+        switch (this.camera.toneMapping) {
+            case TONEMAP_LINEAR: return 'linear';
+            case TONEMAP_NEUTRAL: return 'neutral';
+            case TONEMAP_ACES: return 'aces';
+            case TONEMAP_ACES2: return 'aces2';
+            case TONEMAP_FILMIC: return 'filmic';
+            case TONEMAP_HEJL: return 'hejl';
+        }
+        return 'linear';
+    }
+    // near clip
+    set near(value) {
+        this.camera.nearClip = value;
+    }
+    get near() {
+        return this.camera.nearClip;
+    }
+    // far clip
+    set far(value) {
+        this.camera.farClip = value;
+    }
+    get far() {
+        return this.camera.farClip;
+    }
+    // focal point
+    get focalPoint() {
+        const t = this.focalPointTween.target;
+        return new Vec3(t.x, t.y, t.z);
+    }
+    // azimuth, elevation
+    get azimElev() {
+        return this.azimElevTween.target;
+    }
+    get azim() {
+        return this.azimElev.azim;
+    }
+    get elevation() {
+        return this.azimElev.elev;
+    }
+    get distance() {
+        return this.distanceTween.target.distance;
+    }
+    setFocalPoint(point, dampingFactorFactor = 1) {
+        this.lookCameraPos = null;
+        this.focalPointTween.goto(point, dampingFactorFactor * this.scene.config.controls.dampingFactor);
+    }
+    // Fly mode: rotate camera around itself, keeping the camera position fixed
+    look(dx, dy) {
+        const sensitivity = this.scene.config.controls.orbitSensitivity;
+        const d = this.distance * this.sceneRadius / this.fovFactor;
+        Camera.calcForwardVec(forwardVec, this.azim, this.elevation);
+        const cameraPos = this.focalPoint.add(forwardVec.clone().mulScalar(d));
+        const azim = this.azim - dx * sensitivity;
+        const elev = this.elevation - dy * sensitivity;
+        Camera.calcForwardVec(forwardVec, azim, elev);
+        const focalPoint = cameraPos.clone().sub(forwardVec.clone().mulScalar(d));
+        this.setAzimElev(azim, elev);
+        this.focalPointTween.goto(focalPoint, this.scene.config.controls.dampingFactor);
+        this.lookCameraPos = cameraPos;
+    }
+    setAzimElev(azim, elev, dampingFactorFactor = 1) {
+        // clamp
+        azim = mod(azim, 360);
+        elev = Math.max(this.minElev, Math.min(this.maxElev, elev));
+        const t = this.azimElevTween;
+        t.goto({ azim, elev }, dampingFactorFactor * this.scene.config.controls.dampingFactor);
+        // handle wraparound
+        if (t.source.azim - azim < -180) {
+            t.source.azim += 360;
+        }
+        else if (t.source.azim - azim > 180) {
+            t.source.azim -= 360;
+        }
+        // return to perspective mode on rotation
+        this.ortho = false;
+    }
+    setDistance(distance, dampingFactorFactor = 1) {
+        this.lookCameraPos = null;
+        const controls = this.scene.config.controls;
+        // clamp
+        distance = Math.max(controls.minZoom, Math.min(controls.maxZoom, distance));
+        const t = this.distanceTween;
+        t.goto({ distance }, dampingFactorFactor * controls.dampingFactor);
+    }
+    setPose(position, target, dampingFactorFactor = 1) {
+        vec.sub2(target, position);
+        const l = vec.length();
+        const azim = Math.atan2(-vec.x / l, -vec.z / l) * math.RAD_TO_DEG;
+        const elev = Math.asin(vec.y / l) * math.RAD_TO_DEG;
+        this.setFocalPoint(target, dampingFactorFactor);
+        this.setAzimElev(azim, elev, dampingFactorFactor);
+        this.setDistance(l / this.sceneRadius * this.fovFactor, dampingFactorFactor);
+    }
+    // set or clear the pose override and apply it immediately so subsequent
+    // splat sorting and rendering see the new transform
+    setPoseOverride(override) {
+        this.poseOverride = override;
+        this.onUpdate(0);
+    }
+    // transform the world space coordinate to normalized screen coordinate
+    worldToScreen(world, screen) {
+        const { camera } = this;
+        m.mul2(camera.projectionMatrix, camera.viewMatrix);
+        v4$1.set(world.x, world.y, world.z, 1);
+        m.transformVec4(v4$1, v4$1);
+        screen.x = v4$1.x / v4$1.w * 0.5 + 0.5;
+        screen.y = 1.0 - (v4$1.y / v4$1.w * 0.5 + 0.5);
+        screen.z = v4$1.z / v4$1.w;
+    }
+    add() {
+        const { camera, scene } = this;
+        scene.cameraRoot.addChild(this.mainCamera);
+        // configure camera to render all layers
+        this.mainCamera.camera.layers = [
+            scene.worldLayer.id,
+            scene.splatLayer.id,
+            scene.gizmoLayer.id
+        ];
+        // use manual aspect ratio mode so we can set it based on targetSize
+        camera.aspectRatioMode = ASPECT_MANUAL;
+        // create render passes
+        const device = scene.graphicsDevice;
+        const { app } = scene;
+        const renderer = app.renderer;
+        const composition = app.scene.layers;
+        this.clearPass = new RenderPass(device);
+        this.mainPass = new RenderPassForward(device, composition, app.scene, renderer);
+        this.splatPass = new RenderPassForward(device, composition, app.scene, renderer);
+        this.gizmoPass = new RenderPassForward(device, composition, app.scene, renderer);
+        this.finalPass = new SimpleRenderPass(device, new ShaderQuad(device, vertexShader$a, fragmentShader$a, 'final-blit'), {
+            vars: () => {
+                return {
+                    srcTexture: this.mainTarget.colorBuffer
+                };
+            }
+        });
+        const target = document.getElementById('canvas-container');
+        this.controller = new PointerController(this, target);
+        // apply scene config
+        const config = scene.config;
+        const controls = config.controls;
+        this.minElev = (controls.minPolarAngle * 180) / Math.PI - 90;
+        this.maxElev = (controls.maxPolarAngle * 180) / Math.PI - 90;
+        // tonemapping
+        camera.toneMapping = {
+            linear: TONEMAP_LINEAR,
+            filmic: TONEMAP_FILMIC,
+            hejl: TONEMAP_HEJL,
+            aces: TONEMAP_ACES,
+            aces2: TONEMAP_ACES2,
+            neutral: TONEMAP_NEUTRAL
+        }[config.camera.toneMapping];
+        // exposure
+        scene.app.scene.exposure = config.camera.exposure;
+        this.fov = config.camera.fov;
+        // initial camera position and orientation
+        this.setAzimElev(controls.initialAzim, controls.initialElev, 0);
+        this.setDistance(controls.initialZoom, 0);
+        // picker
+        this.picker = new Picker(scene);
+        scene.events.on('scene.boundChanged', this.onBoundChanged, this);
+        // prepare camera-specific uniforms
+        this.updateCameraUniforms = () => {
+            const device = scene.graphicsDevice;
+            const entity = this.mainCamera;
+            const camera = entity.camera;
+            const set = (name, vec) => {
+                device.scope.resolve(name).setValue([vec.x, vec.y, vec.z]);
+            };
+            // get frustum corners in world space
+            const points = camera.camera.getFrustumCorners(-100);
+            const worldTransform = this.worldTransform;
+            for (let i = 0; i < points.length; i++) {
+                worldTransform.transformPoint(points[i], points[i]);
+            }
+            // near
+            if (camera.projection === PROJECTION_PERSPECTIVE) {
+                // perspective
+                set('near_origin', worldTransform.getTranslation());
+                set('near_x', Vec3.ZERO);
+                set('near_y', Vec3.ZERO);
+            }
+            else {
+                // orthographic
+                set('near_origin', points[3]);
+                set('near_x', va.sub2(points[0], points[3]));
+                set('near_y', va.sub2(points[2], points[3]));
+            }
+            // far
+            set('far_origin', points[7]);
+            set('far_x', va.sub2(points[4], points[7]));
+            set('far_y', va.sub2(points[6], points[7]));
+        };
+        // temp control of camera start
+        const url = new URL(location.href);
+        const focal = url.searchParams.get('focal');
+        if (focal) {
+            const parts = focal.toString().split(',');
+            if (parts.length === 3) {
+                this.setFocalPoint(new Vec3(parseFloat(parts[0]), parseFloat(parts[1]), parseFloat(parts[2])), 0);
+            }
+        }
+        const angles = url.searchParams.get('angles');
+        if (angles) {
+            const parts = angles.toString().split(',');
+            if (parts.length === 2) {
+                this.setAzimElev(parseFloat(parts[0]), parseFloat(parts[1]), 0);
+            }
+        }
+        const distance = url.searchParams.get('distance');
+        if (distance) {
+            this.setDistance(parseFloat(distance), 0);
+        }
+    }
+    remove() {
+        const { scene } = this;
+        this.controller.destroy();
+        this.controller = null;
+        // cleanup render passes
+        this.clearPass?.destroy();
+        this.mainPass?.destroy();
+        this.splatPass?.destroy();
+        this.gizmoPass?.destroy();
+        this.finalPass?.destroy();
+        this.camera.framePasses = null;
+        scene.cameraRoot.removeChild(this.mainCamera);
+        this.picker.destroy();
+        this.picker = null;
+        scene.events.off('scene.boundChanged', this.onBoundChanged, this);
+    }
+    // handle the scene's bound changing. the camera must be configured to render
+    // the entire extents as well as possible.
+    // also update the existing camera distance to maintain the current view
+    onBoundChanged(bound) {
+        const prevDistance = this.distanceTween.value.distance * this.sceneRadius;
+        this.sceneRadius = Math.max(1e-03, bound.halfExtents.length());
+        this.setDistance(prevDistance / this.sceneRadius, 0);
+    }
+    serialize(serializer) {
+        serializer.packa(this.worldTransform.data);
+        serializer.pack(this.fov, this.tonemapping, this.targetSize.width, this.targetSize.height);
+    }
+    // handle the viewer canvas resizing
+    rebuildRenderTargets() {
+        const { width, height } = this.targetSize;
+        const { mainTarget, scene } = this;
+        // early out if size is unchanged
+        if (mainTarget && mainTarget.width === width && mainTarget.height === height) {
+            return;
+        }
+        if (!mainTarget) {
+            // first time - construct render targets
+            const { graphicsDevice } = scene;
+            const createTexture = (name, width, height, format) => {
+                return new Texture(graphicsDevice, {
+                    name,
+                    width,
+                    height,
+                    format,
+                    mipmaps: false,
+                    minFilter: FILTER_NEAREST,
+                    magFilter: FILTER_NEAREST,
+                    addressU: ADDRESS_CLAMP_TO_EDGE,
+                    addressV: ADDRESS_CLAMP_TO_EDGE
+                });
+            };
+            const colorBuffer = createTexture('cameraColor', width, height, PIXELFORMAT_RGBA16F);
+            const workBuffer = createTexture('workColor', width, height, PIXELFORMAT_RGBA8);
+            const depthBuffer = createTexture('cameraDepth', width, height, PIXELFORMAT_DEPTH);
+            // create main render target
+            this.mainTarget = new RenderTarget({
+                colorBuffer,
+                depthBuffer,
+                flipY: false,
+                autoResolve: false
+            });
+            // create MRT render target for splat pass
+            this.splatTarget = new RenderTarget({
+                colorBuffers: [
+                    colorBuffer, // RT0: main color (shared)
+                    workBuffer // RT1: overlay output (shared with workTarget)
+                ],
+                depthBuffer,
+                flipY: false,
+                autoResolve: false
+            });
+            this.colorTarget = new RenderTarget({
+                colorBuffer,
+                depth: false,
+                autoResolve: false
+            });
+            // create work buffer (used for picking, overlay output, and other operations)
+            this.workTarget = new RenderTarget({
+                colorBuffer: workBuffer,
+                depth: false,
+                autoResolve: false
+            });
+            // set picker render targets
+            this.picker.setRenderTargets(this.colorTarget, this.workTarget);
+            // clear all targets
+            this.clearPass.init(this.splatTarget);
+            this.clearPass.setClearColor(new Color(0, 0, 0, 0));
+            this.clearPass.setClearDepth(1);
+            this.clearPass.setClearStencil(0);
+            // configure main pass - world layer with clears
+            this.mainPass.init(this.mainTarget);
+            this.mainPass.addLayer(this.camera, scene.worldLayer, false, false);
+            this.mainPass.addLayer(this.camera, scene.worldLayer, true, false);
+            // configure splat pass - MRT target, no clears
+            this.splatPass.init(this.splatTarget);
+            this.splatPass.addLayer(this.camera, scene.splatLayer, false, false);
+            this.splatPass.addLayer(this.camera, scene.splatLayer, true, false);
+            // configure gizmo pass
+            this.gizmoPass.init(this.mainTarget);
+            this.gizmoPass.addLayer(this.camera, scene.gizmoLayer, false, false);
+            this.gizmoPass.addLayer(this.camera, scene.gizmoLayer, true, false);
+            this.gizmoPass.renderActions[0].clearDepth = true;
+            this.gizmoPass.renderActions[0].clearStencil = true;
+            this.finalPass.init(null);
+            // assign render passes to camera
+            this.camera.framePasses = [this.clearPass, this.mainPass, this.splatPass, this.gizmoPass, this.finalPass];
+        }
+        else {
+            // resize existing render targets
+            const { splatTarget, colorTarget, workTarget } = this;
+            mainTarget.resize(width, height);
+            workTarget.resize(width, height);
+            colorTarget.resize(width, height);
+            splatTarget.resize(width, height);
+        }
+        this.camera.horizontalFov = width > height;
+        this.camera.aspectRatio = width / height;
+        scene.events.fire('camera.resize', { width, height });
+    }
+    onUpdate(deltaTime) {
+        // controller update
+        this.controller.update(deltaTime);
+        // update underlying values
+        this.focalPointTween.update(deltaTime);
+        this.azimElevTween.update(deltaTime);
+        this.distanceTween.update(deltaTime);
+        const azimElev = this.azimElevTween.value;
+        const distance = this.distanceTween.value;
+        Camera.calcForwardVec(forwardVec, azimElev.azim, azimElev.elev);
+        if (this.lookCameraPos) {
+            cameraPosition.copy(this.lookCameraPos);
+            if (this.azimElevTween.timer >= this.azimElevTween.transitionTime) {
+                this.lookCameraPos = null;
+            }
+        }
+        else {
+            cameraPosition.copy(forwardVec);
+            cameraPosition.mulScalar(distance.distance * this.sceneRadius / this.fovFactor);
+            cameraPosition.add(this.focalPointTween.value);
+        }
+        if (this.poseOverride) {
+            // cameraRoot has identity transform, so local space is world space
+            const { position, rotation, fov, near, far } = this.poseOverride;
+            this.mainCamera.setLocalPosition(position);
+            this.mainCamera.setLocalRotation(rotation);
+            this.camera.fov = fov;
+            this.near = near;
+            this.far = far;
+        }
+        else {
+            this.mainCamera.setLocalPosition(cameraPosition);
+            this.mainCamera.setLocalEulerAngles(azimElev.elev, azimElev.azim, 0);
+            this.fitClippingPlanes(this.mainCamera.getLocalPosition(), this.mainCamera.forward);
+            this.displayTransform.copy(this.mainCamera.getWorldTransform());
+        }
+        const { camera } = this.mainCamera;
+        const { targetSize } = this;
+        // update ortho height
+        camera.orthoHeight = this.distanceTween.value.distance * this.sceneRadius / this.fovFactor * (this.fov / 90) * (camera.horizontalFov ? targetSize.height / targetSize.width : 1);
+        camera.camera._updateViewProjMat();
+    }
+    fitClippingPlanes(cameraPosition, forwardVec) {
+        const bound = this.scene.bound;
+        const boundRadius = bound.halfExtents.length();
+        vec.sub2(bound.center, cameraPosition);
+        const dist = vec.dot(forwardVec);
+        if (dist > 0) {
+            this.far = dist + boundRadius;
+            // if camera is placed inside the sphere bound calculate near based far
+            this.near = Math.max(1e-6, dist < boundRadius ? this.far / (1024 * 16) : dist - boundRadius);
+        }
+        else {
+            // if the scene is behind the camera
+            this.far = boundRadius * 2;
+            this.near = this.far / (1024 * 16);
+        }
+    }
+    onPreRender() {
+        this.rebuildRenderTargets();
+        this.updateCameraUniforms();
+    }
+    onPostRender() {
+    }
+    focus(options) {
+        const getSplatFocalPoint = () => {
+            for (const element of this.scene.elements) {
+                if (element.type === ElementType.splat) {
+                    const focalPoint = element.focalPoint?.();
+                    if (focalPoint) {
+                        return focalPoint;
+                    }
+                }
+            }
+        };
+        const focalPoint = options ? options.focalPoint : (getSplatFocalPoint() ?? this.scene.bound.center);
+        const focalRadius = options ? options.radius : this.scene.bound.halfExtents.length();
+        const fdist = focalRadius / this.sceneRadius;
+        this.setDistance(isFinite(fdist) ? fdist : 1, options?.speed ?? 0);
+        this.setFocalPoint(focalPoint, options?.speed ?? 0);
+    }
+    get fovFactor() {
+        // use the larger axis fov (which is always this.fov) so camera distance
+        // stays constant regardless of viewport aspect ratio.
+        return Math.sin(this.fov * math.DEG_TO_RAD * 0.5);
+    }
+    getRay(screenX, screenY, ray) {
+        const { camera, ortho } = this;
+        const cameraPos = this.mainCamera.getPosition();
+        // create the pick ray in world space
+        if (ortho) {
+            camera.screenToWorld(screenX, screenY, -1, vec);
+            camera.screenToWorld(screenX, screenY, 1.0, vecb);
+            vecb.sub(vec).normalize();
+            ray.set(vec, vecb);
+        }
+        else {
+            camera.screenToWorld(screenX, screenY, 1.0, vec);
+            vec.sub(cameraPos).normalize();
+            ray.set(cameraPos, vec);
+        }
+    }
+    // intersect the scene at the given normalized screen coordinate (0-1 range) using depth picking
+    async intersect(x, y) {
+        const { scene } = this;
+        const splats = scene.getElementsByType(ElementType.splat);
+        let closestDepth = Infinity;
+        let closestSplat = null;
+        // Find the splat with the smallest depth at this screen position
+        for (let i = 0; i < splats.length; ++i) {
+            const splat = splats[i];
+            this.picker.prepareDepth(splat);
+            const normalizedDepth = await this.picker.readDepth(x, y);
+            if (normalizedDepth !== null && normalizedDepth < closestDepth) {
+                closestDepth = normalizedDepth;
+                closestSplat = splat;
+            }
+        }
+        if (!closestSplat) {
+            return null;
+        }
+        // Convert normalized depth to linear depth
+        const linearDepth = closestDepth * (this.far - this.near) + this.near;
+        // Convert normalized coordinates to screen pixels for getRay
+        const screenX = x * scene.canvas.clientWidth;
+        const screenY = y * scene.canvas.clientHeight;
+        // Calculate world position from ray and depth
+        this.getRay(screenX, screenY, ray);
+        const t = linearDepth / ray.direction.dot(this.mainCamera.forward);
+        const position = new Vec3();
+        position.copy(ray.origin).add(vec.copy(ray.direction).mulScalar(t));
+        return {
+            splat: closestSplat,
+            position: position,
+            distance: t
+        };
+    }
+    // intersect the scene at the normalized screen location (0-1 range) and focus the camera on this location
+    async pickFocalPoint(x, y) {
+        const result = await this.intersect(x, y);
+        if (result) {
+            const { scene } = this;
+            this.setFocalPoint(result.position);
+            this.setDistance(result.distance / this.sceneRadius * this.fovFactor);
+            scene.events.fire('camera.focalPointPicked', {
+                camera: this,
+                splat: result.splat,
+                position: result.position
+            });
+        }
+    }
+    // pick mode
+    // render picker contents
+    pickPrep(splat, mode) {
+        this.picker.prepareId(splat, mode);
+    }
+    pick(x, y) {
+        return this.picker.readId(x, y);
+    }
+    pickRect(x, y, width, height) {
+        return this.picker.readIds(x, y, width, height);
+    }
+    docSerialize() {
+        const pack3 = (v) => [v.x, v.y, v.z];
+        return {
+            focalPoint: pack3(this.focalPointTween.target),
+            azim: this.azim,
+            elev: this.elevation,
+            distance: this.distance,
+            fov: this.fov,
+            tonemapping: this.tonemapping
+        };
+    }
+    docDeserialize(settings) {
+        this.setFocalPoint(new Vec3(settings.focalPoint), 0);
+        this.setAzimElev(settings.azim, settings.elev, 0);
+        this.setDistance(settings.distance, 0);
+        this.fov = settings.fov;
+        this.tonemapping = settings.tonemapping;
+    }
+    // offscreen render mode
+    startOffscreenMode(width, height) {
+        this.targetSizeOverride = { width, height };
+        this.finalPass.enabled = false;
+        this.rebuildRenderTargets();
+        this.onUpdate(0);
+    }
+    endOffscreenMode() {
+        this.targetSizeOverride = null;
+        this.finalPass.enabled = true;
+        this.rebuildRenderTargets();
+        this.onUpdate(0);
+    }
+    get targetSize() {
+        return this.targetSizeOverride ?? this.scene.targetSize;
+    }
+    get camera() {
+        return this.mainCamera.camera;
+    }
+    get worldTransform() {
+        return this.mainCamera.getWorldTransform();
+    }
+    get position() {
+        return this.mainCamera.getPosition();
+    }
+    get forward() {
+        return this.mainCamera.forward;
+    }
+}
+
+const vertexShader$9 = /* glsl */ `
+    attribute vec3 vertex_position;
+    attribute vec4 vertex_color;
+
+    varying vec4 vColor;
+    varying vec2 vZW;
+
+    uniform mat4 matrix_model;
+    uniform mat4 matrix_viewProjection;
+
+    void main(void) {
+        gl_Position = matrix_viewProjection * matrix_model * vec4(vertex_position, 1.0);
+
+        // store z/w for later use in fragment shader
+        vColor = vertex_color;
+        vZW = gl_Position.zw;
+
+        // disable depth clipping
+        gl_Position.z = 0.0;
+    }
+`;
+const fragmentShader$9 = /* glsl */ `
+    precision highp float;
+
+    varying vec4 vColor;
+    varying vec2 vZW;
+
+    void main(void) {
+        gl_FragColor = vColor;
+
+        // clamp depth in Z to [0, 1] range
+        gl_FragDepth = max(0.0, min(1.0, (vZW.x / vZW.y + 1.0) * 0.5));
+    }
+`;
+
+// temp vectors for frustum geometry calculation (module-scope to avoid allocations)
+const tmpForward = new Vec3();
+const tmpRight = new Vec3();
+const tmpUp = new Vec3();
+const tmpBase = new Vec3();
+const tmpTL = new Vec3();
+const tmpTR = new Vec3();
+const tmpBL = new Vec3();
+const tmpBR = new Vec3();
+const tmpUpTip = new Vec3();
+// lines per camera icon: 4 pyramid + 4 base rect + 2 up indicator = 10
+const LINES_PER_CAMERA = 10;
+const VERTS_PER_CAMERA = LINES_PER_CAMERA * 2;
+class CameraPoseGizmos extends Element {
+    entity;
+    mesh;
+    material;
+    meshInstance;
+    dirty = true;
+    constructor() {
+        super(ElementType.debug);
+    }
+    add() {
+        const scene = this.scene;
+        const device = scene.graphicsDevice;
+        this.material = new ShaderMaterial({
+            uniqueName: 'cameraPoseGizmoMaterial',
+            vertexGLSL: vertexShader$9,
+            fragmentGLSL: fragmentShader$9
+        });
+        this.material.depthWrite = true;
+        this.material.depthTest = true;
+        this.material.update();
+        this.mesh = new Mesh(device);
+        this.mesh.primitive[0] = {
+            baseVertex: 0,
+            type: PRIMITIVE_LINES,
+            base: 0,
+            count: 0
+        };
+        this.meshInstance = new MeshInstance(this.mesh, this.material, null);
+        this.meshInstance.cull = false;
+        this.entity = new Entity('cameraPoseGizmos');
+        this.entity.addComponent('render', {
+            meshInstances: [this.meshInstance],
+            layers: [scene.worldLayer.id]
+        });
+        scene.app.root.addChild(this.entity);
+        // mark dirty when poses or scene bound change
+        const markDirty = () => {
+            this.dirty = true;
+            if (scene.events.invoke('camera.showPoses')) {
+                scene.forceRender = true;
+            }
+        };
+        const { events } = scene;
+        events.on('track.keyAdded', markDirty);
+        events.on('track.keyRemoved', markDirty);
+        events.on('track.keyMoved', markDirty);
+        events.on('track.keyUpdated', markDirty);
+        events.on('track.keysCleared', markDirty);
+        events.on('track.keysLoaded', markDirty);
+        events.on('scene.boundChanged', markDirty);
+    }
+    destroy() {
+        this.entity?.destroy();
+    }
+    onPreRender() {
+        const { scene } = this;
+        const visible = scene.events.invoke('camera.showPoses') && scene.camera.renderOverlays;
+        this.entity.enabled = visible;
+        if (visible && this.dirty) {
+            this.dirty = false;
+            this.rebuildMesh();
+        }
+    }
+    rebuildMesh() {
+        const poses = this.scene.events.invoke('camera.poses');
+        if (!poses || poses.length === 0) {
+            this.mesh.primitive[0].count = 0;
+            return;
+        }
+        const depth = 0.08;
+        const halfW = 0.06;
+        const halfH = 0.04;
+        const numVerts = poses.length * VERTS_PER_CAMERA;
+        const positions = [];
+        const colors = new Uint8Array(numVerts * 4);
+        const pushLine = (a, b) => {
+            positions.push(a.x, a.y, a.z, b.x, b.y, b.z);
+        };
+        for (const pose of poses) {
+            const { position, target } = pose;
+            // forward direction
+            tmpForward.sub2(target, position).normalize();
+            // right direction (handle degenerate case when looking straight up/down)
+            if (Math.abs(tmpForward.y) > 0.999) {
+                tmpRight.cross(tmpForward, Vec3.BACK).normalize();
+            }
+            else {
+                tmpRight.cross(tmpForward, Vec3.UP).normalize();
+            }
+            // up direction
+            tmpUp.cross(tmpRight, tmpForward);
+            // base center (in front of camera position)
+            tmpBase.copy(position).addScaled(tmpForward, depth);
+            // frustum corners
+            tmpTL.copy(tmpBase).addScaled(tmpUp, halfH).addScaled(tmpRight, -halfW);
+            tmpTR.copy(tmpBase).addScaled(tmpUp, halfH).addScaled(tmpRight, halfW);
+            tmpBL.copy(tmpBase).addScaled(tmpUp, -halfH).addScaled(tmpRight, -halfW);
+            tmpBR.copy(tmpBase).addScaled(tmpUp, -halfH).addScaled(tmpRight, halfW);
+            // pyramid edges from position to corners
+            pushLine(position, tmpTL);
+            pushLine(position, tmpTR);
+            pushLine(position, tmpBL);
+            pushLine(position, tmpBR);
+            // base rectangle
+            pushLine(tmpTL, tmpTR);
+            pushLine(tmpTR, tmpBR);
+            pushLine(tmpBR, tmpBL);
+            pushLine(tmpBL, tmpTL);
+            // up indicator triangle
+            tmpUpTip.copy(tmpBase).addScaled(tmpUp, halfH * 1.5);
+            pushLine(tmpTL, tmpUpTip);
+            pushLine(tmpTR, tmpUpTip);
+        }
+        // fill vertex colors with cyan (0, 255, 255, 255)
+        for (let i = 0; i < numVerts; i++) {
+            const off = i * 4;
+            colors[off] = 0;
+            colors[off + 1] = 255;
+            colors[off + 2] = 255;
+            colors[off + 3] = 255;
+        }
+        this.mesh.setPositions(positions);
+        this.mesh.setColors32(colors);
+        this.mesh.update(PRIMITIVE_LINES);
+    }
+}
+
+// pool of Uint8Array readback buffers, keyed by byteLength. GPU passes acquire
+// a buffer for the duration of a single run+consume cycle and release it back
+// when done. avoids the shared-singleton foot-gun where a stale reference from
+// a previous run could be overwritten under the caller, while keeping steady
+// state memory parity with the old model (one buffer in flight, one parked).
+class BufferPool {
+    free = new Map();
+    acquire(byteLen) {
+        const list = this.free.get(byteLen);
+        if (list && list.length) {
+            return list.pop();
+        }
+        return new Uint8Array(byteLen);
+    }
+    release(buf) {
+        const list = this.free.get(buf.byteLength);
+        if (list) {
+            list.push(buf);
+        }
+        else {
+            this.free.set(buf.byteLength, [buf]);
+        }
+    }
+}
+
+const vertexShader$8 = /* glsl */ `
+    attribute vec2 vertex_position;
+    void main(void) {
+        gl_Position = vec4(vertex_position, 0.0, 1.0);
+    }
+`;
+const fragmentShader$8 = /* glsl */ `
+    uniform highp usampler2D transformA;                // splat center x, y, z
+    uniform highp usampler2D splatTransform;            // transform palette index
+    uniform sampler2D transformPalette;                 // palette of transforms
+    uniform sampler2D splatState;                       // per-splat state
+    uniform highp ivec3 splat_params;                   // texture width, texture height, num splats
+
+    // Custom infinity check that transpiles correctly to WGSL
+    bvec3 isInf(vec3 v) {
+        return greaterThan(abs(v), vec3(1e30));
+    }
+
+    // calculate min and max for a single column of splats
+    // outputs both selected bounds and all visible bounds
+    void main(void) {
+
+        vec3 selectedMin = vec3(1e6);
+        vec3 selectedMax = vec3(-1e6);
+        vec3 visibleMin = vec3(1e6);
+        vec3 visibleMax = vec3(-1e6);
+
+        for (int id = 0; id < splat_params.y; id++) {
+            // calculate splatUV
+            ivec2 splatUV = ivec2(gl_FragCoord.x, id);
+
+            // skip out-of-range splats
+            if ((splatUV.x + splatUV.y * splat_params.x) >= splat_params.z) {
+                continue;
+            }
+
+            // read splat state
+            uint state = uint(texelFetch(splatState, splatUV, 0).r * 255.0);
+
+            // skip deleted splats for both bounds
+            if ((state & 4u) != 0u) {
+                continue;
+            }
+
+            // read splat center
+            vec3 center = uintBitsToFloat(texelFetch(transformA, splatUV, 0).xyz);
+
+            // apply optional per-splat transform
+            uint transformIndex = texelFetch(splatTransform, splatUV, 0).r;
+            if (transformIndex > 0u) {
+                // read transform matrix
+                int u = int(transformIndex % 512u) * 3;
+                int v = int(transformIndex / 512u);
+
+                mat3x4 t;
+                t[0] = texelFetch(transformPalette, ivec2(u, v), 0);
+                t[1] = texelFetch(transformPalette, ivec2(u + 1, v), 0);
+                t[2] = texelFetch(transformPalette, ivec2(u + 2, v), 0);
+
+                center = vec4(center, 1.0) * t;
+            }
+
+            vec3 safeCenter = mix(center, vec3(1e6), isInf(center));
+
+            // update visible bounds (all non-deleted splats)
+            visibleMin = min(visibleMin, safeCenter);
+            visibleMax = max(visibleMax, mix(center, visibleMax, isInf(center)));
+
+            // update selected bounds (only exactly selected splats)
+            if (state == 1u) {
+                selectedMin = min(selectedMin, safeCenter);
+                selectedMax = max(selectedMax, mix(center, selectedMax, isInf(center)));
+            }
+        }
+
+        pcFragColor0 = vec4(selectedMin, 0.0);
+        pcFragColor1 = vec4(selectedMax, 0.0);
+        pcFragColor2 = vec4(visibleMin, 0.0);
+        pcFragColor3 = vec4(visibleMax, 0.0);
+    }
+`;
+
+const v1 = new Vec3();
+const v2 = new Vec3();
+const v3 = new Vec3();
+const v4 = new Vec3();
+const resolve$6 = (scope, values) => {
+    for (const key in values) {
+        scope.resolve(key).setValue(values[key]);
+    }
+};
+class CalcBound {
+    device;
+    splatParams = new Int32Array(3);
+    shader = null;
+    selectedMinTexture = null;
+    selectedMaxTexture = null;
+    visibleMinTexture = null;
+    visibleMaxTexture = null;
+    renderTarget = null;
+    selectedMinRenderTarget = null;
+    selectedMaxRenderTarget = null;
+    visibleMinRenderTarget = null;
+    visibleMaxRenderTarget = null;
+    selectedMinData = null;
+    selectedMaxData = null;
+    visibleMinData = null;
+    visibleMaxData = null;
+    constructor(device) {
+        this.device = device;
+    }
+    getResources(width) {
+        const { device } = this;
+        if (!this.shader) {
+            this.shader = ShaderUtils.createShader(device, {
+                uniqueName: 'calcBoundShader',
+                attributes: {
+                    vertex_position: SEMANTIC_POSITION
+                },
+                vertexGLSL: vertexShader$8,
+                fragmentGLSL: fragmentShader$8
+            });
+        }
+        if (!this.selectedMinTexture || this.selectedMinTexture.width !== width) {
+            if (this.selectedMinTexture) {
+                this.selectedMinTexture.destroy();
+                this.selectedMaxTexture.destroy();
+                this.visibleMinTexture.destroy();
+                this.visibleMaxTexture.destroy();
+                this.renderTarget.destroy();
+                this.selectedMinRenderTarget.destroy();
+                this.selectedMaxRenderTarget.destroy();
+                this.visibleMinRenderTarget.destroy();
+                this.visibleMaxRenderTarget.destroy();
+            }
+            const createTexture = (name) => {
+                return new Texture(device, {
+                    name,
+                    width,
+                    height: 1,
+                    format: PIXELFORMAT_RGBA32F,
+                    mipmaps: false,
+                    addressU: ADDRESS_CLAMP_TO_EDGE,
+                    addressV: ADDRESS_CLAMP_TO_EDGE
+                });
+            };
+            this.selectedMinTexture = createTexture('calcBoundSelectedMin');
+            this.selectedMaxTexture = createTexture('calcBoundSelectedMax');
+            this.visibleMinTexture = createTexture('calcBoundVisibleMin');
+            this.visibleMaxTexture = createTexture('calcBoundVisibleMax');
+            this.renderTarget = new RenderTarget({
+                colorBuffers: [this.selectedMinTexture, this.selectedMaxTexture, this.visibleMinTexture, this.visibleMaxTexture],
+                depth: false
+            });
+            this.selectedMinRenderTarget = new RenderTarget({
+                colorBuffer: this.selectedMinTexture,
+                depth: false
+            });
+            this.selectedMaxRenderTarget = new RenderTarget({
+                colorBuffer: this.selectedMaxTexture,
+                depth: false
+            });
+            this.visibleMinRenderTarget = new RenderTarget({
+                colorBuffer: this.visibleMinTexture,
+                depth: false
+            });
+            this.visibleMaxRenderTarget = new RenderTarget({
+                colorBuffer: this.visibleMaxTexture,
+                depth: false
+            });
+            this.selectedMinData = new Float32Array(width * 4);
+            this.selectedMaxData = new Float32Array(width * 4);
+            this.visibleMinData = new Float32Array(width * 4);
+            this.visibleMaxData = new Float32Array(width * 4);
+        }
+        return {
+            shader: this.shader,
+            selectedMinTexture: this.selectedMinTexture,
+            selectedMaxTexture: this.selectedMaxTexture,
+            visibleMinTexture: this.visibleMinTexture,
+            visibleMaxTexture: this.visibleMaxTexture,
+            renderTarget: this.renderTarget,
+            selectedMinRenderTarget: this.selectedMinRenderTarget,
+            selectedMaxRenderTarget: this.selectedMaxRenderTarget,
+            visibleMinRenderTarget: this.visibleMinRenderTarget,
+            visibleMaxRenderTarget: this.visibleMaxRenderTarget,
+            selectedMinData: this.selectedMinData,
+            selectedMaxData: this.selectedMaxData,
+            visibleMinData: this.visibleMinData,
+            visibleMaxData: this.visibleMaxData
+        };
+    }
+    async run(splat, selectionBound, localBound) {
+        const device = splat.scene.graphicsDevice;
+        const { scope } = device;
+        const numSplats = splat.splatData.numSplats;
+        const transformA = splat.entity.gsplat.instance.resource.getTexture('transformA');
+        const splatTransform = splat.transformTexture;
+        const transformPalette = splat.transformPalette.texture;
+        const splatState = splat.stateTexture;
+        this.splatParams[0] = transformA.width;
+        this.splatParams[1] = transformA.height;
+        this.splatParams[2] = numSplats;
+        // get resources
+        const resources = this.getResources(transformA.width);
+        resolve$6(scope, {
+            transformA,
+            splatTransform,
+            transformPalette,
+            splatState,
+            splat_params: this.splatParams
+        });
+        device.setBlendState(BlendState.NOBLEND);
+        drawQuadWithShader(device, resources.renderTarget, resources.shader);
+        // read all 4 textures asynchronously using the public texture.read() API
+        const [selectedMinData, selectedMaxData, visibleMinData, visibleMaxData] = await Promise.all([
+            resources.selectedMinTexture.read(0, 0, transformA.width, 1, {
+                renderTarget: resources.selectedMinRenderTarget,
+                data: resources.selectedMinData,
+                immediate: false
+            }),
+            resources.selectedMaxTexture.read(0, 0, transformA.width, 1, {
+                renderTarget: resources.selectedMaxRenderTarget,
+                data: resources.selectedMaxData,
+                immediate: false
+            }),
+            resources.visibleMinTexture.read(0, 0, transformA.width, 1, {
+                renderTarget: resources.visibleMinRenderTarget,
+                data: resources.visibleMinData,
+                immediate: false
+            }),
+            resources.visibleMaxTexture.read(0, 0, transformA.width, 1, {
+                renderTarget: resources.visibleMaxRenderTarget,
+                data: resources.visibleMaxData,
+                immediate: false
+            })
+        ]);
+        // resolve selected bounds
+        v1.set(Infinity, Infinity, Infinity);
+        v2.set(-Infinity, -Infinity, -Infinity);
+        for (let i = 0; i < transformA.width; i++) {
+            const a = selectedMinData[i * 4];
+            const b = selectedMinData[i * 4 + 1];
+            const c = selectedMinData[i * 4 + 2];
+            if (isFinite(a))
+                v1.x = Math.min(v1.x, a);
+            if (isFinite(b))
+                v1.y = Math.min(v1.y, b);
+            if (isFinite(c))
+                v1.z = Math.min(v1.z, c);
+            const d = selectedMaxData[i * 4];
+            const e = selectedMaxData[i * 4 + 1];
+            const f = selectedMaxData[i * 4 + 2];
+            if (isFinite(d))
+                v2.x = Math.max(v2.x, d);
+            if (isFinite(e))
+                v2.y = Math.max(v2.y, e);
+            if (isFinite(f))
+                v2.z = Math.max(v2.z, f);
+        }
+        selectionBound.setMinMax(v1, v2);
+        // resolve visible bounds
+        v3.set(Infinity, Infinity, Infinity);
+        v4.set(-Infinity, -Infinity, -Infinity);
+        for (let i = 0; i < transformA.width; i++) {
+            const a = visibleMinData[i * 4];
+            const b = visibleMinData[i * 4 + 1];
+            const c = visibleMinData[i * 4 + 2];
+            if (isFinite(a))
+                v3.x = Math.min(v3.x, a);
+            if (isFinite(b))
+                v3.y = Math.min(v3.y, b);
+            if (isFinite(c))
+                v3.z = Math.min(v3.z, c);
+            const d = visibleMaxData[i * 4];
+            const e = visibleMaxData[i * 4 + 1];
+            const f = visibleMaxData[i * 4 + 2];
+            if (isFinite(d))
+                v4.x = Math.max(v4.x, d);
+            if (isFinite(e))
+                v4.y = Math.max(v4.y, e);
+            if (isFinite(f))
+                v4.z = Math.max(v4.z, f);
+        }
+        localBound.setMinMax(v3, v4);
+    }
+}
+
+let cachedDevice = null;
+let cachedVB = null;
+const getInstancingVB = (device) => {
+    if (cachedVB && cachedDevice === device) {
+        return cachedVB;
+    }
+    const format = new VertexFormat(device, [
+        { semantic: SEMANTIC_POSITION, components: 1, type: TYPE_FLOAT32 }
+    ]);
+    format.instancing = true;
+    cachedVB = new VertexBuffer(device, format, 1);
+    cachedVB.lock();
+    cachedVB.unlock();
+    cachedDevice = device;
+    return cachedVB;
+};
+const drawPointsWithShader = (device, target, shader, count, blendState) => {
+    const vb = getInstancingVB(device);
+    const d = device;
+    const oldRt = d.renderTarget;
+    const oldVx = d.vx, oldVy = d.vy, oldVw = d.vw, oldVh = d.vh;
+    const oldSx = d.sx, oldSy = d.sy, oldSw = d.sw, oldSh = d.sh;
+    d.setRenderTarget(target);
+    d.updateBegin();
+    const w = target ? target.width : d.width;
+    const h = target ? target.height : d.height;
+    d.setViewport(0, 0, w, h);
+    d.setScissor(0, 0, w, h);
+    d.setBlendState(blendState);
+    d.setDepthState(DepthState.NODEPTH);
+    d.setVertexBuffer(vb);
+    d.setShader(shader);
+    d.draw({
+        type: PRIMITIVE_POINTS,
+        base: 0,
+        count,
+        indexed: false
+    });
+    d.updateEnd();
+    d.setRenderTarget(oldRt);
+    d.setViewport(oldVx, oldVy, oldVw, oldVh);
+    d.setScissor(oldSx, oldSy, oldSw, oldSh);
+};
+
+// shared sizing constants for histogram and per-splat-mask GPU passes.
+// keeping them in one place stops calc-histogram, select-by-range, intersect,
+// and the histogram shaders from drifting independently.
+// histogram tile reduction grid: tile shader writes a GRID_DIM x GRID_DIM
+// texture, the reduce shader collapses it to 1x1. the histogram shaders
+// hardcode MAX_GRID_DIM=64 as the unrolled loop bound; if GRID_DIM ever
+// exceeds 64 the shader bound must be raised alongside it.
+const GRID_DIM = 64;
+// default bin count for histogram results when the caller does not override.
+const NUM_BINS = 256;
+// per-splat mask packing: each RGBA8 output texel carries 4 splats. width is
+// derived from the source transformA texture width via this helper so all
+// callers (Intersect, SelectByRange) agree on layout.
+const packedMaskWidth = (sourceWidth) => {
+    return Math.max(1, Math.floor(sourceWidth / 2));
+};
+const packedMaskHeight = (packedWidth, numSplats) => {
+    return Math.ceil(numSplats / (packedWidth * 4));
+};
+
+// shared GLSL chunk used by histogram and select-by-range GPU passes.
+//
+// declares the texture and uniform interface for reading per-splat data and
+// computing a single scalar value selected by `propMode`. exposes a small
+// extractor API (`Splat` struct + `readSplat`, `readColorDC`, `readOpacity`,
+// `readScale`, `readRotation`, `readSHCoeff`, `readFinalColor`) so callers can
+// also pull individual fields if they need something other than the propMode
+// dispatch.
+//
+// propMode values:
+//
+//   0..2   world.x / world.y / world.z
+//   3      distance (= length(world))
+//   4      camera depth (= -(viewMatrix * world).z)
+//   5..7   "Red"/"Green"/"Blue" = final on-screen color channels.
+//          applyColorGrade(dcDecode(f_dc) + evalSH(viewDir)). view-dependent.
+//   8      opacity (= splatColor.a * transparency)
+//   9..11  scale_0 / scale_1 / scale_2 (exp'd in transformB.xyz)
+//   12     volume (= scale.x * scale.y * scale.z)
+//   13     surface area (= dot(scale, scale))
+//   14..17 quat W (reconstructed, always >= 0) / X / Y / Z
+//   18..20 H / S / V of the final on-screen color (same dependence as 5..7)
+//   21..   f_rest_N (N = propMode - 21), decoded from the engine's packed SH
+//          textures. only valid when SH_BANDS > 0 and N < 3 * shNumCoeffs.
+//   66..68 raw "DC R"/"DC G"/"DC B" coefficients: inverse of `dcDecode` applied
+//          to `splatColor.rgb`. camera-independent.
+//
+// the active SH_BANDS define controls which SH samplers are declared and which
+// branches are compiled in. callers must select a matching uniqueName so that
+// each SH_BANDS variant gets its own cached shader.
+const computeSplatValueGLSL = /* glsl */ `
+
+#ifndef SH_BANDS
+#define SH_BANDS 0
+#endif
+
+#define SH_C0 0.28209479177387814
+
+#if SH_BANDS == 1
+#define SH_COEFFS 3
+#elif SH_BANDS == 2
+#define SH_COEFFS 8
+#elif SH_BANDS == 3
+#define SH_COEFFS 15
+#endif
+
+uniform highp usampler2D transformA;
+uniform sampler2D transformB;
+uniform sampler2D splatColor;
+uniform highp usampler2D splatTransform;
+uniform sampler2D transformPalette;
+uniform sampler2D splatState;
+
+#if SH_BANDS > 0
+uniform highp usampler2D splatSH_1to3;
+uniform int shNumCoeffs;
+#endif
+#if SH_BANDS > 1
+uniform highp usampler2D splatSH_4to7;
+uniform highp usampler2D splatSH_8to11;
+#endif
+#if SH_BANDS > 2
+uniform highp usampler2D splatSH_12to15;
+#endif
+
+uniform ivec2 splat_params;
+uniform int propMode;
+uniform mat4 entityMatrix;
+uniform mat4 viewMatrix;
+uniform mat4 viewProjection;
+uniform vec3 cameraWorldPos;
+uniform int onScreenOnly;
+
+uniform vec3 cgScale;
+uniform float cgOffset;
+uniform float cgSaturation;
+uniform float transparency;
+
+// SH band weighting constants (matches engine's gsplatEvalSH GLSL chunk).
+#if SH_BANDS > 0
+const float SH_C1 = 0.4886025119029199;
+#if SH_BANDS > 1
+const float SH_C2_0 =  1.0925484305920792;
+const float SH_C2_1 = -1.0925484305920792;
+const float SH_C2_2 =  0.31539156525252005;
+const float SH_C2_3 = -1.0925484305920792;
+const float SH_C2_4 =  0.5462742152960396;
+#endif
+#if SH_BANDS > 2
+const float SH_C3_0 = -0.5900435899266435;
+const float SH_C3_1 =  2.890611442640554;
+const float SH_C3_2 = -0.4570457994644658;
+const float SH_C3_3 =  0.3731763325901154;
+const float SH_C3_4 = -0.4570457994644658;
+const float SH_C3_5 =  1.445305721320277;
+const float SH_C3_6 = -0.5900435899266435;
+#endif
+#endif
+
+struct Splat {
+    int idx;
+    ivec2 uv;
+    int state;
+    bool selected;      // state == 1
+    bool valid;         // state == 0 || state == 1 (not locked / deleted)
+    vec3 localPos;      // pre-transform (from transformA)
+    vec3 worldPos;      // post entity + per-splat transform
+    bool visible;       // passes the onScreenOnly filter
+};
+
+vec3 applyColorGrade(vec3 c) {
+    c = cgOffset + c * cgScale;
+    float grey = dot(c, vec3(0.299, 0.587, 0.114));
+    return mix(vec3(grey), c, cgSaturation);
+}
+
+vec3 rgb2hsv(vec3 c) {
+    vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+    vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+    vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+    float d = q.x - min(q.w, q.y);
+    float e = 1.0e-10;
+    return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
+}
+
+#if SH_BANDS > 0
+// unpack the (R, G, B) SH triplet at coefficient index coeffIdx (0..14) for
+// the splat at uv. R/B are stored in 11 bits, G in 10 bits, all per-splat
+// normalized by the max value packed into splatSH_1to3.x.
+vec3 unpackSHTriplet(int coeffIdx, ivec2 uv) {
+    uvec4 sh1 = texelFetch(splatSH_1to3, uv, 0);
+    float maxV = uintBitsToFloat(sh1.x);
+
+    uint packed = 0u;
+    if (coeffIdx < 3) {
+        packed = sh1[coeffIdx + 1];
+    }
+    #if SH_BANDS > 1
+    else if (coeffIdx < 7) {
+        packed = texelFetch(splatSH_4to7, uv, 0)[coeffIdx - 3];
+    }
+    else if (coeffIdx < 11) {
+        packed = texelFetch(splatSH_8to11, uv, 0)[coeffIdx - 7];
+    }
+    #endif
+    #if SH_BANDS > 2
+    else if (coeffIdx < 15) {
+        packed = texelFetch(splatSH_12to15, uv, 0)[coeffIdx - 11];
+    }
+    #endif
+
+    uint encR = (packed >> 21) & 0x7FFu;
+    uint encG = (packed >> 11) & 0x3FFu;
+    uint encB =  packed        & 0x7FFu;
+
+    vec3 normalized = vec3(
+        (float(encR) / 2047.0) * 2.0 - 1.0,
+        (float(encG) / 1023.0) * 2.0 - 1.0,
+        (float(encB) / 2047.0) * 2.0 - 1.0
+    );
+
+    return normalized * maxV;
+}
+#endif
+
+// populate s from the given index. returns false when the splat is
+// out-of-bounds or in a locked / deleted state; in that case only idx, state,
+// valid, and selected are reliably set.
+bool readSplat(int idx, out Splat s) {
+    s.idx = idx;
+    s.uv = ivec2(0);
+    s.state = 0;
+    s.selected = false;
+    s.valid = false;
+    s.localPos = vec3(0.0);
+    s.worldPos = vec3(0.0);
+    s.visible = false;
+
+    if (idx >= splat_params.y) return false;
+    s.uv = ivec2(idx % splat_params.x, idx / splat_params.x);
+
+    s.state = int(texelFetch(splatState, s.uv, 0).r * 255.0 + 0.5);
+    s.selected = (s.state == 1);
+    bool clean = (s.state == 0);
+    if (!(s.selected || clean)) return false;
+    s.valid = true;
+
+    uvec4 transformAData = texelFetch(transformA, s.uv, 0);
+    s.localPos = uintBitsToFloat(transformAData.xyz);
+
+    vec3 pos = s.localPos;
+    uint ti = texelFetch(splatTransform, s.uv, 0).r;
+    if (ti > 0u) {
+        int u = int(ti % 512u) * 3;
+        int v = int(ti / 512u);
+        mat3x4 t;
+        t[0] = texelFetch(transformPalette, ivec2(u,     v), 0);
+        t[1] = texelFetch(transformPalette, ivec2(u + 1, v), 0);
+        t[2] = texelFetch(transformPalette, ivec2(u + 2, v), 0);
+        pos = vec4(s.localPos, 1.0) * t;
+    }
+
+    s.worldPos = (entityMatrix * vec4(pos, 1.0)).xyz;
+
+    s.visible = true;
+    if (onScreenOnly == 1) {
+        vec4 clip = viewProjection * vec4(s.worldPos, 1.0);
+        if (clip.w <= 0.0) {
+            s.visible = false;
+        } else {
+            // OpenGL-style clip space: ndc in [-1, 1] on all axes.
+            vec3 ndc = clip.xyz / clip.w;
+            if (any(greaterThan(abs(ndc), vec3(1.0)))) {
+                s.visible = false;
+            }
+        }
+    }
+
+    return true;
+}
+
+// color-graded DC color (no SH contribution). this is what was historically
+// returned for the "Red"/"Green"/"Blue" propModes, now exposed as a building
+// block.
+vec3 readColorDC(Splat s) {
+    return applyColorGrade(texelFetch(splatColor, s.uv, 0).rgb);
+}
+
+// post-grade alpha = sigmoid(opacity) * transparency.
+float readOpacity(Splat s) {
+    return texelFetch(splatColor, s.uv, 0).a * transparency;
+}
+
+// exponentiated scale per axis.
+vec3 readScale(Splat s) {
+    return texelFetch(transformB, s.uv, 0).xyz;
+}
+
+// quaternion components as (W, X, Y, Z). W is reconstructed and always >= 0
+// because the engine canonicalises rotation signs during splat construction.
+vec4 readRotation(Splat s) {
+    vec2 qxy = unpackHalf2x16(texelFetch(transformA, s.uv, 0).w);
+    float qz = texelFetch(transformB, s.uv, 0).w;
+    float qw = sqrt(max(0.0, 1.0 - qxy.x * qxy.x - qxy.y * qxy.y - qz * qz));
+    return vec4(qw, qxy.x, qxy.y, qz);
+}
+
+#if SH_BANDS > 0
+// returns the single-channel f_rest value at the given index (0..44 for
+// shBands 3). identical layout to getSHData in the engine.
+float readSHCoeff(Splat s, int fRestIdx) {
+    int channel = fRestIdx / shNumCoeffs;
+    int coeffIdx = fRestIdx % shNumCoeffs;
+    vec3 triplet = unpackSHTriplet(coeffIdx, s.uv);
+    if (channel == 0) return triplet.r;
+    if (channel == 1) return triplet.g;
+    return triplet.b;
+}
+#endif
+
+// final on-screen color: dcDecode(f_dc) + evalSH(viewDir), then ColorGrade.
+// view-dependent. for shBands == 0 this collapses to the DC-only color.
+vec3 readFinalColor(Splat s) {
+    vec3 color = texelFetch(splatColor, s.uv, 0).rgb;
+
+    #if SH_BANDS > 0
+    vec3 dir = normalize(s.worldPos - cameraWorldPos);
+    float x = dir.x;
+    float y = dir.y;
+    float z = dir.z;
+
+    vec3 sh0 = unpackSHTriplet(0, s.uv);
+    vec3 sh1 = unpackSHTriplet(1, s.uv);
+    vec3 sh2 = unpackSHTriplet(2, s.uv);
+    color += SH_C1 * (-sh0 * y + sh1 * z - sh2 * x);
+
+    #if SH_BANDS > 1
+    float xx = x * x;
+    float yy = y * y;
+    float zz = z * z;
+    float xy = x * y;
+    float yz = y * z;
+    float xz = x * z;
+
+    vec3 sh3 = unpackSHTriplet(3, s.uv);
+    vec3 sh4 = unpackSHTriplet(4, s.uv);
+    vec3 sh5 = unpackSHTriplet(5, s.uv);
+    vec3 sh6 = unpackSHTriplet(6, s.uv);
+    vec3 sh7 = unpackSHTriplet(7, s.uv);
+    color +=
+        sh3 * (SH_C2_0 * xy) +
+        sh4 * (SH_C2_1 * yz) +
+        sh5 * (SH_C2_2 * (2.0 * zz - xx - yy)) +
+        sh6 * (SH_C2_3 * xz) +
+        sh7 * (SH_C2_4 * (xx - yy));
+    #endif
+
+    #if SH_BANDS > 2
+    vec3 sh8  = unpackSHTriplet(8,  s.uv);
+    vec3 sh9  = unpackSHTriplet(9,  s.uv);
+    vec3 sh10 = unpackSHTriplet(10, s.uv);
+    vec3 sh11 = unpackSHTriplet(11, s.uv);
+    vec3 sh12 = unpackSHTriplet(12, s.uv);
+    vec3 sh13 = unpackSHTriplet(13, s.uv);
+    vec3 sh14 = unpackSHTriplet(14, s.uv);
+    color +=
+        sh8  * (SH_C3_0 * y * (3.0 * xx - yy)) +
+        sh9  * (SH_C3_1 * xy * z) +
+        sh10 * (SH_C3_2 * y * (4.0 * zz - xx - yy)) +
+        sh11 * (SH_C3_3 * z * (2.0 * zz - 3.0 * xx - 3.0 * yy)) +
+        sh12 * (SH_C3_4 * x * (4.0 * zz - xx - yy)) +
+        sh13 * (SH_C3_5 * z * (xx - yy)) +
+        sh14 * (SH_C3_6 * x * (xx - 3.0 * yy));
+    #endif
+    #endif
+
+    return applyColorGrade(color);
+}
+
+// computes the scalar value for the splat at the given index. out-params
+// receive the value, whether the splat is selected, and whether it passes the
+// onScreenOnly filter (always true when onScreenOnly == 0).
+bool computeSplatValue(int idx, out float value, out bool selected, out bool visible) {
+    value = 0.0;
+    Splat s;
+    if (!readSplat(idx, s)) {
+        selected = false;
+        visible = false;
+        return false;
+    }
+    selected = s.selected;
+    visible = s.visible;
+
+    if (propMode == 0)        value = s.worldPos.x;
+    else if (propMode == 1)   value = s.worldPos.y;
+    else if (propMode == 2)   value = s.worldPos.z;
+    else if (propMode == 3)   value = length(s.worldPos);
+    else if (propMode == 4)   value = -(viewMatrix * vec4(s.worldPos, 1.0)).z;
+    else if (propMode == 5 || propMode == 6 || propMode == 7) {
+        vec3 rgb = readFinalColor(s);
+        if (propMode == 5)       value = rgb.r;
+        else if (propMode == 6)  value = rgb.g;
+        else                     value = rgb.b;
+    }
+    else if (propMode == 8) {
+        value = readOpacity(s);
+    }
+    else if (propMode >= 9 && propMode <= 13) {
+        vec3 sc = readScale(s);
+        if (propMode == 9)       value = sc.x;
+        else if (propMode == 10) value = sc.y;
+        else if (propMode == 11) value = sc.z;
+        else if (propMode == 12) value = sc.x * sc.y * sc.z;
+        else                     value = dot(sc, sc);
+    }
+    else if (propMode >= 14 && propMode <= 17) {
+        vec4 q = readRotation(s);
+        if (propMode == 14)      value = q.x;     // W
+        else if (propMode == 15) value = q.y;     // X
+        else if (propMode == 16) value = q.z;     // Y
+        else                     value = q.w;     // Z
+    }
+    else if (propMode == 18 || propMode == 19 || propMode == 20) {
+        // rgb2hsv expects channels in [0, 1]; the renderer clamps the final
+        // pixel at output, so HSV is well-defined only on the clamped color.
+        // without this, unclamped HDR / SH-shifted channels yield nonsense
+        // S/V (e.g. (max - min)/max blowing up when max ≈ 0).
+        vec3 hsv = rgb2hsv(clamp(readFinalColor(s), 0.0, 1.0));
+        if (propMode == 18)      value = hsv.x * 360.0;
+        else if (propMode == 19) value = hsv.y;
+        else                     value = hsv.z;
+    }
+    #if SH_BANDS > 0
+    else if (propMode >= 21 && propMode <= 65) {
+        value = readSHCoeff(s, propMode - 21);
+    }
+    #endif
+    else if (propMode >= 66 && propMode <= 68) {
+        // raw f_dc_N coefficient: invert the engine's dcDecode.
+        vec3 dc = texelFetch(splatColor, s.uv, 0).rgb;
+        float c;
+        if (propMode == 66)      c = dc.r;
+        else if (propMode == 67) c = dc.g;
+        else                     c = dc.b;
+        value = (c - 0.5) / SH_C0;
+    }
+
+    return true;
+}
+`;
+
+const fullscreenVS = /* glsl */ `
+    attribute vec2 vertex_position;
+    void main(void) {
+        gl_Position = vec4(vertex_position, 0.0, 1.0);
+    }
+`;
+// pass 1: tile min/max
+// each fragment owns a contiguous range of splat indices and reduces them inline
+const tileMinMaxFS = /* glsl */ `
+    ${computeSplatValueGLSL}
+
+    uniform int tileSize;
+    uniform int gridDim;
+
+    #define MAX_TILE_SIZE 65536
+
+    void main(void) {
+        ivec2 tileXY = ivec2(gl_FragCoord);
+        int tileId = tileXY.y * gridDim + tileXY.x;
+        int baseIdx = tileId * tileSize;
+        int endIdx = min(baseIdx + tileSize, splat_params.y);
+
+        float minVal =  1e30;
+        float maxVal = -1e30;
+
+        for (int k = 0; k < MAX_TILE_SIZE; k++) {
+            int idx = baseIdx + k;
+            if (idx >= endIdx) break;
+            float val;
+            bool sel;
+            bool vis;
+            bool valid = computeSplatValue(idx, val, sel, vis);
+            if (!valid || !vis) continue;
+            minVal = min(minVal, val);
+            maxVal = max(maxVal, val);
+        }
+
+        gl_FragColor = vec4(minVal, maxVal, 0.0, 0.0);
+    }
+`;
+// pass 2: reduce 64×64 → 1×1
+const finalReduceFS = /* glsl */ `
+    uniform sampler2D inputTex;
+    uniform int gridDim;
+
+    #define MAX_GRID_DIM 64
+
+    void main(void) {
+        float minVal =  1e30;
+        float maxVal = -1e30;
+
+        for (int y = 0; y < MAX_GRID_DIM; y++) {
+            if (y >= gridDim) break;
+            for (int x = 0; x < MAX_GRID_DIM; x++) {
+                if (x >= gridDim) break;
+                vec2 v = texelFetch(inputTex, ivec2(x, y), 0).rg;
+                minVal = min(minVal, v.x);
+                maxVal = max(maxVal, v.y);
+            }
+        }
+
+        gl_FragColor = vec4(minVal, maxVal, 0.0, 0.0);
+    }
+`;
+// pass 3: bin counting (point rendering, additive blending)
+const binVS = /* glsl */ `
+    ${computeSplatValueGLSL}
+
+    uniform sampler2D minMax;
+    uniform int numBins;
+
+    varying float v_flag;
+
+    void main(void) {
+        float val;
+        bool sel;
+        bool vis;
+        bool valid = computeSplatValue(gl_VertexID, val, sel, vis);
+        bool include = valid && vis;
+        v_flag = include ? (sel ? 2.0 : 1.0) : 0.0;
+
+        if (!include) {
+            gl_Position = vec4(2.0, 2.0, 0.0, 1.0);
+            gl_PointSize = 0.0;
+            return;
+        }
+
+        vec2 mm = texelFetch(minMax, ivec2(0, 0), 0).rg;
+        float minV = mm.x;
+        float maxV = mm.y;
+        float n = (maxV == minV) ? 0.0 : (val - minV) / (maxV - minV);
+        int bin = clamp(int(n * float(numBins)), 0, numBins - 1);
+
+        float xNDC = (float(bin) + 0.5) / float(numBins) * 2.0 - 1.0;
+        gl_Position = vec4(xNDC, 0.0, 0.0, 1.0);
+        gl_PointSize = 1.0;
+    }
+`;
+const binFS = /* glsl */ `
+    varying float v_flag;
+    void main(void) {
+        float sel   = v_flag == 2.0 ? 1.0 : 0.0;
+        float unsel = v_flag == 1.0 ? 1.0 : 0.0;
+        gl_FragColor = vec4(sel, unsel, 0.0, 0.0);
+    }
+`;
+
+const identity$1 = new Mat4();
+const zeroVec3$1 = new Vec3();
+// number of SH coefficients per RGB band, indexed by GSplatResource.shBands.
+const SH_NUM_COEFFS$2 = { 0: 0, 1: 3, 2: 8, 3: 15 };
+const resolve$5 = (scope, values) => {
+    for (const key in values) {
+        scope.resolve(key).setValue(values[key]);
+    }
+};
+const getShBands$1 = (splat) => {
+    return splat.entity.gsplat.instance.resource.shBands ?? 0;
+};
+class CalcHistogram {
+    device;
+    // shaders are compiled per SH_BANDS value so that each variant declares only
+    // the SH samplers it actually reads. reduceShader has no SH dependence.
+    tileShaders = new Map();
+    binShaders = new Map();
+    reduceShader = null;
+    tileTex = null;
+    tileRT = null;
+    minMaxTex = null;
+    minMaxRT = null;
+    binTex = null;
+    binRT = null;
+    minMaxData = new Float32Array(4);
+    binData = new Float32Array(NUM_BINS * 4);
+    additiveBlend;
+    constructor(device) {
+        this.device = device;
+        this.additiveBlend = new BlendState(true, BLENDEQUATION_ADD, BLENDMODE_ONE, BLENDMODE_ONE, BLENDEQUATION_ADD, BLENDMODE_ONE, BLENDMODE_ONE);
+    }
+    ensureSharedResources() {
+        const { device } = this;
+        if (!this.reduceShader) {
+            this.reduceShader = ShaderUtils.createShader(device, {
+                uniqueName: 'histFinalReduce',
+                attributes: { vertex_position: SEMANTIC_POSITION },
+                vertexGLSL: fullscreenVS,
+                fragmentGLSL: finalReduceFS
+            });
+        }
+        if (!this.tileTex) {
+            this.tileTex = new Texture(device, {
+                name: 'histTile',
+                width: GRID_DIM,
+                height: GRID_DIM,
+                format: PIXELFORMAT_RGBA32F,
+                mipmaps: false,
+                addressU: ADDRESS_CLAMP_TO_EDGE,
+                addressV: ADDRESS_CLAMP_TO_EDGE
+            });
+            this.tileRT = new RenderTarget({ colorBuffer: this.tileTex, depth: false });
+            this.minMaxTex = new Texture(device, {
+                name: 'histMinMax',
+                width: 1,
+                height: 1,
+                format: PIXELFORMAT_RGBA32F,
+                mipmaps: false,
+                addressU: ADDRESS_CLAMP_TO_EDGE,
+                addressV: ADDRESS_CLAMP_TO_EDGE
+            });
+            this.minMaxRT = new RenderTarget({ colorBuffer: this.minMaxTex, depth: false });
+            this.binTex = new Texture(device, {
+                name: 'histBins',
+                width: NUM_BINS,
+                height: 1,
+                format: PIXELFORMAT_RGBA32F,
+                mipmaps: false,
+                addressU: ADDRESS_CLAMP_TO_EDGE,
+                addressV: ADDRESS_CLAMP_TO_EDGE
+            });
+            this.binRT = new RenderTarget({ colorBuffer: this.binTex, depth: false });
+        }
+    }
+    getTileShader(shBands) {
+        let shader = this.tileShaders.get(shBands);
+        if (!shader) {
+            const defines = new Map();
+            defines.set('SH_BANDS', `${shBands}`);
+            shader = ShaderUtils.createShader(this.device, {
+                uniqueName: `histTileMinMax_SH${shBands}`,
+                attributes: { vertex_position: SEMANTIC_POSITION },
+                vertexGLSL: fullscreenVS,
+                fragmentGLSL: tileMinMaxFS,
+                fragmentDefines: defines
+            });
+            this.tileShaders.set(shBands, shader);
+        }
+        return shader;
+    }
+    getBinShader(shBands) {
+        let shader = this.binShaders.get(shBands);
+        if (!shader) {
+            const defines = new Map();
+            defines.set('SH_BANDS', `${shBands}`);
+            shader = ShaderUtils.createShader(this.device, {
+                uniqueName: `histBin_SH${shBands}`,
+                attributes: { vertex_position: SEMANTIC_POSITION },
+                vertexGLSL: binVS,
+                fragmentGLSL: binFS,
+                vertexDefines: defines
+            });
+            this.binShaders.set(shBands, shader);
+        }
+        return shader;
+    }
+    setSplatUniforms(splat, mode, options) {
+        const { scope } = this.device;
+        const numSplats = splat.splatData.numSplats;
+        const resource = splat.entity.gsplat.instance.resource;
+        const transformA = resource.getTexture('transformA');
+        const transformB = resource.getTexture('transformB');
+        const splatColor = resource.getTexture('splatColor');
+        const splatTransform = splat.transformTexture;
+        const transformPalette = splat.transformPalette.texture;
+        const splatState = splat.stateTexture;
+        const shBands = getShBands$1(splat);
+        const numCoeffs = SH_NUM_COEFFS$2[shBands] ?? 0;
+        const entityMatrix = options?.entityMatrix ?? identity$1;
+        const viewMatrix = options?.viewMatrix ?? identity$1;
+        const viewProjection = options?.viewProjection ?? identity$1;
+        const cameraPos = options?.cameraPos ?? zeroVec3$1;
+        const onScreenOnly = options?.onScreenOnly ? 1 : 0;
+        // ColorGrade math, kept in sync with ColorGrade in src/color-grade.ts.
+        const { tintClr, temperature, saturation, brightness, blackPoint, whitePoint, transparency } = splat;
+        const cgInvRange = 1 / (whitePoint - blackPoint);
+        const values = {
+            transformA,
+            transformB,
+            splatColor,
+            splatTransform,
+            transformPalette,
+            splatState,
+            splat_params: [transformA.width, numSplats],
+            propMode: mode,
+            entityMatrix: entityMatrix.data,
+            viewMatrix: viewMatrix.data,
+            viewProjection: viewProjection.data,
+            cameraWorldPos: [cameraPos.x, cameraPos.y, cameraPos.z],
+            onScreenOnly,
+            cgScale: [
+                cgInvRange * tintClr.r * (1 + temperature),
+                cgInvRange * tintClr.g,
+                cgInvRange * tintClr.b * (1 - temperature)
+            ],
+            cgOffset: -blackPoint + brightness,
+            cgSaturation: saturation,
+            transparency
+        };
+        if (shBands > 0) {
+            values.splatSH_1to3 = resource.getTexture('splatSH_1to3');
+            values.shNumCoeffs = numCoeffs;
+        }
+        if (shBands > 1) {
+            values.splatSH_4to7 = resource.getTexture('splatSH_4to7');
+            values.splatSH_8to11 = resource.getTexture('splatSH_8to11');
+        }
+        if (shBands > 2) {
+            values.splatSH_12to15 = resource.getTexture('splatSH_12to15');
+        }
+        resolve$5(scope, values);
+        return numSplats;
+    }
+    clearRT(rt) {
+        const d = this.device;
+        const oldRt = d.renderTarget;
+        const oldVx = d.vx, oldVy = d.vy, oldVw = d.vw, oldVh = d.vh;
+        const oldSx = d.sx, oldSy = d.sy, oldSw = d.sw, oldSh = d.sh;
+        d.setRenderTarget(rt);
+        d.updateBegin();
+        d.setViewport(0, 0, rt.width, rt.height);
+        d.setScissor(0, 0, rt.width, rt.height);
+        d.clear({ color: [0, 0, 0, 0], flags: 1 });
+        d.updateEnd();
+        d.setRenderTarget(oldRt);
+        d.setViewport(oldVx, oldVy, oldVw, oldVh);
+        d.setScissor(oldSx, oldSy, oldSw, oldSh);
+    }
+    // release all GPU resources owned by this instance. peer data-processor
+    // classes (Intersect, SelectByRange, CalcBound) destroy resources only on
+    // size change; CalcHistogram resources are fixed-size, so this exists for
+    // explicit teardown (context loss, scene reload) rather than per-run reuse.
+    destroy() {
+        this.tileRT?.destroy();
+        this.tileTex?.destroy();
+        this.minMaxRT?.destroy();
+        this.minMaxTex?.destroy();
+        this.binRT?.destroy();
+        this.binTex?.destroy();
+        this.tileRT = null;
+        this.tileTex = null;
+        this.minMaxRT = null;
+        this.minMaxTex = null;
+        this.binRT = null;
+        this.binTex = null;
+        this.tileShaders.clear();
+        this.binShaders.clear();
+        this.reduceShader = null;
+    }
+    async run(splat, mode, options) {
+        this.ensureSharedResources();
+        const { device } = this;
+        const { scope } = device;
+        const shBands = getShBands$1(splat);
+        const tileShader = this.getTileShader(shBands);
+        const binShader = this.getBinShader(shBands);
+        const numSplats = this.setSplatUniforms(splat, mode, options);
+        const tileSize = Math.ceil(numSplats / (GRID_DIM * GRID_DIM));
+        scope.resolve('tileSize').setValue(tileSize);
+        scope.resolve('gridDim').setValue(GRID_DIM);
+        // pass 1: tile min/max (fullscreen quad over GRID_DIM x GRID_DIM)
+        device.setBlendState(BlendState.NOBLEND);
+        drawQuadWithShader(device, this.tileRT, tileShader);
+        // pass 2: final reduce 64x64 → 1x1
+        scope.resolve('inputTex').setValue(this.tileTex);
+        scope.resolve('gridDim').setValue(GRID_DIM);
+        device.setBlendState(BlendState.NOBLEND);
+        drawQuadWithShader(device, this.minMaxRT, this.reduceShader);
+        // pass 3: clear bins, then additive-blend point dispatch
+        this.clearRT(this.binRT);
+        // bin shader needs same splat uniforms + minMax + numBins
+        this.setSplatUniforms(splat, mode, options);
+        scope.resolve('minMax').setValue(this.minMaxTex);
+        scope.resolve('numBins').setValue(NUM_BINS);
+        drawPointsWithShader(device, this.binRT, binShader, numSplats, this.additiveBlend);
+        // readback minMax (8 bytes) and bins (4 KB)
+        await this.minMaxTex.read(0, 0, 1, 1, {
+            renderTarget: this.minMaxRT,
+            data: this.minMaxData,
+            immediate: false
+        });
+        await this.binTex.read(0, 0, NUM_BINS, 1, {
+            renderTarget: this.binRT,
+            data: this.binData,
+            immediate: false
+        });
+        let min = this.minMaxData[0];
+        let max = this.minMaxData[1];
+        // detect "nothing contributed" (sentinel survives reduction)
+        if (min > max) {
+            min = 0;
+            max = 0;
+        }
+        const selected = new Float32Array(NUM_BINS);
+        const unselected = new Float32Array(NUM_BINS);
+        let numValues = 0;
+        for (let i = 0; i < NUM_BINS; i++) {
+            const s = this.binData[i * 4];
+            const u = this.binData[i * 4 + 1];
+            selected[i] = s;
+            unselected[i] = u;
+            numValues += s + u;
+        }
+        return { selected, unselected, min, max, numValues };
+    }
+}
+
+const vertexShader$7 = /* glsl */ `
+    attribute vec2 vertex_position;
+    void main(void) {
+        gl_Position = vec4(vertex_position, 0.0, 1.0);
+    }
+`;
+const fragmentShader$7 = /* glsl */ `
+    uniform highp usampler2D transformA;            // splat center x, y, z
+    uniform highp usampler2D splatTransform;        // transform palette index
+    uniform sampler2D transformPalette;             // palette of transforms
+    uniform ivec2 splat_params;                     // splat texture width, num splats
+
+    void main(void) {
+        // calculate output id
+        ivec2 splatUV = ivec2(gl_FragCoord);
+
+        // skip if splat index is out of bounds
+        if (splatUV.x + splatUV.y * splat_params.x >= splat_params.y) {
+            discard;
+        }
+
+        // read splat center
+        vec3 center = uintBitsToFloat(texelFetch(transformA, splatUV, 0).xyz);
+
+        // apply optional per-splat transform
+        uint transformIndex = texelFetch(splatTransform, splatUV, 0).r;
+        if (transformIndex > 0u) {
+            // read transform matrix
+            int u = int(transformIndex % 512u) * 3;
+            int v = int(transformIndex / 512u);
+
+            mat3x4 t;
+            t[0] = texelFetch(transformPalette, ivec2(u, v), 0);
+            t[1] = texelFetch(transformPalette, ivec2(u + 1, v), 0);
+            t[2] = texelFetch(transformPalette, ivec2(u + 2, v), 0);
+
+            center = vec4(center, 1.0) * t;
+        }
+
+        gl_FragColor = vec4(center, 0.0);
+    }
+`;
+
+const resolve$4 = (scope, values) => {
+    for (const key in values) {
+        scope.resolve(key).setValue(values[key]);
+    }
+};
+class CalcPositions {
+    device;
+    shader = null;
+    texture = null;
+    renderTarget = null;
+    data = null;
+    constructor(device) {
+        this.device = device;
+    }
+    getResources(width, height) {
+        const { device } = this;
+        if (!this.shader) {
+            this.shader = ShaderUtils.createShader(device, {
+                uniqueName: 'calcPositionShader',
+                attributes: {
+                    vertex_position: SEMANTIC_POSITION
+                },
+                vertexGLSL: vertexShader$7,
+                fragmentGLSL: fragmentShader$7
+            });
+        }
+        if (!this.texture || this.texture.width !== width || this.texture.height !== height) {
+            if (this.texture) {
+                this.texture.destroy();
+                this.renderTarget.destroy();
+            }
+            this.texture = new Texture(device, {
+                name: 'positionTex',
+                width,
+                height,
+                format: PIXELFORMAT_RGBA32F,
+                mipmaps: false,
+                addressU: ADDRESS_CLAMP_TO_EDGE,
+                addressV: ADDRESS_CLAMP_TO_EDGE
+            });
+            this.renderTarget = new RenderTarget({
+                colorBuffer: this.texture,
+                depth: false
+            });
+            this.data = new Float32Array(width * height * 4);
+        }
+        return {
+            shader: this.shader,
+            texture: this.texture,
+            renderTarget: this.renderTarget,
+            data: this.data
+        };
+    }
+    async run(splat) {
+        const { device } = this;
+        const { scope } = device;
+        const numSplats = splat.splatData.numSplats;
+        const transformA = splat.entity.gsplat.instance.resource.getTexture('transformA');
+        const splatTransform = splat.transformTexture;
+        const transformPalette = splat.transformPalette.texture;
+        // allocate resources
+        const resources = this.getResources(transformA.width, transformA.height);
+        resolve$4(scope, {
+            transformA,
+            splatTransform,
+            transformPalette,
+            splat_params: [transformA.width, numSplats]
+        });
+        device.setBlendState(BlendState.NOBLEND);
+        drawQuadWithShader(device, resources.renderTarget, resources.shader);
+        const data = await resources.texture.read(0, 0, resources.texture.width, resources.texture.height, {
+            renderTarget: resources.renderTarget,
+            data: resources.data,
+            immediate: false
+        });
+        return data;
+    }
+}
+
+const vertexShader$6 = /* glsl */ `
+    attribute vec2 vertex_position;
+    void main(void) {
+        gl_Position = vec4(vertex_position, 0.0, 1.0);
+    }
+`;
+const fragmentShader$6 = /* glsl */ `
+    uniform highp usampler2D transformA;            // splat center x, y, z
+    uniform highp usampler2D splatTransform;        // transform palette index
+    uniform sampler2D transformPalette;             // palette of transforms
+    uniform uvec2 splat_params;                     // splat texture width, num splats
+
+    uniform mat4 matrix_model;
+    uniform mat4 matrix_viewProjection;
+
+    uniform uvec2 output_params;                    // output width, height
+
+    // 0: mask, 1: rect, 2: sphere, 3: box
+    uniform int mode;
+
+    // mask params
+    uniform sampler2D mask;                         // mask in alpha channel
+    uniform vec2 mask_params;                       // mask width, height
+
+    // rect params
+    uniform vec4 rect_params;                       // rect x, y, width, height
+
+    // sphere params
+    uniform vec4 sphere_params;                     // sphere x, y, z, radius
+
+    // box params
+    uniform vec4 box_params;                     // box x, y, z
+    uniform vec4 aabb_params;                    // len x, y, z
+
+    void main(void) {
+        // calculate output id
+        uvec2 outputUV = uvec2(gl_FragCoord);
+        uint outputId = (outputUV.x + outputUV.y * output_params.x) * 4u;
+
+        vec4 clr = vec4(0.0);
+
+        for (uint i = 0u; i < 4u; i++) {
+            uint id = outputId + i;
+
+            if (id >= splat_params.y) {
+                continue;
+            }
+
+            // calculate splatUV
+            ivec2 splatUV = ivec2(
+                int(id % splat_params.x),
+                int(id / splat_params.x)
+            );
+
+            // read splat center
+            vec3 center = uintBitsToFloat(texelFetch(transformA, splatUV, 0).xyz);
+
+            // apply optional per-splat transform
+            uint transformIndex = texelFetch(splatTransform, splatUV, 0).r;
+            if (transformIndex > 0u) {
+                // read transform matrix
+                int u = int(transformIndex % 512u) * 3;
+                int v = int(transformIndex / 512u);
+
+                mat3x4 t;
+                t[0] = texelFetch(transformPalette, ivec2(u, v), 0);
+                t[1] = texelFetch(transformPalette, ivec2(u + 1, v), 0);
+                t[2] = texelFetch(transformPalette, ivec2(u + 2, v), 0);
+
+                center = vec4(center, 1.0) * t;
+            }
+
+            // transform to world space (sphere/box modes test world-space containment)
+            vec3 world = (matrix_model * vec4(center, 1.0)).xyz;
+
+            if (mode == 0 || mode == 1) {
+                // screen-space modes: project to clip space and skip offscreen fragments
+                vec4 clip = matrix_viewProjection * vec4(world, 1.0);
+                vec3 ndc = clip.xyz / clip.w;
+
+                if (!any(greaterThan(abs(ndc), vec3(1.0)))) {
+                    if (mode == 0) {
+                        // select by mask
+                        ivec2 maskUV = ivec2((ndc.xy * vec2(0.5, -0.5) + 0.5) * mask_params);
+                        clr[i] = texelFetch(mask, maskUV, 0).a < 1.0 ? 0.0 : 1.0;
+                    } else {
+                        // select by rect
+                        clr[i] = all(greaterThan(ndc.xy * vec2(1.0, -1.0), rect_params.xy)) && all(lessThan(ndc.xy * vec2(1.0, -1.0), rect_params.zw)) ? 1.0 : 0.0;
+                    }
+                }
+            } else if (mode == 2) {
+                // select by sphere (world-space, independent of camera frustum)
+                clr[i] = length(world - sphere_params.xyz) < sphere_params.w ? 1.0 : 0.0;
+            } else if (mode == 3) {
+                // select by box (world-space, independent of camera frustum)
+                vec3 relativePosition = world - box_params.xyz;
+                bool isInsideCube = true;
+                if (relativePosition.x < -aabb_params.x || relativePosition.x > aabb_params.x) {
+                    isInsideCube = false;
+                }
+                if (relativePosition.y < -aabb_params.y || relativePosition.y > aabb_params.y) {
+                    isInsideCube = false;
+                }
+                if (relativePosition.z < -aabb_params.z || relativePosition.z > aabb_params.z) {
+                    isInsideCube = false;
+                }
+                clr[i] = isInsideCube ? 1.0 : 0.0;
+            }
+        }
+
+        gl_FragColor = clr;
+    }
+`;
+
+const resolve$3 = (scope, values) => {
+    for (const key in values) {
+        scope.resolve(key).setValue(values[key]);
+    }
+};
+class Intersect {
+    device;
+    dummyTexture;
+    viewProjectionMat = new Mat4();
+    shader = null;
+    texture = null;
+    renderTarget = null;
+    constructor(device) {
+        this.device = device;
+        this.dummyTexture = new Texture(device, {
+            width: 1,
+            height: 1,
+            format: PIXELFORMAT_RGBA8
+        });
+    }
+    getResources(width, numSplats) {
+        const { device } = this;
+        if (!this.shader) {
+            this.shader = ShaderUtils.createShader(device, {
+                uniqueName: 'intersectByMaskShader',
+                attributes: {
+                    vertex_position: SEMANTIC_POSITION
+                },
+                vertexGLSL: vertexShader$6,
+                fragmentGLSL: fragmentShader$6
+            });
+        }
+        const resultWidth = packedMaskWidth(width);
+        const resultHeight = packedMaskHeight(resultWidth, numSplats);
+        if (!this.texture || this.texture.width !== resultWidth || this.texture.height !== resultHeight) {
+            if (this.texture) {
+                this.texture.destroy();
+                this.renderTarget.destroy();
+            }
+            this.texture = new Texture(device, {
+                name: 'intersectTexture',
+                width: resultWidth,
+                height: resultHeight,
+                format: PIXELFORMAT_RGBA8,
+                mipmaps: false,
+                addressU: ADDRESS_CLAMP_TO_EDGE,
+                addressV: ADDRESS_CLAMP_TO_EDGE
+            });
+            this.renderTarget = new RenderTarget({
+                colorBuffer: this.texture,
+                depth: false
+            });
+        }
+        return {
+            shader: this.shader,
+            texture: this.texture,
+            renderTarget: this.renderTarget
+        };
+    }
+    async run(options, splat, bufferPool) {
+        const { device } = this;
+        const { scope } = device;
+        const numSplats = splat.splatData.numSplats;
+        const transformA = splat.entity.gsplat.instance.resource.getTexture('transformA');
+        const splatTransform = splat.transformTexture;
+        const transformPalette = splat.transformPalette.texture;
+        // update view projection matrix
+        const camera = splat.scene.camera.camera;
+        this.viewProjectionMat.mul2(camera.projectionMatrix, camera.viewMatrix);
+        // allocate resources
+        const resources = this.getResources(transformA.width, numSplats);
+        resolve$3(scope, {
+            transformA,
+            splatTransform,
+            transformPalette,
+            splat_params: [transformA.width, numSplats],
+            matrix_model: splat.entity.getWorldTransform().data,
+            matrix_viewProjection: this.viewProjectionMat.data,
+            output_params: [resources.texture.width, resources.texture.height]
+        });
+        const maskOptions = options;
+        if (maskOptions.mask) {
+            resolve$3(scope, {
+                mode: 0,
+                mask: maskOptions.mask,
+                mask_params: [maskOptions.mask.width, maskOptions.mask.height]
+            });
+        }
+        else {
+            resolve$3(scope, {
+                mask: this.dummyTexture,
+                mask_params: [0, 0]
+            });
+        }
+        const rectOptions = options;
+        if (rectOptions.rect) {
+            resolve$3(scope, {
+                mode: 1,
+                rect_params: [
+                    rectOptions.rect.x1 * 2.0 - 1.0,
+                    rectOptions.rect.y1 * 2.0 - 1.0,
+                    rectOptions.rect.x2 * 2.0 - 1.0,
+                    rectOptions.rect.y2 * 2.0 - 1.0
+                ]
+            });
+        }
+        else {
+            resolve$3(scope, {
+                rect_params: [0, 0, 0, 0]
+            });
+        }
+        const sphereOptions = options;
+        if (sphereOptions.sphere) {
+            resolve$3(scope, {
+                mode: 2,
+                sphere_params: [
+                    sphereOptions.sphere.x,
+                    sphereOptions.sphere.y,
+                    sphereOptions.sphere.z,
+                    sphereOptions.sphere.radius
+                ]
+            });
+        }
+        else {
+            resolve$3(scope, {
+                sphere_params: [0, 0, 0, 0]
+            });
+        }
+        const boxOptions = options;
+        if (boxOptions.box) {
+            resolve$3(scope, {
+                mode: 3,
+                box_params: [
+                    boxOptions.box.x,
+                    boxOptions.box.y,
+                    boxOptions.box.z,
+                    0
+                ],
+                aabb_params: [
+                    boxOptions.box.lenx * 0.5,
+                    boxOptions.box.leny * 0.5,
+                    boxOptions.box.lenz * 0.5,
+                    0
+                ]
+            });
+        }
+        else {
+            resolve$3(scope, {
+                box_params: [0, 0, 0, 0],
+                aabb_params: [0, 0, 0, 0]
+            });
+        }
+        device.setBlendState(BlendState.NOBLEND);
+        drawQuadWithShader(device, resources.renderTarget, resources.shader);
+        const byteLen = resources.texture.width * resources.texture.height * 4;
+        const buffer = bufferPool.acquire(byteLen);
+        const data = await resources.texture.read(0, 0, resources.texture.width, resources.texture.height, {
+            renderTarget: resources.renderTarget,
+            data: buffer,
+            immediate: false
+        });
+        return data;
+    }
+}
+
+// fragment writes a 4-byte texel per output pixel where each channel is 255 if
+// the corresponding splat falls within the requested histogram-bucket range
+// (and is visible / not locked / not deleted), or 0 otherwise. callers can
+// then read the result back as a Uint8Array and use `data[i] === 255` as the
+// per-splat selection predicate.
+const vertexShader$5 = /* glsl */ `
+    attribute vec2 vertex_position;
+    void main(void) {
+        gl_Position = vec4(vertex_position, 0.0, 1.0);
+    }
+`;
+const fragmentShader$5 = /* glsl */ `
+    ${computeSplatValueGLSL}
+
+    uniform ivec2 output_params;  // result texture (width, height)
+    uniform vec2 minMax;           // (min, max) from the last histogram pass
+    uniform int numBins;
+    uniform int rangeStart;
+    uniform int rangeEnd;
+
+    float check(int idx) {
+        float val;
+        bool sel;
+        bool vis;
+        bool valid = computeSplatValue(idx, val, sel, vis);
+        if (!valid || !vis) return 0.0;
+
+        float n = (minMax.y == minMax.x) ? 0.0 : (val - minMax.x) / (minMax.y - minMax.x);
+        int bin = clamp(int(n * float(numBins)), 0, numBins - 1);
+        return (bin >= rangeStart && bin <= rangeEnd) ? 1.0 : 0.0;
+    }
+
+    void main(void) {
+        ivec2 outUV = ivec2(gl_FragCoord);
+        int baseIdx = (outUV.y * output_params.x + outUV.x) * 4;
+
+        gl_FragColor = vec4(
+            check(baseIdx),
+            check(baseIdx + 1),
+            check(baseIdx + 2),
+            check(baseIdx + 3)
+        );
+    }
+`;
+
+const identity = new Mat4();
+const zeroVec3 = new Vec3();
+// number of SH coefficients per RGB band, indexed by GSplatResource.shBands.
+const SH_NUM_COEFFS$1 = { 0: 0, 1: 3, 2: 8, 3: 15 };
+const resolve$2 = (scope, values) => {
+    for (const key in values) {
+        scope.resolve(key).setValue(values[key]);
+    }
+};
+const getShBands = (splat) => {
+    return splat.entity.gsplat.instance.resource.shBands ?? 0;
+};
+// GPU pass that produces a 1-byte-per-splat selection mask for a given
+// histogram bucket range. mirrors the packing scheme used by Intersect so the
+// CPU readback is `numSplats` bytes (with up to 3 bytes of padding at the
+// end), addressable directly as `mask[splatIdx]`.
+class SelectByRange {
+    device;
+    // shaders compiled per SH_BANDS, same pattern as CalcHistogram.
+    shaders = new Map();
+    texture = null;
+    renderTarget = null;
+    constructor(device) {
+        this.device = device;
+    }
+    getShader(shBands) {
+        let shader = this.shaders.get(shBands);
+        if (!shader) {
+            const defines = new Map();
+            defines.set('SH_BANDS', `${shBands}`);
+            shader = ShaderUtils.createShader(this.device, {
+                uniqueName: `selectByRangeShader_SH${shBands}`,
+                attributes: {
+                    vertex_position: SEMANTIC_POSITION
+                },
+                vertexGLSL: vertexShader$5,
+                fragmentGLSL: fragmentShader$5,
+                fragmentDefines: defines
+            });
+            this.shaders.set(shBands, shader);
+        }
+        return shader;
+    }
+    getResources(width, numSplats) {
+        // pack 4 splats per RGBA8 texel; layout shared with Intersect via histogram-config.
+        const resultWidth = packedMaskWidth(width);
+        const resultHeight = packedMaskHeight(resultWidth, numSplats);
+        if (!this.texture || this.texture.width !== resultWidth || this.texture.height !== resultHeight) {
+            if (this.texture) {
+                this.texture.destroy();
+                this.renderTarget.destroy();
+            }
+            this.texture = new Texture(this.device, {
+                name: 'selectByRangeTexture',
+                width: resultWidth,
+                height: resultHeight,
+                format: PIXELFORMAT_RGBA8,
+                mipmaps: false,
+                addressU: ADDRESS_CLAMP_TO_EDGE,
+                addressV: ADDRESS_CLAMP_TO_EDGE
+            });
+            this.renderTarget = new RenderTarget({
+                colorBuffer: this.texture,
+                depth: false
+            });
+        }
+        return {
+            texture: this.texture,
+            renderTarget: this.renderTarget
+        };
+    }
+    async run(splat, mode, options, bufferPool) {
+        const { device } = this;
+        const { scope } = device;
+        const numSplats = splat.splatData.numSplats;
+        const resource = splat.entity.gsplat.instance.resource;
+        const transformA = resource.getTexture('transformA');
+        const transformB = resource.getTexture('transformB');
+        const splatColor = resource.getTexture('splatColor');
+        const splatTransform = splat.transformTexture;
+        const transformPalette = splat.transformPalette.texture;
+        const splatState = splat.stateTexture;
+        const shBands = getShBands(splat);
+        const numCoeffs = SH_NUM_COEFFS$1[shBands] ?? 0;
+        const resources = this.getResources(transformA.width, numSplats);
+        const shader = this.getShader(shBands);
+        const entityMatrix = options.entityMatrix ?? identity;
+        const viewMatrix = options.viewMatrix ?? identity;
+        const viewProjection = options.viewProjection ?? identity;
+        const cameraPos = options.cameraPos ?? zeroVec3;
+        const onScreenOnly = options.onScreenOnly ? 1 : 0;
+        // ColorGrade math, kept in sync with ColorGrade in src/color-grade.ts.
+        const { tintClr, temperature, saturation, brightness, blackPoint, whitePoint, transparency } = splat;
+        const cgInvRange = 1 / (whitePoint - blackPoint);
+        const values = {
+            transformA,
+            transformB,
+            splatColor,
+            splatTransform,
+            transformPalette,
+            splatState,
+            splat_params: [transformA.width, numSplats],
+            propMode: mode,
+            entityMatrix: entityMatrix.data,
+            viewMatrix: viewMatrix.data,
+            viewProjection: viewProjection.data,
+            cameraWorldPos: [cameraPos.x, cameraPos.y, cameraPos.z],
+            onScreenOnly,
+            cgScale: [
+                cgInvRange * tintClr.r * (1 + temperature),
+                cgInvRange * tintClr.g,
+                cgInvRange * tintClr.b * (1 - temperature)
+            ],
+            cgOffset: -blackPoint + brightness,
+            cgSaturation: saturation,
+            transparency,
+            output_params: [resources.texture.width, resources.texture.height],
+            minMax: [options.min, options.max],
+            numBins: options.numBins,
+            rangeStart: options.rangeStart,
+            rangeEnd: options.rangeEnd
+        };
+        if (shBands > 0) {
+            values.splatSH_1to3 = resource.getTexture('splatSH_1to3');
+            values.shNumCoeffs = numCoeffs;
+        }
+        if (shBands > 1) {
+            values.splatSH_4to7 = resource.getTexture('splatSH_4to7');
+            values.splatSH_8to11 = resource.getTexture('splatSH_8to11');
+        }
+        if (shBands > 2) {
+            values.splatSH_12to15 = resource.getTexture('splatSH_12to15');
+        }
+        resolve$2(scope, values);
+        device.setBlendState(BlendState.NOBLEND);
+        drawQuadWithShader(device, resources.renderTarget, shader);
+        const byteLen = resources.texture.width * resources.texture.height * 4;
+        const buffer = bufferPool.acquire(byteLen);
+        const data = await resources.texture.read(0, 0, resources.texture.width, resources.texture.height, {
+            renderTarget: resources.renderTarget,
+            data: buffer,
+            immediate: false
+        });
+        return data;
+    }
+}
+
+const resolve$1 = (scope, values) => {
+    for (const key in values) {
+        scope.resolve(key).setValue(values[key]);
+    }
+};
+// gpu processor for splat data. methods are plain (no internal serialisation):
+// callers that need ordering relative to other async work must run them inside
+// a shared CommandQueue task. see src/command-queue.ts.
+class DataProcessor {
+    device;
+    copyShader;
+    // shared pool of readback buffers used by GPU passes that hand bytes back
+    // to the caller. Callers receive ownership and must call releaseMask() when
+    // done.
+    bufferPool = new BufferPool();
+    // instances
+    intersectImpl;
+    calcBoundImpl;
+    calcPositionsImpl;
+    calcHistogramImpl;
+    selectByRangeImpl;
+    constructor(device) {
+        this.device = device;
+        this.copyShader = ShaderUtils.createShader(device, {
+            uniqueName: 'copyShader',
+            attributes: {
+                vertex_position: SEMANTIC_POSITION
+            },
+            vertexGLSL: `
+                attribute vec2 vertex_position;
+                void main(void) {
+                    gl_Position = vec4(vertex_position, 0.0, 1.0);
+                }
+            `,
+            fragmentGLSL: `
+                uniform sampler2D colorTex;
+                void main(void) {
+                    ivec2 texel = ivec2(gl_FragCoord.xy);
+                    gl_FragColor = texelFetch(colorTex, texel, 0);
+                }
+            `
+        });
+        // create instances
+        this.intersectImpl = new Intersect(device);
+        this.calcBoundImpl = new CalcBound(device);
+        this.calcPositionsImpl = new CalcPositions(device);
+        this.calcHistogramImpl = new CalcHistogram(device);
+        this.selectByRangeImpl = new SelectByRange(device);
+    }
+    // calculate the intersection of a mask canvas with splat centers.
+    // returns an owned mask buffer the caller must release via releaseMask().
+    intersect(options, splat) {
+        return this.intersectImpl.run(options, splat, this.bufferPool);
+    }
+    // use gpu to calculate both selected and visible bounds in a single pass
+    calcBound(splat, selectionBound, localBound) {
+        return this.calcBoundImpl.run(splat, selectionBound, localBound);
+    }
+    // calculate world-space splat positions
+    calcPositions(splat) {
+        return this.calcPositionsImpl.run(splat);
+    }
+    // calculate histogram (bin counts + min/max) entirely on GPU
+    calcHistogram(splat, mode, options) {
+        return this.calcHistogramImpl.run(splat, mode, options);
+    }
+    // compute a per-splat byte mask (255 = in range and visible, 0 = not) for
+    // the given histogram bucket range. mode matches the propMode dispatch in
+    // src/shaders/splat-value-shader.ts (0..20 = built-in props, 21+N = f_rest_N).
+    // returns an owned mask buffer the caller must release via releaseMask().
+    selectByRange(splat, mode, options) {
+        return this.selectByRangeImpl.run(splat, mode, options, this.bufferPool);
+    }
+    // release a mask buffer returned by intersect() or selectByRange() back to
+    // the pool so subsequent calls can reuse it without re-allocating.
+    releaseMask(mask) {
+        this.bufferPool.release(mask);
+    }
+    copyRt(source, dest) {
+        const { device } = this;
+        resolve$1(device.scope, {
+            colorTex: source.colorBuffer
+        });
+        device.setBlendState(BlendState.NOBLEND);
+        drawQuadWithShader(device, dest, this.copyShader);
+    }
+}
+
+const vertexShader$4 = /* glsl*/ `
+    uniform vec3 near_origin;
+    uniform vec3 near_x;
+    uniform vec3 near_y;
+
+    uniform vec3 far_origin;
+    uniform vec3 far_x;
+    uniform vec3 far_y;
+
+    attribute vec2 vertex_position;
+
+    varying vec3 worldFar;
+    varying vec3 worldNear;
+
+    void main(void) {
+        gl_Position = vec4(vertex_position, 0.0, 1.0);
+
+        vec2 p = vertex_position * 0.5 + 0.5;
+        worldNear = near_origin + near_x * p.x + near_y * p.y;
+        worldFar = far_origin + far_x * p.x + far_y * p.y;
+    }
+`;
+const fragmentShader$4 = /* glsl*/ `
+    uniform vec3 view_position;
+    uniform mat4 matrix_viewProjection;
+    uniform sampler2D blueNoiseTex32;
+
+    uniform int plane;  // 0: x (yz), 1: y (xz), 2: z (xy)
+
+    vec4 planes[3] = vec4[3](
+        vec4(1.0, 0.0, 0.0, 0.0),
+        vec4(0.0, 1.0, 0.0, 0.0),
+        vec4(0.0, 0.0, 1.0, 0.0)
+    );
+
+    vec3 colors[3] = vec3[3](
+        vec3(1.0, 0.2, 0.2),
+        vec3(0.2, 1.0, 0.2),
+        vec3(0.2, 0.2, 1.0)
+    );
+
+    int axis0[3] = int[3](1, 0, 0);
+    int axis1[3] = int[3](2, 2, 1);
+
+    varying vec3 worldNear;
+    varying vec3 worldFar;
+
+    bool intersectPlane(inout float t, vec3 pos, vec3 dir, vec4 plane) {
+        float d = dot(dir, plane.xyz);
+        if (abs(d) < 1e-06) {
+            return false;
+        }
+
+        float n = -(dot(pos, plane.xyz) + plane.w) / d;
+        if (n < 0.0) {
+            return false;
+        }
+
+        t = n;
+
+        return true;
+    }
+
+    // https://bgolus.medium.com/the-best-darn-grid-shader-yet-727f9278b9d8#1e7c
+    float pristineGrid(in vec2 uv, in vec2 ddx, in vec2 ddy, vec2 lineWidth) {
+        vec2 uvDeriv = vec2(length(vec2(ddx.x, ddy.x)), length(vec2(ddx.y, ddy.y)));
+        bvec2 invertLine = bvec2(lineWidth.x > 0.5, lineWidth.y > 0.5);
+        vec2 targetWidth = vec2(
+            invertLine.x ? 1.0 - lineWidth.x : lineWidth.x,
+            invertLine.y ? 1.0 - lineWidth.y : lineWidth.y
+        );
+        vec2 drawWidth = clamp(targetWidth, uvDeriv, vec2(0.5));
+        vec2 lineAA = uvDeriv * 1.5;
+        vec2 gridUV = abs(fract(uv) * 2.0 - 1.0);
+        gridUV.x = invertLine.x ? gridUV.x : 1.0 - gridUV.x;
+        gridUV.y = invertLine.y ? gridUV.y : 1.0 - gridUV.y;
+        vec2 grid2 = smoothstep(drawWidth + lineAA, drawWidth - lineAA, gridUV);
+
+        grid2 *= clamp(targetWidth / drawWidth, 0.0, 1.0);
+        grid2 = mix(grid2, targetWidth, clamp(uvDeriv * 2.0 - 1.0, 0.0, 1.0));
+        grid2.x = invertLine.x ? 1.0 - grid2.x : grid2.x;
+        grid2.y = invertLine.y ? 1.0 - grid2.y : grid2.y;
+
+        return mix(grid2.x, 1.0, grid2.y);
+    }
+
+    float calcDepth(vec3 p) {
+        vec4 v = matrix_viewProjection * vec4(p, 1.0);
+        return (v.z / v.w) * 0.5 + 0.5;
+    }
+
+    bool writeDepth(float alpha) {
+        vec2 uv = fract(gl_FragCoord.xy / 32.0);
+        float noise = texture2DLod(blueNoiseTex32, uv, 0.0).y;
+        return alpha > noise;
+    }
+
+    void main(void) {
+        vec3 p = worldNear;
+        vec3 v = normalize(worldFar - worldNear);
+
+        // intersect ray with the world xz plane
+        float t;
+        if (!intersectPlane(t, p, v, planes[plane])) {
+            discard;
+        }
+
+        // calculate grid intersection
+        vec3 worldPos = p + v * t;
+        vec2 pos = plane == 0 ? worldPos.yz : (plane == 1 ? worldPos.xz : worldPos.xy);
+        vec2 ddx = dFdx(pos);
+        vec2 ddy = dFdy(pos);
+
+        float epsilon = 1.0 / 255.0;
+
+        // calculate fade
+        float fade = 1.0 - smoothstep(400.0, 1000.0, length(worldPos - view_position));
+        if (fade < epsilon) {
+            discard;
+        }
+
+        vec2 levelPos;
+        float levelSize;
+        float levelAlpha;
+
+        // 10m grid with colored main axes
+        levelPos = pos * 0.1;
+        levelSize = 2.0 / 1000.0;
+        levelAlpha = pristineGrid(levelPos, ddx * 0.1, ddy * 0.1, vec2(levelSize)) * fade;
+        if (levelAlpha > epsilon) {
+            vec3 color;
+            vec2 loc = abs(levelPos);
+            if (loc.x < levelSize) {
+                if (loc.y < levelSize) {
+                    color = vec3(1.0);
+                } else {
+                    color = colors[axis1[plane]];
+                }
+            } else if (loc.y < levelSize) {
+                color = colors[axis0[plane]];
+            } else {
+                color = vec3(0.9);
+            }
+            gl_FragColor = vec4(color, levelAlpha);
+            gl_FragDepth = writeDepth(levelAlpha) ? calcDepth(worldPos) : 1.0;
+            return;
+        }
+
+        // 1m grid
+        levelPos = pos;
+        levelSize = 1.0 / 100.0;
+        levelAlpha = pristineGrid(levelPos, ddx, ddy, vec2(levelSize)) * fade;
+        if (levelAlpha > epsilon) {
+            gl_FragColor = vec4(vec3(0.7), levelAlpha);
+            gl_FragDepth = writeDepth(levelAlpha) ? calcDepth(worldPos) : 1.0;
+            return;
+        }
+
+        // 0.1m grid
+        levelPos = pos * 10.0;
+        levelSize = 1.0 / 100.0;
+        levelAlpha = pristineGrid(levelPos, ddx * 10.0, ddy * 10.0, vec2(levelSize)) * fade;
+        if (levelAlpha > epsilon) {
+            gl_FragColor = vec4(vec3(0.7), levelAlpha);
+            gl_FragDepth = writeDepth(levelAlpha) ? calcDepth(worldPos) : 1.0;
+            return;
+        }
+
+        discard;
+    }
+`;
+
+const resolve = (scope, values) => {
+    for (const key in values) {
+        scope.resolve(key).setValue(values[key]);
+    }
+};
+class InfiniteGrid extends Element {
+    shader;
+    quadRender;
+    blendState = new BlendState(false);
+    depthState = new DepthState(FUNC_LESSEQUAL, true);
+    visible = true;
+    constructor() {
+        super(ElementType.debug);
+    }
+    add() {
+        const device = this.scene.app.graphicsDevice;
+        this.shader = ShaderUtils.createShader(device, {
+            uniqueName: 'infinite-grid',
+            attributes: {
+                vertex_position: SEMANTIC_POSITION
+            },
+            vertexGLSL: vertexShader$4,
+            fragmentGLSL: fragmentShader$4
+        });
+        this.quadRender = new QuadRender(this.shader);
+        const blendState = new BlendState(true, BLENDEQUATION_ADD, BLENDMODE_SRC_ALPHA, BLENDMODE_ONE_MINUS_SRC_ALPHA, BLENDEQUATION_ADD, BLENDMODE_ONE, BLENDMODE_ONE_MINUS_SRC_ALPHA);
+        const view_position = [0, 0, 0];
+        const viewProjectionMatrix = new Mat4();
+        let plane;
+        this.scene.camera.camera.on('preRenderLayer', (layer, transparent) => {
+            const { scene } = this;
+            if (this.visible && layer === scene.worldLayer && !transparent && scene.camera.renderOverlays) {
+                const { camera } = scene;
+                device.setBlendState(blendState);
+                device.setCullMode(CULLFACE_NONE);
+                device.setDepthState(DepthState.WRITEDEPTH);
+                device.setStencilState(null, null);
+                // select the correctly plane in orthographic mode
+                if (camera.ortho) {
+                    const cmp = (a, b) => 1.0 - Math.abs(a.dot(b)) < 1e-03;
+                    const z = camera.worldTransform.getZ();
+                    plane = cmp(z, Vec3.RIGHT) ? 0 : (cmp(z, Vec3.BACK) ? 2 : 1);
+                }
+                else {
+                    // default is xz plane
+                    plane = 1;
+                }
+                const p = camera.position;
+                view_position[0] = p.x;
+                view_position[1] = p.y;
+                view_position[2] = p.z;
+                viewProjectionMatrix.mul2(camera.camera.projectionMatrix, camera.camera.viewMatrix);
+                resolve(device.scope, {
+                    plane,
+                    view_position,
+                    matrix_viewProjection: viewProjectionMatrix.data
+                });
+                this.quadRender.render();
+            }
+        });
+    }
+    remove() {
+        this.shader.destroy();
+        this.quadRender.destroy();
+    }
+    serialize(serializer) {
+        serializer.pack(this.visible);
+    }
+}
+
+const vertexShader$3 = /* glsl*/ `
+    attribute vec2 vertex_position;
+    void main(void) {
+        gl_Position = vec4(vertex_position, 0.0, 1.0);
+    }
+`;
+const fragmentShader$3 = /* glsl*/ `
+    uniform sampler2D srcTexture;
+    uniform float alphaCutoff;
+    uniform vec4 clr;
+
+    void main(void) {
+        ivec2 texel = ivec2(gl_FragCoord.xy);
+
+        // skip solid pixels
+        if (texelFetch(srcTexture, texel, 0).a > alphaCutoff) {
+            discard;
+        }
+
+        for (int x = -2; x <= 2; x++) {
+            for (int y = -2; y <= 2; y++) {
+                if ((x != 0) && (y != 0) && (texelFetch(srcTexture, texel + ivec2(x, y), 0).a > alphaCutoff)) {
+                    gl_FragColor = clr;
+                    return;
+                }
+            }
+        }
+
+        discard;
+    }
+`;
+
+class Outline extends Element {
+    shaderQuad;
+    renderPass;
+    enabled = true;
+    constructor() {
+        super(ElementType.other);
+    }
+    add() {
+        const device = this.scene.app.graphicsDevice;
+        this.shaderQuad = new ShaderQuad(device, vertexShader$3, fragmentShader$3, 'apply-outline');
+        this.renderPass = new SimpleRenderPass(device, this.shaderQuad, {
+            blendState: BlendState.ALPHABLEND
+        });
+        const clr = [1, 1, 1, 1];
+        const { camera, events } = this.scene;
+        camera.camera.on('postRenderLayer', (layer, transparent) => {
+            // only apply when outline mode is enabled
+            if (!this.enabled || !events.invoke('view.outlineSelection')) {
+                return;
+            }
+            // apply at the end of the gizmo layer (after overlay renders)
+            if (layer !== this.scene.gizmoLayer || !transparent) {
+                return;
+            }
+            events.invoke('selectedClr').toArray(clr);
+            this.renderPass.execute({
+                srcTexture: camera.workTarget.colorBuffer,
+                alphaCutoff: events.invoke('camera.mode') === 'rings' ? 0.0 : 0.8,
+                clr
+            });
+        });
+    }
+    remove() {
+        // event listeners are cleaned up when camera is destroyed
+    }
+    onPreRender() {
+        // no longer need to manage a separate camera
+    }
+}
+
+class PCApp extends AppBase {
+    constructor(canvas, options) {
+        super(canvas);
+        const appOptions = new AppOptions();
+        appOptions.graphicsDevice = options.graphicsDevice;
+        this.addComponentSystems(appOptions);
+        this.addResourceHandles(appOptions);
+        appOptions.elementInput = options.elementInput;
+        appOptions.keyboard = options.keyboard;
+        appOptions.mouse = options.mouse;
+        appOptions.touch = options.touch;
+        appOptions.gamepads = options.gamepads;
+        appOptions.scriptPrefix = options.scriptPrefix;
+        appOptions.assetPrefix = options.assetPrefix;
+        appOptions.scriptsOrder = options.scriptsOrder;
+        // appOptions.soundManager = new SoundManager(options);
+        // appOptions.lightmapper = Lightmapper;
+        // appOptions.batchManager = BatchManager;
+        // appOptions.xr = XrManager;
+        this.init(appOptions);
+    }
+    addComponentSystems(appOptions) {
+        appOptions.componentSystems = [
+            // RigidBodyComponentSystem,
+            // CollisionComponentSystem,
+            // JointComponentSystem,
+            // AnimationComponentSystem,
+            // @ts-ignore
+            AnimComponentSystem,
+            // ModelComponentSystem,
+            // @ts-ignore
+            RenderComponentSystem,
+            // @ts-ignore
+            CameraComponentSystem,
+            // @ts-ignore
+            LightComponentSystem,
+            // script.legacy ? ScriptLegacyComponentSystem : ScriptComponentSystem,
+            // AudioSourceComponentSystem,
+            // SoundComponentSystem,
+            // AudioListenerComponentSystem,
+            // ParticleSystemComponentSystem,
+            // ScreenComponentSystem,
+            // ElementComponentSystem,
+            // ButtonComponentSystem,
+            // ScrollViewComponentSystem,
+            // ScrollbarComponentSystem,
+            // SpriteComponentSystem,
+            // LayoutGroupComponentSystem,
+            // LayoutChildComponentSystem,
+            // ZoneComponentSystem,
+            GSplatComponentSystem
+        ];
+    }
+    addResourceHandles(appOptions) {
+        appOptions.resourceHandlers = [
+            // @ts-ignore
+            RenderHandler,
+            // AnimationHandler,
+            // @ts-ignore
+            AnimClipHandler,
+            // @ts-ignore
+            AnimStateGraphHandler,
+            // ModelHandler,
+            // MaterialHandler,
+            // @ts-ignore
+            TextureHandler,
+            // TextHandler,
+            // JsonHandler,
+            // AudioHandler,
+            // ScriptHandler,
+            // SceneHandler,
+            // @ts-ignore
+            CubemapHandler,
+            // HtmlHandler,
+            // CssHandler,
+            // ShaderHandler,
+            // HierarchyHandler,
+            // FolderHandler,
+            // FontHandler,
+            // BinaryHandler,
+            // TextureAtlasHandler,
+            // SpriteHandler,
+            // TemplateHandler,
+            // @ts-ignore
+            ContainerHandler,
+            GSplatHandler
+        ];
+    }
+}
+
+// this class is used by elements to store their pertinent state
+// every frame. the data is then compared with the previous frame's
+// values in order to determine if any changes happened.
+class Serializer {
+    constructor(packValue) {
+        this.packValue = packValue;
+    }
+    packValue;
+    pack(...args) {
+        for (let j = 0; j < args.length; ++j) {
+            this.packValue(args[j]);
+        }
+    }
+    packa(a) {
+        for (let j = 0; j < a.length; ++j) {
+            this.packValue(a[j]);
+        }
+    }
+    packVec3(v) {
+        this.pack(v.x, v.y, v.z);
+    }
+    packColor(c) {
+        this.pack(c.r, c.g, c.b, c.a);
+    }
+}
+
+const common = new Set();
+// this class tracks the state of scene elements and determines what
+// type of objects have changed in a frame. this allows the rest of
+// the application to respond to changes like re-rendering
+// the scene or recalculating the scene bounding box.
+class SceneState {
+    states = {};
+    activeValues;
+    serializer = new Serializer((value) => {
+        this.activeValues.push(value);
+    });
+    constructor() {
+        for (let i = 0; i < ElementTypeList.length; ++i) {
+            this.states[ElementTypeList[i]] = {
+                elements: new Map(),
+                valueStart: [],
+                valueCount: [],
+                values: []
+            };
+        }
+    }
+    reset() {
+        ElementTypeList.forEach((type) => {
+            const state = this.states[type];
+            state.elements.clear();
+            state.valueStart.length = 0;
+            state.valueCount.length = 0;
+            state.values.length = 0;
+        });
+    }
+    pack(element) {
+        const state = this.states[element.type];
+        const start = state.values.length;
+        // let element store its values
+        this.activeValues = state.values;
+        element.serialize(this.serializer);
+        state.elements.set(element, state.elements.size);
+        state.valueStart.push(start);
+        state.valueCount.push(state.values.length - start);
+    }
+    compare(other) {
+        function intersection(result, a, b) {
+            result.clear();
+            for (const e of a.keys()) {
+                if (b.has(e)) {
+                    result.add(e);
+                }
+            }
+        }
+        function diff(a, b) {
+            for (const e of a.keys()) {
+                if (!b.has(e)) {
+                    return true;
+                }
+            }
+        }
+        function some(it, predicate) {
+            for (const e of it) {
+                if (predicate(e)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        const result = {
+            added: new Array(),
+            removed: new Array(),
+            moved: new Array(),
+            changed: new Array()
+        };
+        ElementTypeList.forEach((type) => {
+            const prevState = other.states[type];
+            const currState = this.states[type];
+            // generate map of element to index
+            const prev = prevState.elements;
+            const curr = currState.elements;
+            // make a set containing the elements present in both the previous and current frame
+            intersection(common, prev, curr);
+            // determine if any elements were added
+            if (diff(curr, common)) {
+                result.added.push(type);
+            }
+            // determine if any elements were removed
+            if (diff(prev, common)) {
+                result.removed.push(type);
+            }
+            // determine if any element moved order
+            if (some(common.values(), (e) => {
+                return prev.get(e) !== curr.get(e);
+            })) {
+                result.moved.push(type);
+            }
+            // determine if any element's state changed
+            if (some(common.values(), (e) => {
+                const prevIdx = prev.get(e);
+                const currIdx = curr.get(e);
+                const count = prevState.valueCount[prevIdx];
+                if (count !== currState.valueCount[currIdx]) {
+                    // number of state values changed
+                    return true;
+                }
+                const prevStart = prevState.valueStart[prevIdx];
+                const currStart = currState.valueStart[currIdx];
+                const prevValues = prevState.values;
+                const currValues = currState.values;
+                for (let i = 0; i < count; ++i) {
+                    if (prevValues[prevStart + i] !== currValues[currStart + i]) {
+                        // state value changed
+                        return true;
+                    }
+                }
+                return false;
+            })) {
+                result.changed.push(type);
+            }
+        });
+        return result;
+    }
+}
+
+const vertexShader$2 = /* glsl */ `
+    uniform mat4 matrix_model;
+    uniform mat4 matrix_viewProjection;
+
+    uniform highp usampler2D splatOrder;            // order texture mapping render order to splat ID
+    uniform uint splatTextureSize;                  // width of order texture
+
+    uniform sampler2D splatState;
+    uniform highp usampler2D splatPosition;
+    uniform highp usampler2D splatTransform;        // per-splat index into transform palette
+    uniform sampler2D transformPalette;             // palette of transform matrices
+    uniform sampler2D splatColor;                   // Gaussian color texture (RGBA16F)
+
+    // SH textures (for uncompressed format)
+    #if SH_BANDS > 0
+    uniform highp usampler2D splatSH_1to3;
+    #if SH_BANDS > 1
+    uniform highp usampler2D splatSH_4to7;
+    uniform highp usampler2D splatSH_8to11;
+    #if SH_BANDS > 2
+    uniform highp usampler2D splatSH_12to15;
+    #endif
+    #endif
+    #endif
+
+    uniform vec3 view_position;                     // camera position in world space
+
+    uniform uvec2 texParams;
+
+    uniform float splatSize;
+    uniform float useGaussianColor;                 // 0.0 = use selection colors, 1.0 = use gaussian color
+    uniform vec4 selectedClr;
+    uniform vec4 unselectedClr;
+
+    varying vec4 varying_color;
+
+    // calculate the current splat index and uv
+    ivec2 calcSplatUV(uint index, uint width) {
+        return ivec2(int(index % width), int(index / width));
+    }
+
+    #if SH_BANDS > 0
+
+    // include SH evaluation from engine (provides SH_COEFFS, constants, and evalSH)
+    #include "gsplatEvalSHVS"
+
+    // unpack signed 11 10 11 bits
+    vec3 unpack111011s(uint bits) {
+        return vec3((uvec3(bits) >> uvec3(21u, 11u, 0u)) & uvec3(0x7ffu, 0x3ffu, 0x7ffu)) / vec3(2047.0, 1023.0, 2047.0) * 2.0 - 1.0;
+    }
+
+    // fetch quantized spherical harmonic coefficients with scale
+    void fetchScale(in uvec4 t, out float scale, out vec3 a, out vec3 b, out vec3 c) {
+        scale = uintBitsToFloat(t.x);
+        a = unpack111011s(t.y);
+        b = unpack111011s(t.z);
+        c = unpack111011s(t.w);
+    }
+
+    // fetch quantized spherical harmonic coefficients
+    void fetchSH(in uvec4 t, out vec3 a, out vec3 b, out vec3 c, out vec3 d) {
+        a = unpack111011s(t.x);
+        b = unpack111011s(t.y);
+        c = unpack111011s(t.z);
+        d = unpack111011s(t.w);
+    }
+
+    void fetchSH1(in uint t, out vec3 a) {
+        a = unpack111011s(t);
+    }
+
+    #if SH_BANDS == 1
+    void readSHData(in ivec2 uv, out vec3 sh[3], out float scale) {
+        fetchScale(texelFetch(splatSH_1to3, uv, 0), scale, sh[0], sh[1], sh[2]);
+    }
+    #elif SH_BANDS == 2
+    void readSHData(in ivec2 uv, out vec3 sh[8], out float scale) {
+        fetchScale(texelFetch(splatSH_1to3, uv, 0), scale, sh[0], sh[1], sh[2]);
+        fetchSH(texelFetch(splatSH_4to7, uv, 0), sh[3], sh[4], sh[5], sh[6]);
+        fetchSH1(texelFetch(splatSH_8to11, uv, 0).x, sh[7]);
+    }
+    #elif SH_BANDS == 3
+    void readSHData(in ivec2 uv, out vec3 sh[15], out float scale) {
+        fetchScale(texelFetch(splatSH_1to3, uv, 0), scale, sh[0], sh[1], sh[2]);
+        fetchSH(texelFetch(splatSH_4to7, uv, 0), sh[3], sh[4], sh[5], sh[6]);
+        fetchSH(texelFetch(splatSH_8to11, uv, 0), sh[7], sh[8], sh[9], sh[10]);
+        fetchSH(texelFetch(splatSH_12to15, uv, 0), sh[11], sh[12], sh[13], sh[14]);
+    }
+    #endif
+
+    #endif
+
+    void main(void) {
+        // look up splat ID from order texture using gl_VertexID
+        ivec2 orderUV = ivec2(gl_VertexID % int(splatTextureSize), gl_VertexID / int(splatTextureSize));
+        uint splatId = texelFetch(splatOrder, orderUV, 0).r;
+
+        ivec2 splatUV = calcSplatUV(splatId, texParams.x);
+        uint splatState = uint(texelFetch(splatState, splatUV, 0).r * 255.0);
+
+        // check for locked splats (deleted splats are already excluded from order texture)
+        if ((splatState & 2u) != 0u) {
+            // locked
+            gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
+            gl_PointSize = 0.0;
+        } else {
+            mat4 model = matrix_model;
+
+            // handle per-splat transform
+            uint transformIndex = texelFetch(splatTransform, splatUV, 0).r;
+            if (transformIndex > 0u) {
+                // read transform matrix
+                int u = int(transformIndex % 512u) * 3;
+                int v = int(transformIndex / 512u);
+
+                mat4 t;
+                t[0] = texelFetch(transformPalette, ivec2(u, v), 0);
+                t[1] = texelFetch(transformPalette, ivec2(u + 1, v), 0);
+                t[2] = texelFetch(transformPalette, ivec2(u + 2, v), 0);
+                t[3] = vec4(0.0, 0.0, 0.0, 1.0);
+
+                model = matrix_model * transpose(t);
+            }
+
+            vec3 center = uintBitsToFloat(texelFetch(splatPosition, splatUV, 0).xyz);
+
+            vec3 gaussianClr;
+
+            if (useGaussianColor > 0.0) {
+                // get base gaussian color
+                gaussianClr = texelFetch(splatColor, splatUV, 0).xyz;
+
+                #if SH_BANDS > 0
+                    // calculate world position and view direction
+                    vec3 worldPos = (model * vec4(center, 1.0)).xyz;
+                    vec3 viewDir = normalize(worldPos - view_position);
+                    // transform view direction to model space
+                    vec3 modelViewDir = normalize(viewDir * mat3(model));
+
+                    // read and evaluate SH
+                    vec3 sh[SH_COEFFS];
+                    float scale;
+                    readSHData(splatUV, sh, scale);
+                    gaussianClr += evalSH(sh, modelViewDir) * scale;
+                #endif
+            } else {
+                gaussianClr = unselectedClr.xyz;
+            }
+
+            // choose between selection colors and gaussian color
+            varying_color = vec4(mix(gaussianClr, selectedClr.xyz, (splatState == 1u) ? selectedClr.w : 0.0), unselectedClr.w);
+
+            gl_Position = matrix_viewProjection * model * vec4(center, 1.0);
+
+            // disable depth clipping
+            gl_Position.z = 0.0;
+
+            gl_PointSize = splatSize;
+        }
+    }
+`;
+const fragmentShader$2 = /* glsl */ `
+    varying vec4 varying_color;
+
+    void main(void) {
+        gl_FragColor = varying_color;
+    }
+`;
+
+const nullClr = new Color(0, 0, 0, 0);
+class SplatOverlay extends Element {
+    entity;
+    mesh;
+    material;
+    meshInstance;
+    splat;
+    onSorterUpdated;
+    // the sorter we subscribed to in attach(); cached so detach() unsubscribes
+    // from it directly (splat.entity may have been swapped out by replaceData)
+    sorter;
+    constructor() {
+        super(ElementType.debug);
+    }
+    add() {
+        const scene = this.scene;
+        const device = scene.graphicsDevice;
+        this.material = new ShaderMaterial({
+            uniqueName: 'splatOverlayMaterial',
+            vertexGLSL: vertexShader$2,
+            fragmentGLSL: fragmentShader$2
+        });
+        this.material.blendType = BLEND_NORMAL;
+        this.material.depthWrite = false;
+        this.material.depthTest = true;
+        this.material.update();
+        this.mesh = new Mesh(device);
+        // dummy 1-vertex VB so the engine caches the VAO (avoids creating a new one every frame)
+        const format = new VertexFormat(device, [
+            { semantic: SEMANTIC_POSITION, components: 1, type: TYPE_FLOAT32 }
+        ]);
+        format.instancing = true;
+        const vb = new VertexBuffer(device, format, 1);
+        vb.lock();
+        vb.unlock();
+        this.mesh.vertexBuffer = vb;
+        this.mesh.primitive[0] = {
+            baseVertex: 0,
+            type: PRIMITIVE_POINTS,
+            base: 0,
+            count: 0
+        };
+        this.meshInstance = new MeshInstance(this.mesh, this.material, null);
+        // slightly higher priority so it renders before gizmos
+        this.meshInstance.drawBucket = 128;
+        // disable frustum culling since mesh has no vertex buffer for AABB calculation
+        this.meshInstance.cull = false;
+        this.entity = new Entity('splatOverlay');
+        this.entity.addComponent('render', {
+            meshInstances: [this.meshInstance],
+            layers: [scene.gizmoLayer.id]
+        });
+        scene.events.on('selection.changed', (selection) => {
+            if (selection) {
+                this.attach(selection);
+            }
+            else {
+                this.detach();
+            }
+        });
+        // re-attach when the attached splat swaps its frame data (animated
+        // sequence): replaceData builds a new entity/instance, so our captured
+        // instance and our entity (parented under the old one) are stale.
+        scene.events.on('splat.replaced', (splat) => {
+            if (this.splat === splat) {
+                this.attach(splat);
+            }
+        });
+    }
+    destroy() {
+        this.detach();
+        this.entity.destroy();
+    }
+    attach(splat) {
+        // detach from previous splat first
+        this.detach();
+        const { mesh, material } = this;
+        const instance = splat.entity.gsplat.instance;
+        const orderTexture = instance.orderTexture;
+        // set up order texture uniforms
+        material.setParameter('splatOrder', orderTexture);
+        material.setParameter('splatTextureSize', orderTexture.width);
+        // set up other uniforms
+        const resource = instance.resource;
+        material.setParameter('splatState', splat.stateTexture);
+        material.setParameter('splatPosition', resource.getTexture('transformA'));
+        material.setParameter('splatTransform', splat.transformTexture);
+        material.setParameter('splatColor', resource.getTexture('splatColor'));
+        material.setParameter('texParams', [splat.stateTexture.width, splat.stateTexture.height]);
+        // set up SH textures and define based on SH bands
+        const shBands = resource.shBands;
+        material.setDefine('SH_BANDS', `${shBands}`);
+        if (shBands > 0) {
+            material.setParameter('splatSH_1to3', resource.getTexture('splatSH_1to3'));
+            if (shBands > 1) {
+                material.setParameter('splatSH_4to7', resource.getTexture('splatSH_4to7'));
+                material.setParameter('splatSH_8to11', resource.getTexture('splatSH_8to11'));
+                if (shBands > 2) {
+                    material.setParameter('splatSH_12to15', resource.getTexture('splatSH_12to15'));
+                }
+            }
+        }
+        material.update();
+        // subscribe to sorter updates for dynamic count, caching the sorter so
+        // detach() can unsubscribe from this exact instance
+        this.onSorterUpdated = () => {
+            mesh.primitive[0].count = instance.sorter.pendingSorted?.count ?? mesh.primitive[0].count;
+        };
+        this.sorter = instance.sorter;
+        this.sorter.on('updated', this.onSorterUpdated);
+        // initialize count - numSplats is the current visible count (excluding deleted)
+        mesh.primitive[0].count = splat.numSplats;
+        splat.entity.addChild(this.entity);
+        this.splat = splat;
+    }
+    detach() {
+        // unsubscribe from the cached sorter (not splat.entity, which replaceData
+        // may have already swapped to a new entity/instance)
+        if (this.sorter && this.onSorterUpdated) {
+            this.sorter.off('updated', this.onSorterUpdated);
+        }
+        this.sorter = null;
+        this.onSorterUpdated = null;
+        this.entity.remove();
+        this.splat = null;
+    }
+    onPreRender() {
+        const { enabled, scene } = this;
+        const { events } = scene;
+        this.entity.enabled = enabled;
+        if (enabled) {
+            const { material } = this;
+            const splatSize = events.invoke('camera.splatSize');
+            const selectedClr = events.invoke('view.outlineSelection') ? nullClr : events.invoke('selectedClr');
+            const unselectedClr = events.invoke('unselectedClr');
+            const useGaussianColor = events.invoke('view.centersUseGaussianColor') ? 1.0 : 0.0;
+            material.setParameter('splatSize', splatSize * window.devicePixelRatio);
+            material.setParameter('selectedClr', [selectedClr.r, selectedClr.g, selectedClr.b, selectedClr.a]);
+            material.setParameter('unselectedClr', [unselectedClr.r, unselectedClr.g, unselectedClr.b, unselectedClr.a]);
+            material.setParameter('useGaussianColor', useGaussianColor);
+            material.setParameter('transformPalette', this.splat.transformPalette.texture);
+            // pass camera position for SH evaluation
+            const camPos = scene.camera.mainCamera.getPosition();
+            material.setParameter('view_position', [camPos.x, camPos.y, camPos.z]);
+        }
+    }
+    get enabled() {
+        const { scene, splat } = this;
+        const { events } = scene;
+        return splat &&
+            events.invoke('camera.splatSize') > 0 &&
+            scene.camera.renderOverlays &&
+            events.invoke('camera.overlay') &&
+            events.invoke('camera.mode') === 'centers';
+    }
+}
+
+class Underlay extends Element {
+    shaderQuad;
+    renderPass;
+    enabled = true;
+    constructor() {
+        super(ElementType.other);
+    }
+    add() {
+        const device = this.scene.app.graphicsDevice;
+        this.shaderQuad = new ShaderQuad(device, vertexShader$a, fragmentShader$a, 'apply-underlay');
+        this.renderPass = new SimpleRenderPass(device, this.shaderQuad, {
+            blendState: new BlendState(true, BLENDEQUATION_ADD, BLENDMODE_ONE, BLENDMODE_ONE, BLENDEQUATION_ADD, BLENDMODE_ZERO, BLENDMODE_ONE)
+        });
+        const { camera, events } = this.scene;
+        camera.camera.on('preRenderLayer', (layer, transparent) => {
+            // underlay is used when outline mode is disabled
+            if (!this.enabled || events.invoke('view.outlineSelection')) {
+                return;
+            }
+            // apply at the start of the gizmo layer
+            if (layer !== this.scene.gizmoLayer || transparent) {
+                return;
+            }
+            this.renderPass.execute({
+                srcTexture: camera.workTarget.colorBuffer
+            });
+        });
+    }
+    remove() {
+        // event listeners are cleaned up when camera is destroyed
+    }
+    onPreRender() {
+        // no longer need to manage a separate camera
+    }
+}
+
+// sort meshInstances by the aabb corner furthest from the camera
+const corner = new Vec3();
+const specialSort = (instances, numInstances, cameraPos, cameraDir) => {
+    const distances = new Map();
+    for (let i = 0; i < numInstances; i++) {
+        const instance = instances[i];
+        const { aabb } = instance;
+        const { center, halfExtents } = aabb;
+        // loop over all 8 aabb corners and find the furthest distance along the camera view direction
+        let maxDist = -Infinity;
+        for (let cx = -1; cx <= 1; cx += 2) {
+            for (let cy = -1; cy <= 1; cy += 2) {
+                for (let cz = -1; cz <= 1; cz += 2) {
+                    corner.set(center.x + cx * halfExtents.x, center.y + cy * halfExtents.y, center.z + cz * halfExtents.z);
+                    // project camera-to-corner vector onto camera direction
+                    const dist = (corner.x - cameraPos.x) * cameraDir.x +
+                        (corner.y - cameraPos.y) * cameraDir.y +
+                        (corner.z - cameraPos.z) * cameraDir.z;
+                    if (dist > maxDist) {
+                        maxDist = dist;
+                    }
+                }
+            }
+        }
+        // store in map for reuse during sort
+        distances.set(instance, maxDist);
+    }
+    // sort instances back-to-front by calculated distance (furthest first)
+    instances.sort((a, b) => distances.get(b) - distances.get(a));
+};
+class Scene {
+    events;
+    config;
+    canvas;
+    app;
+    worldLayer;
+    splatLayer;
+    gizmoLayer;
+    sceneState = [new SceneState(), new SceneState()];
+    elements = [];
+    boundStorage = new BoundingBox();
+    boundDirty = true;
+    forceRender = false;
+    lockedRenderMode = false;
+    lockedRender = false;
+    canvasResize = null;
+    targetSize = {
+        width: 0,
+        height: 0
+    };
+    dataProcessor;
+    assetLoader;
+    camera;
+    cameraPoseGizmos;
+    splatOverlay;
+    grid;
+    outline;
+    underlay;
+    // shared queue for serialising async splat work. exposed so subsystems that
+    // need to order their async work alongside edit-history operations can do so
+    // without going through edit-history directly.
+    commandQueue;
+    contentRoot;
+    cameraRoot;
+    constructor(events, config, canvas, graphicsDevice, commandQueue) {
+        this.events = events;
+        this.config = config;
+        this.canvas = canvas;
+        this.commandQueue = commandQueue;
+        // configure the playcanvas application. we render to an offscreen buffer so require
+        // only the simplest of backbuffers.
+        this.app = new PCApp(canvas, { graphicsDevice });
+        // only render the scene when instructed
+        this.app.autoRender = false;
+        // @ts-ignore
+        this.app._allowResize = false;
+        this.app.scene.clusteredLightingEnabled = false;
+        // hack: disable lightmapper first bake until we expose option for this
+        // @ts-ignore
+        this.app.off('prerender', this.app._firstBake, this.app);
+        // @ts-ignore
+        this.app.loader.getHandler('texture').imgParser.crossOrigin = 'anonymous';
+        // this is required to get full res AR mode backbuffer
+        this.app.graphicsDevice.maxPixelRatio = window.devicePixelRatio;
+        // configure application canvas
+        const observer = new ResizeObserver((entries) => {
+            if (entries.length > 0) {
+                const entry = entries[0];
+                if (entry) {
+                    if (entry.devicePixelContentBoxSize) {
+                        // on non-safari browsers, we are given the pixel-perfect canvas size
+                        this.canvasResize = {
+                            width: entry.devicePixelContentBoxSize[0].inlineSize,
+                            height: entry.devicePixelContentBoxSize[0].blockSize
+                        };
+                    }
+                    else if (entry.contentBoxSize.length > 0) {
+                        // on safari browsers we must calculate pixel size from CSS size ourselves
+                        // and hope the browser performs the same calculation.
+                        const pixelRatio = window.devicePixelRatio;
+                        this.canvasResize = {
+                            width: Math.ceil(entry.contentBoxSize[0].inlineSize * pixelRatio),
+                            height: Math.ceil(entry.contentBoxSize[0].blockSize * pixelRatio)
+                        };
+                    }
+                }
+                this.forceRender = true;
+            }
+        });
+        observer.observe(window.document.getElementById('canvas-container'));
+        // configure depth layers to handle dynamic refraction
+        const depthLayer = this.app.scene.layers.getLayerById(LAYERID_DEPTH);
+        this.app.scene.layers.remove(depthLayer);
+        this.app.scene.layers.insertOpaque(depthLayer, 2);
+        // register application callbacks
+        this.app.on('update', (deltaTime) => this.onUpdate(deltaTime));
+        this.app.on('prerender', () => this.onPreRender());
+        this.app.on('postrender', () => this.onPostRender());
+        // force render on device restored
+        this.app.graphicsDevice.on('devicerestored', () => {
+            this.forceRender = true;
+        });
+        // fire pre and post render events on the camera
+        this.app.scene.on(EVENT_PRERENDER_LAYER, (camera, layer, transparent) => {
+            camera.fire('preRenderLayer', layer, transparent);
+        });
+        this.app.scene.on(EVENT_POSTRENDER_LAYER, (camera, layer, transparent) => {
+            camera.fire('postRenderLayer', layer, transparent);
+        });
+        // get the world layer
+        this.worldLayer = this.app.scene.layers.getLayerByName('World');
+        // splat layer - dedicated layer for splat rendering with MRT
+        this.splatLayer = new Layer({
+            name: 'Splat',
+            opaqueSortMode: SORTMODE_CUSTOM,
+            transparentSortMode: SORTMODE_CUSTOM
+        });
+        this.splatLayer.customCalculateSortValues = specialSort;
+        // gizmo layer
+        this.gizmoLayer = new Layer({ name: 'Gizmo' });
+        const layers = this.app.scene.layers;
+        layers.push(this.splatLayer);
+        layers.push(this.gizmoLayer);
+        this.dataProcessor = new DataProcessor(this.app.graphicsDevice);
+        this.assetLoader = new AssetLoader(this.app, events);
+        // create root entities
+        this.contentRoot = new Entity('contentRoot');
+        this.app.root.addChild(this.contentRoot);
+        this.cameraRoot = new Entity('cameraRoot');
+        this.app.root.addChild(this.cameraRoot);
+        // create elements
+        this.camera = new Camera();
+        this.add(this.camera);
+        this.cameraPoseGizmos = new CameraPoseGizmos();
+        this.add(this.cameraPoseGizmos);
+        this.splatOverlay = new SplatOverlay();
+        this.add(this.splatOverlay);
+        this.grid = new InfiniteGrid();
+        this.add(this.grid);
+        this.outline = new Outline();
+        this.add(this.outline);
+        this.underlay = new Underlay();
+        this.add(this.underlay);
+    }
+    start() {
+        // start the app
+        this.app.start();
+    }
+    clear() {
+        const splats = this.getElementsByType(ElementType.splat);
+        splats.forEach((splat) => {
+            this.remove(splat);
+            splat.destroy();
+        });
+    }
+    // add a scene element
+    async add(element) {
+        if (!element.scene) {
+            // add the new element
+            element.scene = this;
+            await element.add();
+            this.elements.push(element);
+            // notify all elements of scene addition
+            this.forEachElement(e => e !== element && e.onAdded(element));
+            // notify listeners
+            this.events.fire('scene.elementAdded', element);
+        }
+    }
+    // remove an element from the scene
+    remove(element) {
+        if (element.scene === this) {
+            // remove from list
+            this.elements.splice(this.elements.indexOf(element), 1);
+            // notify listeners
+            this.events.fire('scene.elementRemoved', element);
+            // notify all elements of scene removal
+            this.forEachElement(e => e.onRemoved(element));
+            element.remove();
+            element.scene = null;
+        }
+    }
+    // get the scene bound
+    get bound() {
+        if (this.boundDirty) {
+            let valid = false;
+            this.forEachElement((e) => {
+                const bound = e.worldBound;
+                if (bound) {
+                    if (!valid) {
+                        valid = true;
+                        this.boundStorage.copy(bound);
+                    }
+                    else {
+                        this.boundStorage.add(bound);
+                    }
+                }
+            });
+            this.boundDirty = false;
+            this.events.fire('scene.boundChanged', this.boundStorage);
+        }
+        return this.boundStorage;
+    }
+    getElementsByType(elementType) {
+        return this.elements.filter(e => e.type === elementType);
+    }
+    get graphicsDevice() {
+        return this.app.graphicsDevice;
+    }
+    forEachElement(action) {
+        this.elements.forEach(action);
+    }
+    onUpdate(deltaTime) {
+        // allow elements to update
+        this.forEachElement(e => e.onUpdate(deltaTime));
+        // fire global update
+        this.events.fire('update', deltaTime);
+        // fire a 'serialize' event which listers will use to store their state. we'll use
+        // this to decide if the view has changed and so requires rendering.
+        const i = this.app.frame % 2;
+        const state = this.sceneState[i];
+        state.reset();
+        this.forEachElement(e => state.pack(e));
+        // diff with previous state
+        const result = state.compare(this.sceneState[1 - i]);
+        // generate the set of all element types that changed
+        const all = new Set([...result.added, ...result.removed, ...result.moved, ...result.changed]);
+        // compare with previously serialized
+        if (this.lockedRenderMode) {
+            this.app.renderNextFrame = this.lockedRender;
+            this.lockedRender = false;
+        }
+        else if (!this.app.renderNextFrame) {
+            this.app.renderNextFrame = this.forceRender || all.size > 0;
+        }
+        this.forceRender = false;
+        // raise per-type update events
+        ElementTypeList.forEach((type) => {
+            if (all.has(type)) {
+                this.events.fire(`updated:${type}`);
+            }
+        });
+        // allow elements to postupdate
+        this.forEachElement(e => e.onPostUpdate());
+    }
+    onPreRender() {
+        if (this.canvasResize) {
+            this.canvas.width = this.canvasResize.width;
+            this.canvas.height = this.canvasResize.height;
+            this.canvasResize = null;
+        }
+        // update render target size
+        this.targetSize.width = Math.ceil(this.app.graphicsDevice.width / this.config.camera.pixelScale);
+        this.targetSize.height = Math.ceil(this.app.graphicsDevice.height / this.config.camera.pixelScale);
+        this.forEachElement(e => e.onPreRender());
+        this.events.fire('prerender', this.camera.displayTransform);
+        // debug - display scene bound
+        if (this.config.debug.showBound) {
+            // draw element bounds
+            this.forEachElement((e) => {
+                if (e.type === ElementType.splat) {
+                    const splat = e;
+                    const local = splat.localBound;
+                    this.app.drawWireAlignedBox(local.getMin(), local.getMax(), Color.RED, true, undefined, splat.entity.getWorldTransform());
+                    const world = splat.worldBound;
+                    this.app.drawWireAlignedBox(world.getMin(), world.getMax(), Color.GREEN);
+                }
+            });
+            // draw scene bound
+            this.app.drawWireAlignedBox(this.bound.getMin(), this.bound.getMax(), Color.BLUE);
+        }
+    }
+    onPostRender() {
+        this.forEachElement(e => e.onPostRender());
+        this.events.fire('postrender');
+    }
+}
+
+const DEFAULT_BG_CLR = { r: 0, g: 0, b: 0, a: 1 };
+const DEFAULT_SELECTED_CLR = { r: 1, g: 1, b: 0, a: 1 };
+const DEFAULT_UNSELECTED_CLR = { r: 0, g: 0, b: 1, a: 0.5 };
+const DEFAULT_LOCKED_CLR = { r: 0, g: 0, b: 0, a: 0.05 };
+// default config
+const sceneConfig = {
+    bgClr: DEFAULT_BG_CLR,
+    selectedClr: DEFAULT_SELECTED_CLR,
+    unselectedClr: DEFAULT_UNSELECTED_CLR,
+    lockedClr: DEFAULT_LOCKED_CLR,
+    camera: {
+        pixelScale: 1,
+        multisample: false,
+        fov: 75,
+        exposure: 1.0,
+        toneMapping: 'linear',
+        overlay: false
+    },
+    show: {
+        grid: true,
+        bound: true,
+        boundDimensions: false,
+        cameraPoses: false,
+        shBands: 3
+    },
+    controls: {
+        dampingFactor: 0.2,
+        minPolarAngle: 0,
+        maxPolarAngle: Math.PI,
+        minZoom: 1e-6,
+        maxZoom: 10.0,
+        initialAzim: -45,
+        initialElev: -10,
+        initialZoom: 1.0,
+        orbitSensitivity: 0.3,
+        zoomSensitivity: 0.4
+    },
+    debug: {
+        showBound: false
+    }
+};
+class Params {
+    sources;
+    constructor(sources) {
+        this.sources = sources;
+    }
+    resolve(configs, path) {
+        const get = (obj) => {
+            for (const name of path) {
+                if (!obj.hasOwnProperty(name)) {
+                    return undefined;
+                }
+                obj = obj[name];
+            }
+            return obj;
+        };
+        for (const config of configs) {
+            const value = get(config);
+            if (value !== undefined) {
+                return value;
+            }
+        }
+        return undefined;
+    }
+    get(path) {
+        // https://stackoverflow.com/a/67243723/2405687
+        const kebabize = (s) => s.replace(/[A-Z]+(?![a-z])|[A-Z]/g, ($, ofs) => (ofs ? '-' : '') + $.toLowerCase());
+        return this.resolve(this.sources, path.split('.').map(kebabize)) ?? this.resolve(this.sources, path.split('.'));
+    }
+    getBool(path) {
+        const value = this.get(path);
+        return typeof value === 'string' ? value.toLowerCase() === 'true' : value === undefined ? undefined : !!value;
+    }
+    getNumber(path) {
+        const value = this.get(path);
+        return typeof value === 'string' ? parseFloat(value) : value;
+    }
+    getVec(path) {
+        const value = this.get(path);
+        return typeof value === 'string' ? value.split(',') : undefined;
+    }
+    getVec3(path) {
+        const value = this.getVec(path);
+        if (value) {
+            const numbers = value.map(v => parseFloat(v));
+            if (value.length === 1) {
+                return { x: numbers[0], y: numbers[0], z: numbers[0] };
+            }
+            else if (value.length === 3) {
+                return { x: numbers[0], y: numbers[1], z: numbers[2] };
+            }
+        }
+        return undefined;
+    }
+    getColor(path) {
+        const value = this.getVec(path);
+        if (value) {
+            const numbers = value.map(v => parseFloat(v));
+            if (value.length === 1) {
+                return { r: numbers[0], g: numbers[0], b: numbers[0], a: 1 };
+            }
+            else if (value.length === 3) {
+                return { r: numbers[0], g: numbers[1], b: numbers[2], a: 1 };
+            }
+            else if (value.length === 4) {
+                return { r: numbers[0], g: numbers[1], b: numbers[2], a: numbers[3] };
+            }
+        }
+        return undefined;
+    }
+}
+const getSceneConfig = (overrides) => {
+    const params = new Params(overrides);
+    const cmp = (a, b) => {
+        return a.length === b.length && a.every((v, i) => v === b[i]);
+    };
+    // recurse the object and replace concrete leaf values with overrides
+    const rec = (obj, path) => {
+        for (const child in obj) {
+            const childPath = `${path}${path.length ? '.' : ''}${child}`;
+            const childValue = obj[child];
+            switch (typeof childValue) {
+                case 'number':
+                    obj[child] = params.getNumber(childPath) ?? childValue;
+                    break;
+                case 'boolean':
+                    obj[child] = params.getBool(childPath) ?? childValue;
+                    break;
+                case 'string':
+                    obj[child] = params.get(childPath) ?? childValue;
+                    break;
+                case 'object': {
+                    const keys = Object.keys(childValue).sort();
+                    if (cmp(keys, ['a', 'b', 'g', 'r'])) {
+                        obj[child] = params.getColor(childPath) ?? childValue;
+                    }
+                    else if (cmp(keys, ['x', 'y', 'z'])) {
+                        obj[child] = params.getVec3(childPath) ?? childValue;
+                    }
+                    else {
+                        rec(childValue, childPath);
+                    }
+                    break;
+                }
+                default:
+                    rec(childValue, childPath);
+                    break;
+            }
+        }
+    };
+    rec(sceneConfig, '');
+    return sceneConfig;
+};
+
+const registerSelectionEvents = (events, scene) => {
+    let selection = null;
+    const setSelection = (splat) => {
+        if (splat !== selection && (!splat || splat.visible)) {
+            const prev = selection;
+            selection = splat;
+            events.fire('selection.changed', selection, prev);
+        }
+    };
+    events.on('selection', (splat) => {
+        setSelection(splat);
+    });
+    events.function('selection', () => {
+        return selection;
+    });
+    events.on('selection.next', () => {
+        const splats = scene.getElementsByType(ElementType.splat);
+        if (splats.length > 1) {
+            const idx = splats.indexOf(selection);
+            setSelection(splats[(idx + 1) % splats.length]);
+        }
+    });
+    events.on('scene.elementAdded', (element) => {
+        if (element.type === ElementType.splat) {
+            setSelection(element);
+        }
+    });
+    events.on('scene.elementRemoved', (element) => {
+        if (element === selection) {
+            const splats = scene.getElementsByType(ElementType.splat);
+            setSelection(splats.length === 1 ? null : splats.find(v => v !== element));
+        }
+    });
+    events.on('splat.visibility', (splat) => {
+        if (splat === selection && !splat.visible) {
+            setSelection(null);
+        }
+    });
+    events.on('camera.focalPointPicked', (details) => {
+        setSelection(details.splat);
+    });
+};
+
+// PLY sequence: a set of frameNNNN.ply files, sorted by trailing frame number.
+class PlyFrameSource {
+    files;
+    scene;
+    constructor(files, scene) {
+        this.scene = scene;
+        // eslint-disable-next-line regexp/no-super-linear-backtracking
+        const regex = /(.*?)(\d+)(?:\.compressed)?\.ply$/;
+        const key = (f) => f.name?.toLowerCase().match(regex)?.[2];
+        this.files = files.slice().sort((a, b) => {
+            const av = key(a);
+            const bv = key(b);
+            return (av && bv) ? parseInt(av, 10) - parseInt(bv, 10) : 0;
+        });
+    }
+    get frameCount() {
+        return this.files.length;
+    }
+    async getFrame(index) {
+        const file = this.files[index];
+        const fileSystem = new MappedReadFileSystem();
+        fileSystem.addFile(file.name, file);
+        // skipReorder: animation frames prioritise load speed over morton ordering
+        const { gsplatData, transform } = await loadGSplatData(file.name, fileSystem, true);
+        validateGSplatData(gsplatData);
+        const asset = this.scene.assetLoader.createGSplatAsset(gsplatData, file.name);
+        return { asset, rotation: transform.rotation };
+    }
+    destroy() { }
+}
+/**
+ * Manages animation-sequence playback (PLY sequence).
+ *
+ * A sequence is rendered by a single persistent Splat element whose gaussian data
+ * is swapped in place each frame (Splat.replaceData). This keeps the user's
+ * whole-model transform and visual properties across frames and avoids the full
+ * element teardown/recreate (and scene-reset prompt) of the previous approach.
+ */
+const registerSequenceEvents = (events, scene) => {
+    let source = null;
+    let splat = null;
+    let currentFrame = -1;
+    let loading = false;
+    let nextFrame = -1;
+    let loadingPromise = null;
+    // apply a frame's data to the persistent splat, creating it on the first frame
+    const applyFrame = async (data) => {
+        if (!splat) {
+            splat = new Splat(data.asset, data.rotation);
+            await scene.add(splat);
+        }
+        else {
+            // in-place swap: preserves entity transform, visual props and selection
+            await splat.replaceData(data.asset);
+        }
+    };
+    // release an asset whose load was abandoned (source switched mid-load)
+    const discardAsset = (asset) => {
+        asset.registry?.remove(asset);
+        asset.unload();
+    };
+    const setSource = (newSource) => {
+        source?.destroy();
+        source = newSource;
+        currentFrame = -1;
+        nextFrame = -1;
+        // tear down the previous sequence's splat so the new source's first frame
+        // is bound as an initial load (applying its rotation/name) rather than
+        // swapped onto the old element
+        if (splat) {
+            scene.remove(splat);
+            splat.destroy();
+            splat = null;
+        }
+        events.fire('timeline.frames', source.frameCount);
+    };
+    const setFrame = async (frame) => {
+        if (!source || frame < 0 || frame >= source.frameCount) {
+            return;
+        }
+        // coalesce while a frame is in flight (rapid scrubbing)
+        if (loading) {
+            nextFrame = frame;
+            return;
+        }
+        if (frame === currentFrame) {
+            return;
+        }
+        loading = true;
+        const loadSource = source;
+        try {
+            const data = await source.getFrame(frame);
+            if (source !== loadSource) {
+                // source was switched (or the scene cleared) while loading — discard
+                // this frame's asset rather than applying a stale one
+                discardAsset(data.asset);
+            }
+            else {
+                // applyFrame swaps data in place; replaceData keeps the previous frame
+                // on screen until the new one has rendered, so no extra wait is needed
+                await applyFrame(data);
+                currentFrame = frame;
+            }
+        }
+        catch (error) {
+            console.error(error);
+        }
+        finally {
+            loading = false;
+        }
+        // process the most recent frame requested while we were loading
+        if (nextFrame !== -1) {
+            const frameToLoad = nextFrame;
+            nextFrame = -1;
+            setFrame(frameToLoad);
+        }
+    };
+    events.on('sequence.setPlyFrames', (files) => {
+        setSource(new PlyFrameSource(files, scene));
+    });
+    events.on('timeline.frame', async (frame) => {
+        await setFrame(frame);
+    });
+    // drop references when the scene is cleared (scene.clear destroys the splat)
+    events.on('scene.clear', () => {
+        source?.destroy();
+        source = null;
+        splat = null;
+        currentFrame = -1;
+        nextFrame = -1;
+    });
+    // Async per-frame advance for the video renderer (render.ts). Awaits the frame
+    // swap so the splat is ready to sort, then returns the (persistent) splat when
+    // the frame actually changed, or null when it didn't. Name kept for render.ts.
+    events.function('plysequence.setFrameAsync', async (frame) => {
+        if (!source || frame < 0 || frame >= source.frameCount) {
+            return null;
+        }
+        if (currentFrame === frame && !loading) {
+            return null;
+        }
+        // if a load is already in flight, wait for it before deciding
+        if (loading && loadingPromise) {
+            await loadingPromise;
+        }
+        if (currentFrame === frame) {
+            return null;
+        }
+        loadingPromise = (async () => {
+            loading = true;
+            const loadSource = source;
+            try {
+                const data = await source.getFrame(frame);
+                if (source !== loadSource) {
+                    // source switched / scene cleared mid-load — discard the asset
+                    discardAsset(data.asset);
+                }
+                else {
+                    await applyFrame(data);
+                    currentFrame = frame;
+                }
+            }
+            finally {
+                loading = false;
+                loadingPromise = null;
+            }
+        })();
+        await loadingPromise;
+        return splat;
+    });
+};
+
+/**
+ * Check if a modifier key state matches the requirement.
+ */
+const checkMod = (requirement, isPressed) => {
+    switch (requirement) {
+        case 'required': return isPressed;
+        case 'optional': return true;
+        case 'forbidden':
+        default: return !isPressed;
+    }
+};
+class Shortcuts {
+    shortcuts = [];
+    constructor(events) {
+        const shortcuts = this.shortcuts;
+        const handleEvent = (e, down, capture) => {
+            // skip if focus is elsewhere (input fields, modals, etc.)
+            if (e.target !== document.body)
+                return;
+            const isCtrlKey = e.code.startsWith('Control');
+            const isShiftKey = e.code.startsWith('Shift');
+            const isAltKey = e.code.startsWith('Alt');
+            for (let i = 0; i < shortcuts.length; i++) {
+                const options = shortcuts[i];
+                const ctrlMatch = isCtrlKey || checkMod(options.ctrl, !!(e.ctrlKey || e.metaKey));
+                const shiftMatch = isShiftKey || checkMod(options.shift, e.shiftKey);
+                const altMatch = isAltKey || checkMod(options.alt, e.altKey);
+                // Match if key matches keys array OR code matches codes array
+                const keyMatches = (options.keys?.some(k => k.toLowerCase() === e.key.toLowerCase()) ||
+                    options.codes?.some(c => c === e.code)) ?? false;
+                if (keyMatches &&
+                    ((options.capture ?? false) === capture) &&
+                    ctrlMatch && shiftMatch && altMatch) {
+                    // consume the event
+                    e.stopPropagation();
+                    e.preventDefault();
+                    if (options.held) {
+                        // Skip repeated keydown events, but fire on initial down and all up events
+                        if (down && e.repeat) {
+                            return;
+                        }
+                    }
+                    else {
+                        // Non-held: ignore up events
+                        // Also ignore repeated keydown events unless repeat is explicitly allowed
+                        if (!down || (e.repeat && !options.repeat))
+                            return;
+                    }
+                    if (options.event) {
+                        // Only pass 'down' state for held shortcuts
+                        if (options.held) {
+                            events.fire(options.event, down);
+                        }
+                        else {
+                            events.fire(options.event);
+                        }
+                    }
+                    else {
+                        options.func(down);
+                    }
+                    break;
+                }
+            }
+        };
+        // register keyboard handler
+        document.addEventListener('keydown', (e) => {
+            handleEvent(e, true, false);
+        });
+        document.addEventListener('keyup', (e) => {
+            handleEvent(e, false, false);
+        });
+        // also handle capture phase
+        document.addEventListener('keydown', (e) => {
+            handleEvent(e, true, true);
+        }, true);
+        document.addEventListener('keyup', (e) => {
+            handleEvent(e, false, true);
+        }, true);
+    }
+    register(options) {
+        this.shortcuts.push(options);
+    }
+}
+
+// Mac uses different symbols for modifier keys
+const isMac = platform.name === 'osx';
+// Default shortcut bindings - the source of truth for key mappings
+const defaultShortcuts = {
+    // Navigation
+    'camera.reset': { keys: ['f'], shift: 'required' },
+    'camera.focus': { keys: ['f'] },
+    'camera.toggleControlMode': { keys: ['v'] },
+    // Show
+    'camera.toggleOverlay': { keys: ['Tab'] },
+    'camera.toggleMode': { keys: ['m'] },
+    'grid.toggleVisible': { keys: ['g'] },
+    'select.hide': { keys: ['h'] },
+    'select.unhide': { keys: ['h'], shift: 'required' },
+    // Playback
+    'timeline.togglePlay': { keys: [' '] },
+    'timeline.prevFrame': { keys: [','], repeat: true },
+    'timeline.nextFrame': { keys: ['.'], repeat: true },
+    'timeline.prevKey': { keys: ['<'], shift: 'optional', repeat: true },
+    'timeline.nextKey': { keys: ['>'], shift: 'optional', repeat: true },
+    'track.addKey': { keys: ['Enter'] },
+    'track.removeKey': { keys: ['Enter'], shift: 'required' },
+    // Selection
+    'select.all': { keys: ['a'], ctrl: 'required', capture: true },
+    'select.none': { keys: ['a'], ctrl: 'required', shift: 'required', capture: true },
+    'select.invert': { keys: ['i'], ctrl: 'required' },
+    'select.delete': { keys: ['Delete', 'Backspace'] },
+    // Tools
+    'tool.move': { keys: ['1'] },
+    'tool.rotate': { keys: ['2'] },
+    'tool.scale': { keys: ['3'] },
+    'tool.rectSelection': { keys: ['r'] },
+    'tool.lassoSelection': { keys: ['l'] },
+    'tool.polygonSelection': { keys: ['p'] },
+    'tool.brushSelection': { keys: ['b'] },
+    'tool.floodSelection': { keys: ['o'] },
+    'tool.eyedropperSelection': { keys: ['e'], ctrl: 'required', capture: true },
+    'tool.brushSelection.smaller': { keys: ['['], repeat: true },
+    'tool.brushSelection.bigger': { keys: [']'], repeat: true },
+    'tool.deactivate': { keys: ['Escape'] },
+    'tool.toggleCoordSpace': { keys: ['c'], shift: 'required' },
+    // Other
+    'edit.undo': { keys: ['z'], ctrl: 'required', repeat: true, capture: true },
+    'edit.redo': { keys: ['z'], ctrl: 'required', shift: 'required', repeat: true, capture: true },
+    'dataPanel.toggle': { keys: ['d'], ctrl: 'required', capture: true },
+    'timelinePanel.toggle': { keys: ['t'], ctrl: 'required', capture: true },
+    // Camera fly keys - use physical positions (codes) for WASD layout on non-QWERTY keyboards
+    'camera.fly.forward': { codes: ['KeyW'], held: true, shift: 'optional', alt: 'optional' },
+    'camera.fly.backward': { codes: ['KeyS'], held: true, shift: 'optional', alt: 'optional' },
+    'camera.fly.left': { codes: ['KeyA'], held: true, shift: 'optional', alt: 'optional' },
+    'camera.fly.right': { codes: ['KeyD'], held: true, shift: 'optional', alt: 'optional' },
+    'camera.fly.down': { codes: ['KeyQ'], held: true, shift: 'optional', alt: 'optional' },
+    'camera.fly.up': { codes: ['KeyE'], held: true, shift: 'optional', alt: 'optional' },
+    'camera.modifier.fast': { codes: ['ShiftLeft', 'ShiftRight'], held: true, alt: 'optional' },
+    'camera.modifier.slow': { codes: ['AltLeft', 'AltRight'], held: true, shift: 'optional' }
+};
+class ShortcutManager {
+    bindings;
+    constructor(events) {
+        // Clone the defaults so they can be modified without affecting the originals
+        this.bindings = {};
+        for (const id in defaultShortcuts) {
+            this.bindings[id] = { ...defaultShortcuts[id] };
+        }
+        // Create shortcuts and register all bindings
+        const shortcuts = new Shortcuts(events);
+        for (const id in this.bindings) {
+            const binding = this.bindings[id];
+            shortcuts.register({
+                event: id,
+                keys: binding.keys,
+                codes: binding.codes,
+                ctrl: binding.ctrl,
+                shift: binding.shift,
+                alt: binding.alt,
+                held: binding.held,
+                repeat: binding.repeat,
+                capture: binding.capture
+            });
+        }
+    }
+    /**
+     * Get a shortcut binding by its event ID.
+     */
+    get(id) {
+        return this.bindings[id];
+    }
+    /**
+     * Format a shortcut for display (e.g., "Ctrl + Shift + Z" or "⌘⇧Z" on Mac).
+     */
+    formatShortcut(id) {
+        const binding = this.bindings[id];
+        if (!binding)
+            return '';
+        const parts = [];
+        // Use Mac symbols: ⌘ (Cmd), ⌥ (Option), ⇧ (Shift)
+        if (binding.ctrl === 'required')
+            parts.push(isMac ? '⌘' : 'Ctrl');
+        if (binding.alt === 'required')
+            parts.push(isMac ? '⌥' : 'Alt');
+        if (binding.shift === 'required')
+            parts.push(isMac ? '⇧' : 'Shift');
+        // Get the first key or code for display
+        let keyDisplay = binding.keys?.[0] ?? binding.codes?.[0];
+        if (!keyDisplay)
+            return '';
+        if (keyDisplay === ' ') {
+            keyDisplay = 'Space';
+        }
+        else if (keyDisplay === 'Escape') {
+            keyDisplay = 'Esc';
+        }
+        else if (keyDisplay.startsWith('Key')) {
+            // Physical key codes like 'KeyW' -> 'W'
+            keyDisplay = keyDisplay.slice(3);
+        }
+        else if (keyDisplay.length === 1) {
+            keyDisplay = keyDisplay.toUpperCase();
+        }
+        parts.push(keyDisplay);
+        return isMac ? parts.join(' ') : parts.join(' + ');
+    }
+}
+
+/**
+ * Register global timeline events.
+ * The timeline manages playback state (frames, frameRate, current frame, playing).
+ * Key management is delegated to individual animation tracks via track.* events.
+ */
+const registerTimelineEvents = (events) => {
+    let frames = 180;
+    let frameRate = 30;
+    let smoothness = 1;
+    // frames
+    const setFrames = (value) => {
+        if (value !== frames) {
+            frames = value;
+            events.fire('timeline.frames', frames);
+        }
+    };
+    events.function('timeline.frames', () => {
+        return frames;
+    });
+    events.on('timeline.setFrames', (value) => {
+        setFrames(value);
+    });
+    // frame rate
+    const setFrameRate = (value) => {
+        if (value !== frameRate) {
+            frameRate = value;
+            events.fire('timeline.frameRate', frameRate);
+        }
+    };
+    events.function('timeline.frameRate', () => {
+        return frameRate;
+    });
+    events.on('timeline.setFrameRate', (value) => {
+        setFrameRate(value);
+    });
+    // smoothness
+    const setSmoothness = (value) => {
+        if (value !== smoothness) {
+            smoothness = value;
+            events.fire('timeline.smoothness', smoothness);
+        }
+    };
+    events.function('timeline.smoothness', () => {
+        return smoothness;
+    });
+    events.on('timeline.setSmoothness', (value) => {
+        setSmoothness(value);
+    });
+    // current frame
+    let frame = 0;
+    const setFrame = (value) => {
+        if (value !== frame) {
+            frame = value;
+            events.fire('timeline.frame', frame);
+        }
+    };
+    events.function('timeline.frame', () => {
+        return frame;
+    });
+    events.on('timeline.setFrame', (value) => {
+        setFrame(value);
+    });
+    // anim controls
+    let animHandle = null;
+    const play = () => {
+        let time = frame;
+        // handle application update tick
+        animHandle = events.on('update', (dt) => {
+            time = (time + dt * frameRate) % frames;
+            setFrame(Math.floor(time));
+            events.fire('timeline.time', time);
+        });
+    };
+    const stop = () => {
+        animHandle.off();
+        animHandle = null;
+    };
+    // playing state
+    let playing = false;
+    const setPlaying = (value) => {
+        if (value !== playing) {
+            playing = value;
+            events.fire('timeline.playing', playing);
+            if (playing) {
+                play();
+            }
+            else {
+                stop();
+            }
+        }
+    };
+    events.function('timeline.playing', () => {
+        return playing;
+    });
+    events.on('timeline.setPlaying', (value) => {
+        setPlaying(value);
+    });
+    // shortcut handlers
+    events.on('timeline.togglePlay', () => {
+        setPlaying(!playing);
+    });
+    events.on('timeline.prevFrame', () => {
+        setFrame((frame - 1 + frames) % frames);
+    });
+    events.on('timeline.nextFrame', () => {
+        setFrame((frame + 1) % frames);
+    });
+    // Key navigation - delegates to active track's keys
+    const skipToKey = (dir) => {
+        const keys = events.invoke('track.keys') ?? [];
+        if (keys.length > 0) {
+            const orderedKeys = keys.slice().sort((a, b) => a - b);
+            const l = orderedKeys.length;
+            const nextKeyIndex = orderedKeys.findIndex(k => (dir === 'back' ? k >= frame : k > frame));
+            if (nextKeyIndex === -1) {
+                setFrame(orderedKeys[dir === 'back' ? l - 1 : 0]);
+            }
+            else {
+                setFrame(orderedKeys[dir === 'back' ? (nextKeyIndex + l - 1) % l : nextKeyIndex]);
+            }
+        }
+        else {
+            setFrame(dir === 'back' ? 0 : frames - 1);
+        }
+    };
+    events.on('timeline.prevKey', () => {
+        skipToKey('back');
+    });
+    events.on('timeline.nextKey', () => {
+        skipToKey('forward');
+    });
+    // clear timeline state when scene is cleared
+    events.on('scene.clear', () => {
+        events.fire('timeline.frames', frames);
+    });
+    // Serialization - only global state, keys are owned by tracks
+    events.function('docSerialize.timeline', () => {
+        return {
+            frames,
+            frameRate,
+            frame,
+            smoothness
+        };
+    });
+    events.function('docDeserialize.timeline', (data = {}) => {
+        // Set values
+        frames = data.frames ?? 180;
+        frameRate = data.frameRate ?? 30;
+        frame = data.frame ?? 0;
+        smoothness = data.smoothness ?? 1;
+        // Fire events to update UI (always fire to ensure rebuild)
+        events.fire('timeline.frames', frames);
+        events.fire('timeline.frameRate', frameRate);
+        events.fire('timeline.frame', frame);
+        events.fire('timeline.smoothness', smoothness);
+    });
+};
+
+const vertexShader$1 = /* glsl */ `
+    attribute vec3 vertex_position;
+
+    uniform mat4 matrix_model;
+    uniform mat4 matrix_viewProjection;
+
+    void main() {
+        gl_Position = matrix_viewProjection * matrix_model * vec4(vertex_position, 1.0);
+    }
+`;
+const fragmentShader$1 = /* glsl */ `
+    // ray-box intersection in box space
+    bool intersectBox(out float t0, out float t1, out int axis0, out int axis1, vec3 pos, vec3 dir, vec3 boxCen, vec3 boxLen)
+    {
+        bvec3 validDir = notEqual(dir, vec3(0.0));
+        vec3 absDir = abs(dir);
+        vec3 signDir = sign(dir);
+        vec3 m = vec3(
+            validDir.x ? 1.0 / absDir.x : 0.0,
+            validDir.y ? 1.0 / absDir.y : 0.0,
+            validDir.z ? 1.0 / absDir.z : 0.0
+        ) * signDir;
+
+        vec3 n = m * (pos - boxCen);
+        vec3 k = abs(m) * boxLen;
+
+        vec3 v0 = -n - k;
+        vec3 v1 = -n + k;
+
+        // replace invalid axes with -inf and +inf so the tests below ignore them
+        v0 = mix(vec3(-1.0 / 0.0000001), v0, validDir);
+        v1 = mix(vec3(1.0 / 0.0000001), v1, validDir);
+
+        axis0 = (v0.x > v0.y) ? ((v0.x > v0.z) ? 0 : 2) : ((v0.y > v0.z) ? 1 : 2);
+        axis1 = (v1.x < v1.y) ? ((v1.x < v1.z) ? 0 : 2) : ((v1.y < v1.z) ? 1 : 2);
+
+        t0 = v0[axis0];
+        t1 = v1[axis1];
+
+        if (t0 > t1 || t1 < 0.0) {
+            return false;
+        }
+
+        return true;
+    }
+
+    float calcDepth(in vec3 pos, in mat4 viewProjection) {
+        vec4 v = viewProjection * vec4(pos, 1.0);
+        return (v.z / v.w) * 0.5 + 0.5;
+    }
+
+    uniform sampler2D blueNoiseTex32;
+    uniform mat4 matrix_viewProjection;
+    uniform vec3 boxCen;
+    uniform vec3 boxLen;
+
+    uniform vec3 near_origin;
+    uniform vec3 near_x;
+    uniform vec3 near_y;
+
+    uniform vec3 far_origin;
+    uniform vec3 far_x;
+    uniform vec3 far_y;
+
+    uniform vec2 targetSize;
+
+    bool writeDepth(float alpha) {
+        ivec2 uv = ivec2(gl_FragCoord.xy);
+        ivec2 size = textureSize(blueNoiseTex32, 0);
+        return alpha > texelFetch(blueNoiseTex32, uv % size, 0).y;
+    }
+
+    bool strips(vec3 pos, int axis) {
+        bvec3 b = lessThan(fract(pos * 2.0 + vec3(0.015)), vec3(0.03));
+        b[axis] = false;
+        return any(b);
+    }
+
+    void main() {
+        vec2 clip = gl_FragCoord.xy / targetSize;
+        vec3 worldNear = near_origin + near_x * clip.x + near_y * clip.y;
+        vec3 worldFar = far_origin + far_x * clip.x + far_y * clip.y;
+        vec3 rayDir = normalize(worldFar - worldNear);
+
+        float t0, t1;
+        int axis0, axis1;
+        if (!intersectBox(t0, t1, axis0, axis1, worldNear, rayDir, boxCen, boxLen)) {
+            gl_FragColor = vec4(1.0, 0.0, 0.0, 0.6);
+            return;
+        }
+
+        vec3 frontPos = worldNear + rayDir * t0;
+        bool front = t0 > 0.0 && strips(frontPos - boxCen, axis0);
+
+        vec3 backPos = worldNear + rayDir * t1;
+        bool back = strips(backPos - boxCen, axis1);
+
+        if (front) {
+            gl_FragColor = vec4(1.0, 1.0, 1.0, 0.6);
+            gl_FragDepth = writeDepth(0.6) ? calcDepth(frontPos, matrix_viewProjection) : 1.0;
+        } else if (back) {
+            gl_FragColor = vec4(0.0, 0.0, 0.0, 0.6);
+            gl_FragDepth = writeDepth(0.6) ? calcDepth(backPos, matrix_viewProjection) : 1.0;
+        } else {
+            discard;
+        }
+    }
+`;
+
+const v$2 = new Vec3();
+const bound$1 = new BoundingBox();
+class BoxShape extends Element {
+    _lenX = 2;
+    _lenY = 2;
+    _lenZ = 2;
+    pivot;
+    material;
+    constructor() {
+        super(ElementType.debug);
+        this.pivot = new Entity('boxPivot');
+        this.pivot.addComponent('render', {
+            type: 'box'
+        });
+    }
+    add() {
+        const material = new ShaderMaterial({
+            uniqueName: 'boxShape',
+            vertexGLSL: vertexShader$1,
+            fragmentGLSL: fragmentShader$1
+        });
+        material.cull = CULLFACE_FRONT;
+        material.blendState = new BlendState(true, BLENDEQUATION_ADD, BLENDMODE_SRC_ALPHA, BLENDMODE_ONE_MINUS_SRC_ALPHA, BLENDEQUATION_ADD, BLENDMODE_ONE, BLENDMODE_ONE_MINUS_SRC_ALPHA);
+        material.update();
+        this.pivot.render.meshInstances[0].material = material;
+        this.pivot.render.layers = [this.scene.worldLayer.id];
+        this.material = material;
+        this.scene.contentRoot.addChild(this.pivot);
+        this.updateBound();
+    }
+    remove() {
+        this.scene.contentRoot.removeChild(this.pivot);
+        this.scene.boundDirty = true;
+    }
+    destroy() {
+    }
+    serialize(serializer) {
+        serializer.packa(this.pivot.getWorldTransform().data);
+        serializer.pack(this.lenX);
+        serializer.pack(this.lenY);
+        serializer.pack(this.lenZ);
+    }
+    onPreRender() {
+        this.pivot.setLocalScale(this._lenX, this._lenY, this._lenZ);
+        this.pivot.getWorldTransform().getTranslation(v$2);
+        this.material.setParameter('boxCen', [v$2.x, v$2.y, v$2.z]);
+        this.material.setParameter('boxLen', [this._lenX * 0.5, this._lenY * 0.5, this._lenZ * 0.5]);
+        const device = this.scene.graphicsDevice;
+        device.scope.resolve('targetSize').setValue([device.width, device.height]);
+    }
+    moved() {
+        this.updateBound();
+    }
+    updateBound() {
+        bound$1.center.copy(this.pivot.getPosition());
+        bound$1.halfExtents.set(this._lenX, this._lenY, this._lenZ);
+        this.scene.boundDirty = true;
+    }
+    get worldBound() {
+        return bound$1;
+    }
+    set lenX(lenX) {
+        this._lenX = lenX;
+        this.updateBound();
+    }
+    get lenX() {
+        return this._lenX;
+    }
+    set lenY(lenY) {
+        this._lenY = lenY;
+        this.updateBound();
+    }
+    get lenY() {
+        return this._lenY;
+    }
+    set lenZ(lenZ) {
+        this._lenZ = lenZ;
+        this.updateBound();
+    }
+    get lenZ() {
+        return this._lenZ;
+    }
+}
+
+class BoxSelection {
+    activate;
+    deactivate;
+    active = false;
+    constructor(events, scene, canvasContainer) {
+        const box = new BoxShape();
+        const gizmo = new TranslateGizmo(scene.camera.camera, scene.gizmoLayer);
+        gizmo.on('render:update', () => {
+            scene.forceRender = true;
+        });
+        gizmo.on('transform:move', () => {
+            box.moved();
+        });
+        // ui
+        const selectToolbar = new Container({
+            class: 'select-toolbar',
+            hidden: true
+        });
+        selectToolbar.dom.addEventListener('pointerdown', (e) => {
+            e.stopPropagation();
+        });
+        const setButton = new Button({ text: 'Set', class: 'select-toolbar-button' });
+        const addButton = new Button({ text: 'Add', class: 'select-toolbar-button' });
+        const removeButton = new Button({ text: 'Remove', class: 'select-toolbar-button' });
+        const lenX = new NumericInput({
+            precision: 2,
+            value: box.lenX,
+            placeholder: 'LenX',
+            width: 80,
+            min: 0.01
+        });
+        const lenY = new NumericInput({
+            precision: 2,
+            value: box.lenY,
+            placeholder: 'LenY',
+            width: 80,
+            min: 0.01
+        });
+        const lenZ = new NumericInput({
+            precision: 2,
+            value: box.lenZ,
+            placeholder: 'LenZ',
+            width: 80,
+            min: 0.01
+        });
+        selectToolbar.append(setButton);
+        selectToolbar.append(addButton);
+        selectToolbar.append(removeButton);
+        selectToolbar.append(lenX);
+        selectToolbar.append(lenY);
+        selectToolbar.append(lenZ);
+        canvasContainer.append(selectToolbar);
+        const apply = (op) => {
+            const p = box.pivot.getPosition();
+            events.fire('select.byBox', op, [p.x, p.y, p.z, box.lenX, box.lenY, box.lenZ]);
+        };
+        setButton.dom.addEventListener('pointerdown', (e) => {
+            e.stopPropagation();
+            apply('set');
+        });
+        addButton.dom.addEventListener('pointerdown', (e) => {
+            e.stopPropagation();
+            apply('add');
+        });
+        removeButton.dom.addEventListener('pointerdown', (e) => {
+            e.stopPropagation();
+            apply('remove');
+        });
+        lenX.on('change', () => {
+            box.lenX = lenX.value;
+        });
+        lenY.on('change', () => {
+            box.lenY = lenY.value;
+        });
+        lenZ.on('change', () => {
+            box.lenZ = lenZ.value;
+        });
+        events.on('camera.focalPointPicked', (details) => {
+            if (this.active) {
+                box.pivot.setPosition(details.position);
+                gizmo.attach([box.pivot]);
+            }
+        });
+        const updateGizmoSize = () => {
+            const { camera, canvas } = scene;
+            if (camera.ortho) {
+                gizmo.size = 1125 / canvas.clientHeight;
+            }
+            else {
+                gizmo.size = 1200 / Math.max(canvas.clientWidth, canvas.clientHeight);
+            }
+        };
+        updateGizmoSize();
+        events.on('camera.resize', updateGizmoSize);
+        events.on('camera.ortho', updateGizmoSize);
+        this.activate = () => {
+            this.active = true;
+            scene.add(box);
+            gizmo.attach([box.pivot]);
+            selectToolbar.hidden = false;
+        };
+        this.deactivate = () => {
+            selectToolbar.hidden = true;
+            gizmo.detach();
+            scene.remove(box);
+            this.active = false;
+        };
+    }
+}
+
+class BrushSelection {
+    activate;
+    deactivate;
+    constructor(events, parent, mask) {
+        // create svg
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.classList.add('tool-svg', 'hidden');
+        svg.id = 'brush-select-svg';
+        parent.appendChild(svg);
+        // create circle element
+        const circle = document.createElementNS(svg.namespaceURI, 'circle');
+        svg.appendChild(circle);
+        const { canvas, context } = mask;
+        let radius = 40;
+        circle.setAttribute('r', radius.toString());
+        const prev = { x: 0, y: 0 };
+        let dragId;
+        const update = (e) => {
+            const x = e.offsetX;
+            const y = e.offsetY;
+            circle.setAttribute('cx', x.toString());
+            circle.setAttribute('cy', y.toString());
+            if (dragId !== undefined) {
+                context.beginPath();
+                context.strokeStyle = '#f60';
+                context.lineCap = 'round';
+                context.lineWidth = radius * 2;
+                context.moveTo(prev.x, prev.y);
+                context.lineTo(x, y);
+                context.stroke();
+                prev.x = x;
+                prev.y = y;
+            }
+        };
+        const pointerdown = (e) => {
+            if (dragId === undefined && (e.pointerType === 'mouse' ? e.button === 0 : e.isPrimary)) {
+                e.preventDefault();
+                e.stopPropagation();
+                dragId = e.pointerId;
+                parent.setPointerCapture(dragId);
+                // initialize canvas
+                if (canvas.width !== parent.clientWidth || canvas.height !== parent.clientHeight) {
+                    canvas.width = parent.clientWidth;
+                    canvas.height = parent.clientHeight;
+                }
+                // clear canvas
+                context.clearRect(0, 0, canvas.width, canvas.height);
+                // display it
+                canvas.style.display = 'inline';
+                prev.x = e.offsetX;
+                prev.y = e.offsetY;
+                update(e);
+            }
+        };
+        const pointermove = (e) => {
+            if (dragId !== undefined) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            update(e);
+        };
+        const dragEnd = () => {
+            parent.releasePointerCapture(dragId);
+            dragId = undefined;
+            canvas.style.display = 'none';
+        };
+        const pointerup = async (e) => {
+            if (e.pointerId === dragId) {
+                e.preventDefault();
+                e.stopPropagation();
+                dragEnd();
+                await events.invoke('select.byMask', e.shiftKey ? 'add' : (e.ctrlKey ? 'remove' : 'set'), canvas, context);
+            }
+        };
+        const wheel = (e) => {
+            if (e.altKey || e.metaKey) {
+                const { deltaX, deltaY } = e;
+                events.fire((Math.abs(deltaX) > Math.abs(deltaY) ? deltaX : deltaY) > 0 ? 'tool.brushSelection.smaller' : 'tool.brushSelection.bigger');
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        };
+        this.activate = () => {
+            svg.classList.remove('hidden');
+            parent.style.display = 'block';
+            parent.addEventListener('pointerdown', pointerdown);
+            parent.addEventListener('pointermove', pointermove);
+            parent.addEventListener('pointerup', pointerup);
+            parent.addEventListener('wheel', wheel);
+        };
+        this.deactivate = () => {
+            // cancel active operation
+            if (dragId !== undefined) {
+                dragEnd();
+            }
+            svg.classList.add('hidden');
+            parent.style.display = 'none';
+            parent.removeEventListener('pointerdown', pointerdown);
+            parent.removeEventListener('pointermove', pointermove);
+            parent.removeEventListener('pointerup', pointerup);
+            parent.removeEventListener('wheel', wheel);
+        };
+        events.on('tool.brushSelection.smaller', () => {
+            radius = Math.max(1, radius / 1.05);
+            circle.setAttribute('r', radius.toString());
+        });
+        events.on('tool.brushSelection.bigger', () => {
+            radius = Math.min(500, radius * 1.05);
+            circle.setAttribute('r', radius.toString());
+        });
+    }
+}
+
+const clamp01 = (value) => Math.min(1, Math.max(0, value));
+class EyedropperSelection {
+    activate;
+    deactivate;
+    constructor(events, parent, canvasContainer) {
+        let pointerId = null;
+        let threshold = 0.2;
+        const selectToolbar = new Container({
+            class: 'select-toolbar',
+            hidden: true
+        });
+        selectToolbar.dom.addEventListener('pointerdown', (event) => {
+            event.stopPropagation();
+        });
+        const thresholdInput = new NumericInput({
+            value: threshold,
+            placeholder: 'Threshold',
+            width: 120,
+            precision: 3,
+            min: 0,
+            max: 1
+        });
+        selectToolbar.append(thresholdInput);
+        canvasContainer.append(selectToolbar);
+        const getPointerOp = (event) => {
+            if (event.shiftKey) {
+                return 'add';
+            }
+            if (event.ctrlKey) {
+                return 'remove';
+            }
+            return 'set';
+        };
+        // Convert pointer event to normalized coordinates within the parent element
+        const toNormalizedPoint = (event) => {
+            const width = parent.clientWidth || 1;
+            const height = parent.clientHeight || 1;
+            return {
+                x: clamp01(event.offsetX / width),
+                y: clamp01(event.offsetY / height)
+            };
+        };
+        const resetPointer = () => {
+            if (pointerId !== null) {
+                parent.releasePointerCapture(pointerId);
+                pointerId = null;
+            }
+        };
+        thresholdInput.on('change', () => {
+            threshold = clamp01(thresholdInput.value ?? threshold);
+        });
+        const pointerdown = (event) => {
+            if (pointerId === null && (event.pointerType === 'mouse' ? event.button === 0 : event.isPrimary)) {
+                event.preventDefault();
+                event.stopPropagation();
+                pointerId = event.pointerId;
+                parent.setPointerCapture(pointerId);
+            }
+        };
+        const pointermove = (event) => {
+            if (event.pointerId === pointerId) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+        };
+        const pointerup = async (event) => {
+            if (event.pointerId === pointerId) {
+                event.preventDefault();
+                event.stopPropagation();
+                await events.invoke('select.colorMatch', getPointerOp(event), toNormalizedPoint(event), threshold);
+                resetPointer();
+            }
+        };
+        const pointercancel = (event) => {
+            if (event.pointerId === pointerId) {
+                event.preventDefault();
+                event.stopPropagation();
+                resetPointer();
+            }
+        };
+        this.activate = () => {
+            parent.style.display = 'block';
+            selectToolbar.hidden = false;
+            parent.addEventListener('pointerdown', pointerdown);
+            parent.addEventListener('pointermove', pointermove);
+            parent.addEventListener('pointerup', pointerup);
+            parent.addEventListener('pointercancel', pointercancel);
+        };
+        this.deactivate = () => {
+            parent.style.display = 'none';
+            selectToolbar.hidden = true;
+            resetPointer();
+            parent.removeEventListener('pointerdown', pointerdown);
+            parent.removeEventListener('pointermove', pointermove);
+            parent.removeEventListener('pointerup', pointerup);
+            parent.removeEventListener('pointercancel', pointercancel);
+        };
+    }
+}
+
+const RED = 0;
+const BLUE = 2;
+const ALPHA = 3;
+const PIXEL = 4;
+class FloodSelection {
+    activate;
+    deactivate;
+    constructor(events, parent, mask, canvasContainer) {
+        // create canvas
+        const { canvas, context } = mask;
+        let threshold = 0.2;
+        let point;
+        let imageData;
+        // ui
+        const selectToolbar = new Container({
+            class: 'select-toolbar',
+            hidden: true
+        });
+        selectToolbar.dom.addEventListener('pointerdown', (e) => {
+            e.stopPropagation();
+        });
+        const thresholdInput = new NumericInput({
+            value: threshold,
+            placeholder: 'Threshold',
+            width: 120,
+            precision: 3,
+            min: 0.001,
+            max: 0.999
+        });
+        selectToolbar.append(thresholdInput);
+        canvasContainer.append(selectToolbar);
+        const apply = async (op) => {
+            await events.invoke('select.byMask', op, canvas, context);
+        };
+        const refreshSelection = async () => {
+            if (!point)
+                return;
+            const width = parent.clientWidth;
+            const height = parent.clientHeight;
+            if (!imageData || canvas.width !== width || canvas.height !== height) {
+                canvas.width = width;
+                canvas.height = height;
+                imageData = context.createImageData(width, height);
+            }
+            const data = await events.invoke('render.offscreen', width, height);
+            let current = {
+                ...point
+            };
+            const start = (current.y * width + current.x) * PIXEL;
+            let idx = start;
+            const pickedOpacity = data[idx + ALPHA];
+            const testPixels = [current];
+            const d = imageData.data;
+            d.fill(102);
+            while (testPixels.length > 0) {
+                current = testPixels.pop();
+                idx = (current.y * width + current.x) * PIXEL;
+                if (Math.abs(data[idx + 3] - pickedOpacity) < threshold * 255) {
+                    d[idx + RED] = 255;
+                    d[idx + BLUE] = 0;
+                    d[idx + ALPHA] = 255;
+                    if (current.x > 0 && d[idx - PIXEL + ALPHA] === 102)
+                        testPixels.push({ x: current.x - 1, y: current.y });
+                    if (current.x < width - 1 && d[idx + PIXEL + ALPHA] === 102)
+                        testPixels.push({ x: current.x + 1, y: current.y });
+                    if (current.y > 0 && d[idx - width * PIXEL + ALPHA] === 102)
+                        testPixels.push({ x: current.x, y: current.y - 1 });
+                    if (current.y < height - 1 && d[idx + width * PIXEL + ALPHA] === 102)
+                        testPixels.push({ x: current.x, y: current.y + 1 });
+                }
+                else {
+                    d[idx + ALPHA] = 0;
+                }
+            }
+            context.putImageData(imageData, 0, 0);
+        };
+        thresholdInput.on('change', () => {
+            threshold = thresholdInput.value;
+        });
+        const isPrimary = (e) => {
+            return e.pointerType === 'mouse' ? e.button === 0 : e.isPrimary;
+        };
+        let clicked = false;
+        const pointerdown = (e) => {
+            if (!clicked && isPrimary(e)) {
+                clicked = true;
+            }
+        };
+        const pointermove = (e) => {
+            clicked = false;
+        };
+        const pointerup = async (e) => {
+            if (clicked && isPrimary(e)) {
+                clicked = false;
+                point = {
+                    x: Math.floor(e.offsetX),
+                    y: Math.floor(e.offsetY)
+                };
+                await refreshSelection();
+                await apply(e.shiftKey ? 'add' : (e.ctrlKey ? 'remove' : 'set'));
+                context.clearRect(0, 0, canvas.width, canvas.height);
+            }
+        };
+        this.activate = () => {
+            parent.style.display = 'block';
+            selectToolbar.hidden = false;
+            canvasContainer.dom.addEventListener('pointerdown', pointerdown);
+            canvasContainer.dom.addEventListener('pointermove', pointermove);
+            canvasContainer.dom.addEventListener('pointerup', pointerup, true);
+        };
+        this.deactivate = () => {
+            parent.style.display = 'none';
+            selectToolbar.hidden = true;
+            canvasContainer.dom.removeEventListener('pointerdown', pointerdown);
+            canvasContainer.dom.removeEventListener('pointermove', pointermove);
+            canvasContainer.dom.removeEventListener('pointerup', pointerup);
+            point = undefined;
+        };
+    }
+}
+
+class LassoSelection {
+    activate;
+    deactivate;
+    constructor(events, parent, mask) {
+        // create svg
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.classList.add('tool-svg', 'hidden');
+        svg.id = 'lasso-select-svg';
+        parent.appendChild(svg);
+        // create polygon element
+        const polygon = document.createElementNS(svg.namespaceURI, 'polygon');
+        svg.appendChild(polygon);
+        const { canvas, context } = mask;
+        let points = [];
+        let currentPoint = null;
+        let lastPointTime = 0;
+        const dist = (a, b) => {
+            return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
+        };
+        const isClosed = () => {
+            return points.length > 1 && dist(currentPoint, points[0]) < 8;
+        };
+        const paint = () => {
+            polygon.setAttribute('points', [...points, currentPoint].reduce((prev, current) => `${prev}${current.x}, ${current.y} `, ''));
+            polygon.setAttribute('stroke', isClosed() ? '#fa6' : '#f60');
+        };
+        let dragId;
+        const update = (e) => {
+            currentPoint = { x: e.offsetX, y: e.offsetY };
+            const distance = points.length === 0 ? 0 : dist(currentPoint, points[points.length - 1]);
+            const millis = Date.now() - lastPointTime;
+            const preventCorners = distance > 20;
+            const slowNarrowSpacing = millis > 500 && distance > 2;
+            const fasterMediumSpacing = millis > 200 && distance > 10;
+            const firstPoints = points.length === 0;
+            if (dragId !== undefined && (preventCorners || slowNarrowSpacing || fasterMediumSpacing || firstPoints)) {
+                points.push(currentPoint);
+                lastPointTime = Date.now();
+            }
+            paint();
+        };
+        const commitSelection = async (e) => {
+            // initialize canvas
+            if (canvas.width !== parent.clientWidth || canvas.height !== parent.clientHeight) {
+                canvas.width = parent.clientWidth;
+                canvas.height = parent.clientHeight;
+            }
+            // clear canvas
+            context.clearRect(0, 0, canvas.width, canvas.height);
+            context.beginPath();
+            context.fillStyle = '#f60';
+            context.beginPath();
+            points.forEach((p, idx) => {
+                if (idx === 0) {
+                    context.moveTo(p.x, p.y);
+                }
+                else {
+                    context.lineTo(p.x, p.y);
+                }
+            });
+            context.closePath();
+            context.fill();
+            // wait for selection to complete
+            await events.invoke('select.byMask', e.shiftKey ? 'add' : (e.ctrlKey ? 'remove' : 'set'), canvas, context);
+        };
+        const pointerdown = (e) => {
+            if (dragId === undefined && (e.pointerType === 'mouse' ? e.button === 0 : e.isPrimary)) {
+                e.preventDefault();
+                e.stopPropagation();
+                dragId = e.pointerId;
+                parent.setPointerCapture(dragId);
+                update(e);
+            }
+        };
+        const pointermove = (e) => {
+            if (dragId !== undefined) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            update(e);
+        };
+        const dragEnd = () => {
+            parent.releasePointerCapture(dragId);
+            dragId = undefined;
+        };
+        const pointerup = async (e) => {
+            if (e.pointerId === dragId) {
+                e.preventDefault();
+                e.stopPropagation();
+                // wait for selection to complete before clearing polygon
+                await commitSelection(e);
+                dragEnd();
+                points = [];
+                paint();
+            }
+        };
+        this.activate = () => {
+            svg.classList.remove('hidden');
+            parent.style.display = 'block';
+            parent.addEventListener('pointerdown', pointerdown);
+            parent.addEventListener('pointermove', pointermove);
+            parent.addEventListener('pointerup', pointerup);
+        };
+        this.deactivate = () => {
+            // cancel active operation
+            if (dragId !== undefined) {
+                dragEnd();
+            }
+            svg.classList.add('hidden');
+            parent.style.display = 'none';
+            parent.removeEventListener('pointerdown', pointerdown);
+            parent.removeEventListener('pointermove', pointermove);
+            parent.removeEventListener('pointerup', pointerup);
+        };
+    }
+}
+
+const mat$2 = new Mat4();
+const mat1 = new Mat4();
+const mat2$1 = new Mat4();
+const mat3 = new Mat4();
+const p = new Vec3();
+const p0 = new Vec3();
+const p1 = new Vec3();
+const r = new Quat();
+const s = new Vec3();
+const t = new Transform$1();
+class MeasureTransformHandler {
+    activate() { }
+    deactivate() { }
+}
+class MeasureTool {
+    activate;
+    deactivate;
+    constructor(events, scene, parent, canvasContainer) {
+        // create svg
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.classList.add('tool-svg', 'hidden');
+        svg.id = 'measure-tool-svg';
+        parent.appendChild(svg);
+        const ns = svg.namespaceURI;
+        // create defs node
+        const defs = document.createElementNS(ns, 'defs');
+        // create line element
+        const line = document.createElementNS(ns, 'line');
+        line.id = 'measure-line';
+        defs.appendChild(line);
+        const lineBottom = document.createElementNS(ns, 'use');
+        lineBottom.id = 'measure-line-bottom';
+        lineBottom.setAttribute('href', '#measure-line');
+        const lineTop = document.createElementNS(ns, 'use');
+        lineTop.id = 'measure-line-top';
+        lineTop.setAttribute('href', '#measure-line');
+        // create line ends
+        const lineStart = document.createElementNS(ns, 'circle');
+        lineStart.id = 'measure-line-start';
+        const lineEnd = document.createElementNS(ns, 'circle');
+        lineEnd.id = 'measure-line-end';
+        svg.appendChild(defs);
+        svg.appendChild(lineBottom);
+        svg.appendChild(lineTop);
+        svg.appendChild(lineStart);
+        svg.appendChild(lineEnd);
+        // ui
+        const lengthLabel = new Label();
+        i18n.bindText(lengthLabel, 'measure.length');
+        const lengthInput = new NumericInput({
+            width: 90,
+            placeholder: 'm',
+            precision: 2,
+            min: 0.0001,
+            value: 0
+        });
+        let suppressUI = 0;
+        const selectToolbar = new Container({
+            class: 'select-toolbar',
+            hidden: true
+        });
+        selectToolbar.dom.addEventListener('pointerdown', (e) => {
+            e.stopPropagation();
+        });
+        selectToolbar.append(lengthLabel);
+        selectToolbar.append(lengthInput);
+        canvasContainer.append(selectToolbar);
+        const gizmo = new TranslateGizmo(scene.camera.camera, scene.gizmoLayer);
+        const entity = new Entity('measureGizmoPivot');
+        const transformHandler = new MeasureTransformHandler();
+        let active = false;
+        let splat;
+        // get world space point
+        const getPoint = (index, result) => {
+            splat.worldTransform.transformPoint(splat.measurePoints[index], result);
+        };
+        const getPoint2d = (index, result) => {
+            getPoint(index, result);
+            scene.camera.worldToScreen(result, result);
+            result.x *= canvasContainer.dom.clientWidth;
+            result.y *= canvasContainer.dom.clientHeight;
+        };
+        const updateVisuals = () => {
+            gizmo.detach();
+            if (splat && active && splat.measureSelection >= 0 && splat.measureSelection < splat.measurePoints.length) {
+                getPoint(splat.measureSelection, p);
+                t.set(p, Quat.IDENTITY, Vec3.ONE);
+                events.invoke('pivot').place(t);
+                entity.setLocalPosition(p);
+                gizmo.attach(entity);
+            }
+            if (splat && splat.measurePoints.length === 2) {
+                getPoint(0, p0);
+                getPoint(1, p1);
+                const len = p0.distance(p1);
+                suppressUI++;
+                lengthInput.value = len;
+                lengthInput.enabled = true;
+                suppressUI--;
+            }
+            else {
+                lengthInput.enabled = false;
+            }
+        };
+        gizmo.on('render:update', () => {
+            scene.forceRender = true;
+        });
+        gizmo.on('transform:start', () => {
+            events.invoke('pivot').start();
+        });
+        gizmo.on('transform:move', () => {
+            events.invoke('pivot').moveTRS(entity.getLocalPosition(), entity.getLocalRotation(), entity.getLocalScale());
+        });
+        gizmo.on('transform:end', () => {
+            events.invoke('pivot').end();
+        });
+        events.on('selection.changed', (selection) => {
+            splat = selection;
+            if (active) {
+                // for now we always deactivate the tool so the current transform handler remains in place
+                events.fire('tool.deactivate');
+            }
+        });
+        events.on('pivot.started', () => {
+        });
+        events.on('pivot.moved', () => {
+            if (active && splat && splat.measureSelection >= 0 && splat.measureSelection < splat.measurePoints.length) {
+                const p = events.invoke('pivot').transform.position;
+                mat$2.invert(splat.worldTransform);
+                mat$2.transformPoint(p, splat.measurePoints[splat.measureSelection]);
+            }
+            scene.forceRender = true;
+        });
+        events.on('pivot.ended', () => {
+            if (active && splat && splat.measureSelection >= 0 && splat.measureSelection < splat.measurePoints.length) {
+                updateVisuals();
+            }
+        });
+        const origTransform = new Mat4();
+        const origP = new Vec3();
+        const origR = new Quat();
+        const origS = new Vec3();
+        const mid = new Vec3();
+        let startLen = 0;
+        const startScale = () => {
+            if (!splat || splat.measurePoints.length !== 2) {
+                return;
+            }
+            origTransform.copy(splat.worldTransform);
+            origP.copy(splat.entity.getLocalPosition());
+            origR.copy(splat.entity.getLocalRotation());
+            origS.copy(splat.entity.getLocalScale());
+            getPoint(0, p0);
+            getPoint(1, p1);
+            mid.sub2(p1, p0);
+            startLen = mid.length();
+            mid.mulScalar(0.5).add(p0);
+        };
+        // position and scale the splat according to the new length
+        const applyLength = (newLength) => {
+            if (!splat || splat.measurePoints.length !== 2 || newLength <= 0) {
+                return;
+            }
+            const scale = newLength / startLen;
+            // calculate mid point
+            p.copy(mid);
+            // construct a transform matrix that scales from p by len * 0.5
+            mat1.setTranslate(-p.x, -p.y, -p.z);
+            mat2$1.setScale(scale, scale, scale);
+            mat3.setTranslate(p.x, p.y, p.z);
+            mat$2.mul2(mat1, origTransform);
+            mat$2.mul2(mat2$1, mat$2);
+            mat$2.mul2(mat3, mat$2);
+            mat$2.getTranslation(p);
+            r.setFromMat4(mat$2);
+            mat$2.getScale(s);
+            splat.entity.setLocalPosition(p);
+            splat.entity.setLocalRotation(r);
+            splat.entity.setLocalScale(s);
+            scene.forceRender = true;
+        };
+        const endScale = () => {
+            const top = new EntityTransformOp({
+                splat: splat,
+                oldt: new Transform$1(origP, origR, origS),
+                newt: new Transform$1(splat.entity.getLocalPosition(), splat.entity.getLocalRotation(), splat.entity.getLocalScale())
+            });
+            events.fire('edit.add', top);
+            updateVisuals();
+        };
+        let dragging = false;
+        // handle length input updates
+        lengthInput.on('slider:mousedown', () => {
+            startScale();
+            dragging = true;
+        });
+        lengthInput.on('change', (value) => {
+            if (dragging) {
+                applyLength(value);
+            }
+            else if (!suppressUI) {
+                startScale();
+                applyLength(value);
+                endScale();
+            }
+        });
+        lengthInput.on('slider:mouseup', () => {
+            endScale();
+            dragging = false;
+        });
+        events.on('select.delete', () => {
+            if (active && splat && splat.measureSelection >= 0 && splat.measureSelection < splat.measurePoints.length) {
+                splat.measurePoints.splice(splat.measureSelection, 1);
+                splat.measureSelection--;
+                updateVisuals();
+            }
+        });
+        const isPrimary = (e) => {
+            return e.pointerType === 'mouse' ? e.button === 0 : e.isPrimary;
+        };
+        let clicked = false;
+        const pointerdown = (e) => {
+            if (!clicked && isPrimary(e)) {
+                clicked = true;
+            }
+        };
+        const pointermove = (e) => {
+            clicked = false;
+        };
+        const pointerup = async (e) => {
+            if (splat && clicked && isPrimary(e)) {
+                clicked = false;
+                let closestIdx = -1;
+                // check for intersection with existing point
+                for (let i = 0; i < splat.measurePoints.length; i++) {
+                    getPoint2d(i, p);
+                    if (Math.abs(p.x - e.offsetX) < 8 && Math.abs(p.y - e.offsetY) < 8) {
+                        closestIdx = i;
+                        break;
+                    }
+                }
+                if (closestIdx >= 0) {
+                    splat.measureSelection = closestIdx;
+                    updateVisuals();
+                    return;
+                }
+                if (splat.measurePoints.length < 2) {
+                    const result = await scene.camera.intersect(e.offsetX / canvasContainer.dom.clientWidth, e.offsetY / canvasContainer.dom.clientHeight);
+                    if (result) {
+                        mat$2.invert(splat.worldTransform);
+                        mat$2.transformPoint(result.position, p);
+                        splat.measureSelection = splat.measurePoints.length;
+                        splat.measurePoints.push(p.clone());
+                        updateVisuals();
+                    }
+                }
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        };
+        events.on('postrender', () => {
+            if (active && splat) {
+                line.setAttribute('visibility', splat.measurePoints.length > 1 ? 'visible' : 'hidden');
+                for (let i = 0; i < 2; i++) {
+                    if (i < splat.measurePoints.length) {
+                        getPoint2d(i, p);
+                        const x = p.x.toString();
+                        const y = p.y.toString();
+                        if (i === 0) {
+                            line.setAttribute('x1', x);
+                            line.setAttribute('y1', y);
+                            lineStart.setAttribute('cx', x);
+                            lineStart.setAttribute('cy', y);
+                            lineStart.setAttribute('visibility', 'visible');
+                        }
+                        else if (i === 1) {
+                            line.setAttribute('x2', x);
+                            line.setAttribute('y2', y);
+                            lineEnd.setAttribute('cx', x);
+                            lineEnd.setAttribute('cy', y);
+                            lineEnd.setAttribute('visibility', 'visible');
+                        }
+                    }
+                    else {
+                        if (i === 0) {
+                            lineStart.setAttribute('visibility', 'hidden');
+                        }
+                        else {
+                            lineEnd.setAttribute('visibility', 'hidden');
+                        }
+                    }
+                }
+            }
+            else {
+                line.setAttribute('visibility', 'hidden');
+                lineStart.setAttribute('visibility', 'hidden');
+                lineEnd.setAttribute('visibility', 'hidden');
+            }
+        });
+        const updateGizmoSize = () => {
+            const { camera, canvas } = scene;
+            if (camera.ortho) {
+                gizmo.size = 1125 / canvas.clientHeight;
+            }
+            else {
+                gizmo.size = 1200 / Math.max(canvas.clientWidth, canvas.clientHeight);
+            }
+        };
+        updateGizmoSize();
+        events.on('camera.resize', updateGizmoSize);
+        events.on('camera.ortho', updateGizmoSize);
+        this.activate = () => {
+            active = true;
+            updateVisuals();
+            canvasContainer.dom.addEventListener('pointerdown', pointerdown);
+            canvasContainer.dom.addEventListener('pointermove', pointermove);
+            canvasContainer.dom.addEventListener('pointerup', pointerup, true);
+            selectToolbar.hidden = false;
+            parent.style.display = 'block';
+            parent.classList.add('noevents');
+            svg.classList.remove('hidden');
+            events.fire('transformHandler.push', transformHandler);
+        };
+        this.deactivate = () => {
+            active = false;
+            updateVisuals();
+            canvasContainer.dom.removeEventListener('pointerdown', pointerdown);
+            canvasContainer.dom.removeEventListener('pointermove', pointermove);
+            canvasContainer.dom.removeEventListener('pointerup', pointerup);
+            selectToolbar.hidden = true;
+            parent.style.display = 'none';
+            parent.classList.remove('noevents');
+            svg.classList.add('hidden');
+            events.fire('transformHandler.pop');
+        };
+    }
+}
+
+class TransformTool {
+    activate;
+    deactivate;
+    constructor(gizmo, events, scene) {
+        let pivot;
+        let active = false;
+        let dragging = false;
+        // create the transform pivot
+        const pivotEntity = new Entity('gizmoPivot');
+        scene.app.root.addChild(pivotEntity);
+        gizmo.on('render:update', () => {
+            scene.forceRender = true;
+        });
+        gizmo.on('transform:start', () => {
+            dragging = true;
+            pivot.start();
+        });
+        gizmo.on('transform:move', () => {
+            pivot.moveTRS(pivotEntity.getLocalPosition(), pivotEntity.getLocalRotation(), pivotEntity.getLocalScale());
+            scene.forceRender = true;
+        });
+        gizmo.on('transform:end', () => {
+            pivot.end();
+            dragging = false;
+        });
+        // reattach the gizmo to the pivot
+        const reattach = () => {
+            if (!active || !events.invoke('selection')) {
+                if (gizmo.enabled) {
+                    gizmo.detach();
+                }
+            }
+            else if (!dragging) {
+                pivot = events.invoke('pivot');
+                pivotEntity.setLocalPosition(pivot.transform.position);
+                pivotEntity.setLocalRotation(pivot.transform.rotation);
+                pivotEntity.setLocalScale(pivot.transform.scale);
+                gizmo.attach([pivotEntity]);
+            }
+        };
+        events.on('tool.coordSpace', (coordSpace) => {
+            gizmo.coordSpace = coordSpace;
+        });
+        // set the gizmo size to remain a constant size in screen space.
+        // called in response to changes in canvas size
+        const updateGizmoSize = () => {
+            const { camera, canvas } = scene;
+            if (camera.ortho) {
+                gizmo.size = 1125 / canvas.clientHeight;
+            }
+            else {
+                gizmo.size = 1200 / Math.max(canvas.clientWidth, canvas.clientHeight);
+            }
+        };
+        updateGizmoSize();
+        events.on('camera.resize', updateGizmoSize);
+        events.on('camera.ortho', updateGizmoSize);
+        this.activate = () => {
+            active = true;
+            reattach();
+            events.on('pivot.placed', reattach);
+            events.on('pivot.moved', reattach);
+            events.on('selection.changed', reattach);
+        };
+        this.deactivate = () => {
+            active = false;
+            reattach();
+            events.off('pivot.placed', reattach);
+            events.off('pivot.moved', reattach);
+            events.off('selection.changed', reattach);
+        };
+        // initialize coodinate space
+        gizmo.coordSpace = events.invoke('tool.coordSpace');
+    }
+}
+
+class MoveTool extends TransformTool {
+    constructor(events, scene) {
+        const gizmo = new TranslateGizmo(scene.camera.camera, scene.gizmoLayer);
+        super(gizmo, events, scene);
+    }
+}
+
+class PolygonSelection {
+    activate;
+    deactivate;
+    constructor(events, parent, mask) {
+        // create svg
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.classList.add('tool-svg', 'hidden');
+        svg.id = 'polygon-select-svg';
+        parent.appendChild(svg);
+        // create polyline element
+        const polyline = document.createElementNS(svg.namespaceURI, 'polyline');
+        svg.appendChild(polyline);
+        // create canvas
+        const { canvas, context } = mask;
+        let points = [];
+        let currentPoint = null;
+        let active = false;
+        const dist = (a, b) => {
+            return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
+        };
+        const isClosed = () => {
+            return points.length > 1 && dist(currentPoint, points[0]) < 8;
+        };
+        const paint = () => {
+            polyline.setAttribute('points', [...points, currentPoint].filter(v => v).reduce((prev, current) => `${prev}${current.x}, ${current.y} `, ''));
+            polyline.setAttribute('stroke', isClosed() ? '#fa6' : '#f60');
+        };
+        const commitSelection = async (e) => {
+            // initialize canvas
+            if (canvas.width !== parent.clientWidth || canvas.height !== parent.clientHeight) {
+                canvas.width = parent.clientWidth;
+                canvas.height = parent.clientHeight;
+            }
+            // clear canvas
+            context.clearRect(0, 0, canvas.width, canvas.height);
+            context.beginPath();
+            context.fillStyle = '#f60';
+            context.beginPath();
+            points.forEach((p, idx) => {
+                if (idx === 0) {
+                    context.moveTo(p.x, p.y);
+                }
+                else {
+                    context.lineTo(p.x, p.y);
+                }
+            });
+            context.closePath();
+            context.fill();
+            // wait for selection to complete
+            await events.invoke('select.byMask', e.shiftKey ? 'add' : (e.ctrlKey ? 'remove' : 'set'), canvas, context);
+            // clear polygon after selection completes
+            points = [];
+            paint();
+        };
+        const pointermove = (e) => {
+            currentPoint = { x: e.offsetX, y: e.offsetY };
+            if (points.length > 0) {
+                paint();
+            }
+        };
+        const pointerdown = (e) => {
+            if (points.length > 0 || (e.pointerType === 'mouse' ? e.button === 0 : e.isPrimary)) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        };
+        const pointerup = async (e) => {
+            if (e.pointerType === 'mouse' ? e.button === 0 : e.isPrimary) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (isClosed()) {
+                    await commitSelection(e);
+                }
+                else if (points.length === 0 || dist(points[points.length - 1], currentPoint) > 0) {
+                    points.push(currentPoint);
+                }
+            }
+        };
+        const dblclick = async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (points.length > 2) {
+                await commitSelection(e);
+            }
+        };
+        const keydown = (e) => {
+            // ignore when focus is elsewhere (input fields, modals, etc.)
+            if (e.target !== document.body)
+                return;
+            if (e.key === 'Enter' && points.length > 2) {
+                e.preventDefault();
+                e.stopPropagation();
+                // ignore held-key repeats so a single commit runs at a time
+                if (!e.repeat) {
+                    commitSelection(e);
+                }
+            }
+        };
+        // remove the last placed point, returning whether a point was removed
+        events.function('polygonSelection.removeLastPoint', () => {
+            if (active && points.length > 0) {
+                points.pop();
+                paint();
+                return true;
+            }
+            return false;
+        });
+        this.activate = () => {
+            active = true;
+            svg.classList.remove('hidden');
+            parent.style.display = 'block';
+            parent.addEventListener('pointerdown', pointerdown);
+            parent.addEventListener('pointermove', pointermove);
+            parent.addEventListener('pointerup', pointerup);
+            parent.addEventListener('dblclick', dblclick);
+            // capture phase so enter commits the polygon before the shortcut handlers run
+            document.addEventListener('keydown', keydown, true);
+        };
+        this.deactivate = () => {
+            // cancel active operation
+            active = false;
+            svg.classList.add('hidden');
+            parent.style.display = 'none';
+            parent.removeEventListener('pointerdown', pointerdown);
+            parent.removeEventListener('pointermove', pointermove);
+            parent.removeEventListener('pointerup', pointerup);
+            parent.removeEventListener('dblclick', dblclick);
+            document.removeEventListener('keydown', keydown, true);
+            points = [];
+            paint();
+        };
+    }
+}
+
+class RectSelection {
+    activate;
+    deactivate;
+    constructor(events, parent) {
+        // create svg
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.classList.add('tool-svg', 'hidden');
+        svg.id = 'rect-select-svg';
+        parent.appendChild(svg);
+        // create rect element
+        const rect = document.createElementNS(svg.namespaceURI, 'rect');
+        svg.appendChild(rect);
+        const start = { x: 0, y: 0 };
+        const end = { x: 0, y: 0 };
+        let dragId;
+        let dragMoved = false;
+        const updateRect = () => {
+            const x = Math.min(start.x, end.x);
+            const y = Math.min(start.y, end.y);
+            const width = Math.abs(start.x - end.x);
+            const height = Math.abs(start.y - end.y);
+            rect.setAttribute('x', x.toString());
+            rect.setAttribute('y', y.toString());
+            rect.setAttribute('width', width.toString());
+            rect.setAttribute('height', height.toString());
+        };
+        const pointerdown = (e) => {
+            if (dragId === undefined && (e.pointerType === 'mouse' ? e.button === 0 : e.isPrimary)) {
+                e.preventDefault();
+                e.stopPropagation();
+                dragId = e.pointerId;
+                dragMoved = false;
+                parent.setPointerCapture(dragId);
+                start.x = end.x = e.offsetX;
+                start.y = end.y = e.offsetY;
+                updateRect();
+                svg.classList.remove('hidden');
+            }
+        };
+        const pointermove = (e) => {
+            if (e.pointerId === dragId) {
+                e.preventDefault();
+                e.stopPropagation();
+                dragMoved = true;
+                end.x = e.offsetX;
+                end.y = e.offsetY;
+                updateRect();
+            }
+        };
+        const dragEnd = () => {
+            parent.releasePointerCapture(dragId);
+            dragId = undefined;
+            svg.classList.add('hidden');
+        };
+        const pointerup = async (e) => {
+            if (e.pointerId === dragId) {
+                e.preventDefault();
+                e.stopPropagation();
+                const w = parent.clientWidth;
+                const h = parent.clientHeight;
+                if (dragMoved) {
+                    // rect select - wait for selection to complete before hiding rect
+                    await events.invoke('select.rect', e.shiftKey ? 'add' : (e.ctrlKey ? 'remove' : 'set'), {
+                        start: { x: Math.min(start.x, end.x) / w, y: Math.min(start.y, end.y) / h },
+                        end: { x: Math.max(start.x, end.x) / w, y: Math.max(start.y, end.y) / h }
+                    });
+                }
+                else {
+                    // pick - wait for selection to complete before hiding rect
+                    await events.invoke('select.point', e.shiftKey ? 'add' : (e.ctrlKey ? 'remove' : 'set'), { x: e.offsetX / parent.clientWidth, y: e.offsetY / parent.clientHeight });
+                }
+                dragEnd();
+            }
+        };
+        this.activate = () => {
+            parent.style.display = 'block';
+            parent.addEventListener('pointerdown', pointerdown);
+            parent.addEventListener('pointermove', pointermove);
+            parent.addEventListener('pointerup', pointerup);
+        };
+        this.deactivate = () => {
+            if (dragId !== undefined) {
+                dragEnd();
+            }
+            parent.style.display = 'none';
+            parent.removeEventListener('pointerdown', pointerdown);
+            parent.removeEventListener('pointermove', pointermove);
+            parent.removeEventListener('pointerup', pointerup);
+        };
+    }
+    destroy() {
+    }
+}
+
+class RotateTool extends TransformTool {
+    constructor(events, scene) {
+        const gizmo = new RotateGizmo(scene.camera.camera, scene.gizmoLayer);
+        gizmo.rotationMode = 'orbit';
+        super(gizmo, events, scene);
+    }
+}
+
+class ScaleTool extends TransformTool {
+    constructor(events, scene) {
+        const gizmo = new ScaleGizmo(scene.camera.camera, scene.gizmoLayer);
+        // disable everything except uniform scale
+        ['x', 'y', 'z', 'yz', 'xz', 'xy'].forEach((axis) => {
+            gizmo.enableShape(axis, false);
+        });
+        // set lower bound on scale
+        gizmo.lowerBoundScale.set(1e-6, 1e-6, 1e-6);
+        super(gizmo, events, scene);
+    }
+}
+
+const vertexShader = /* glsl */ `
+    attribute vec3 vertex_position;
+
+    uniform mat4 matrix_model;
+    uniform mat4 matrix_viewProjection;
+
+    void main() {
+        gl_Position = matrix_viewProjection * matrix_model * vec4(vertex_position, 1.0);
+    }
+`;
+const fragmentShader = /* glsl */ `
+    bool intersectSphere(out float t0, out float t1, vec3 pos, vec3 dir, vec4 sphere) {
+        vec3 L = sphere.xyz - pos;
+        float tca = dot(L, dir);
+
+        float d2 = sphere.w * sphere.w - (dot(L, L) - tca * tca);
+        if (d2 <= 0.0) {
+            return false;
+        }
+
+        float thc = sqrt(d2);
+        t0 = tca - thc;
+        t1 = tca + thc;
+        if (t1 <= 0.0) {
+            return false;
+        }
+
+        return true;
+    }
+
+    float calcDepth(in vec3 pos, in mat4 viewProjection) {
+        vec4 v = viewProjection * vec4(pos, 1.0);
+        return (v.z / v.w) * 0.5 + 0.5;
+    }
+
+    vec2 calcAzimuthElev(in vec3 dir) {
+        float azimuth = atan(dir.z, dir.x);
+        float elev = asin(dir.y);
+        return vec2(azimuth, elev) * 180.0 / 3.14159;
+    }
+
+    uniform sampler2D blueNoiseTex32;
+    uniform mat4 matrix_viewProjection;
+    uniform vec4 sphere;
+
+    uniform vec3 near_origin;
+    uniform vec3 near_x;
+    uniform vec3 near_y;
+
+    uniform vec3 far_origin;
+    uniform vec3 far_x;
+    uniform vec3 far_y;
+
+    uniform vec2 targetSize;
+
+    bool writeDepth(float alpha) {
+        vec2 uv = fract(gl_FragCoord.xy / 32.0);
+        float noise = texture2DLod(blueNoiseTex32, uv, 0.0).y;
+        return alpha > noise;
+    }
+
+    bool strips(vec3 lp) {
+        vec2 ae = calcAzimuthElev(normalize(lp));
+
+        float spacing = 180.0 / (2.0 * 3.14159 * sphere.w);
+        float size = 0.03;
+        return fract(ae.x / spacing) < size ||
+               fract(ae.y / spacing) < size;
+    }
+
+    void main() {
+        vec2 clip = gl_FragCoord.xy / targetSize;
+        vec3 worldNear = near_origin + near_x * clip.x + near_y * clip.y;
+        vec3 worldFar = far_origin + far_x * clip.x + far_y * clip.y;
+
+        vec3 rayDir = normalize(worldFar - worldNear);
+
+        float t0, t1;
+        if (!intersectSphere(t0, t1, worldNear, rayDir, sphere)) {
+            discard;
+        }
+
+        vec3 frontPos = worldNear + rayDir * t0;
+        bool front = t0 > 0.0 && strips(frontPos - sphere.xyz);
+
+        vec3 backPos = worldNear + rayDir * t1;
+        bool back = strips(backPos - sphere.xyz);
+
+        if (front) {
+            gl_FragColor = vec4(1.0, 1.0, 1.0, 0.6);
+            gl_FragDepth = writeDepth(0.6) ? calcDepth(frontPos, matrix_viewProjection) : 1.0;
+        } else if (back) {
+            gl_FragColor = vec4(0.0, 0.0, 0.0, 0.6);
+            gl_FragDepth = writeDepth(0.6) ? calcDepth(backPos, matrix_viewProjection) : 1.0;
+        } else {
+            discard;
+        }
+    }
+`;
+
+const v$1 = new Vec3();
+const bound = new BoundingBox();
+class SphereShape extends Element {
+    _radius = 1;
+    pivot;
+    material;
+    constructor() {
+        super(ElementType.debug);
+        this.pivot = new Entity('spherePivot');
+        this.pivot.addComponent('render', {
+            type: 'box'
+        });
+        const r = this._radius * 2;
+        this.pivot.setLocalScale(r, r, r);
+    }
+    add() {
+        const material = new ShaderMaterial({
+            uniqueName: 'sphereShape',
+            vertexGLSL: vertexShader,
+            fragmentGLSL: fragmentShader
+        });
+        material.cull = CULLFACE_FRONT;
+        material.blendState = new BlendState(true, BLENDEQUATION_ADD, BLENDMODE_SRC_ALPHA, BLENDMODE_ONE_MINUS_SRC_ALPHA, BLENDEQUATION_ADD, BLENDMODE_ONE, BLENDMODE_ONE_MINUS_SRC_ALPHA);
+        material.update();
+        this.pivot.render.meshInstances[0].material = material;
+        this.pivot.render.layers = [this.scene.worldLayer.id];
+        this.material = material;
+        this.scene.contentRoot.addChild(this.pivot);
+        this.updateBound();
+    }
+    remove() {
+        this.scene.contentRoot.removeChild(this.pivot);
+        this.scene.boundDirty = true;
+    }
+    destroy() {
+    }
+    serialize(serializer) {
+        serializer.packa(this.pivot.getWorldTransform().data);
+        serializer.pack(this.radius);
+    }
+    onPreRender() {
+        this.pivot.getWorldTransform().getTranslation(v$1);
+        this.material.setParameter('sphere', [v$1.x, v$1.y, v$1.z, this.radius]);
+        const device = this.scene.graphicsDevice;
+        device.scope.resolve('targetSize').setValue([device.width, device.height]);
+    }
+    moved() {
+        this.updateBound();
+    }
+    updateBound() {
+        bound.center.copy(this.pivot.getPosition());
+        bound.halfExtents.set(this.radius, this.radius, this.radius);
+        this.scene.boundDirty = true;
+    }
+    get worldBound() {
+        return bound;
+    }
+    set radius(radius) {
+        this._radius = radius;
+        const r = this._radius * 2;
+        this.pivot.setLocalScale(r, r, r);
+        this.updateBound();
+    }
+    get radius() {
+        return this._radius;
+    }
+}
+
+class SphereSelection {
+    activate;
+    deactivate;
+    active = false;
+    constructor(events, scene, canvasContainer) {
+        const sphere = new SphereShape();
+        const gizmo = new TranslateGizmo(scene.camera.camera, scene.gizmoLayer);
+        gizmo.on('render:update', () => {
+            scene.forceRender = true;
+        });
+        gizmo.on('transform:move', () => {
+            sphere.moved();
+        });
+        // ui
+        const selectToolbar = new Container({
+            class: 'select-toolbar',
+            hidden: true
+        });
+        selectToolbar.dom.addEventListener('pointerdown', (e) => {
+            e.stopPropagation();
+        });
+        const setButton = new Button({ text: 'Set', class: 'select-toolbar-button' });
+        const addButton = new Button({ text: 'Add', class: 'select-toolbar-button' });
+        const removeButton = new Button({ text: 'Remove', class: 'select-toolbar-button' });
+        const radius = new NumericInput({
+            precision: 2,
+            value: sphere.radius,
+            placeholder: 'Radius',
+            width: 80,
+            min: 0.01
+        });
+        selectToolbar.append(setButton);
+        selectToolbar.append(addButton);
+        selectToolbar.append(removeButton);
+        selectToolbar.append(radius);
+        canvasContainer.append(selectToolbar);
+        const apply = (op) => {
+            const p = sphere.pivot.getPosition();
+            events.fire('select.bySphere', op, [p.x, p.y, p.z, sphere.radius]);
+        };
+        setButton.dom.addEventListener('pointerdown', (e) => {
+            e.stopPropagation();
+            apply('set');
+        });
+        addButton.dom.addEventListener('pointerdown', (e) => {
+            e.stopPropagation();
+            apply('add');
+        });
+        removeButton.dom.addEventListener('pointerdown', (e) => {
+            e.stopPropagation();
+            apply('remove');
+        });
+        radius.on('change', () => {
+            sphere.radius = radius.value;
+        });
+        events.on('camera.focalPointPicked', (details) => {
+            if (this.active) {
+                sphere.pivot.setPosition(details.position);
+                gizmo.attach([sphere.pivot]);
+            }
+        });
+        const updateGizmoSize = () => {
+            const { camera, canvas } = scene;
+            if (camera.ortho) {
+                gizmo.size = 1125 / canvas.clientHeight;
+            }
+            else {
+                gizmo.size = 1200 / Math.max(canvas.clientWidth, canvas.clientHeight);
+            }
+        };
+        updateGizmoSize();
+        events.on('camera.resize', updateGizmoSize);
+        events.on('camera.ortho', updateGizmoSize);
+        this.activate = () => {
+            this.active = true;
+            scene.add(sphere);
+            gizmo.attach([sphere.pivot]);
+            selectToolbar.hidden = false;
+        };
+        this.deactivate = () => {
+            selectToolbar.hidden = true;
+            gizmo.detach();
+            scene.remove(sphere);
+            this.active = false;
+        };
+    }
+}
+
+class ToolManager {
+    tools = new Map();
+    events;
+    active = null;
+    constructor(events) {
+        this.events = events;
+        this.events.on('tool.deactivate', () => {
+            this.activate(null);
+        });
+        this.events.function('tool.active', () => {
+            return this.active;
+        });
+        let coordSpace = 'world';
+        const setCoordSpace = (space) => {
+            if (space !== coordSpace) {
+                coordSpace = space;
+                events.fire('tool.coordSpace', coordSpace);
+            }
+        };
+        events.function('tool.coordSpace', () => {
+            return coordSpace;
+        });
+        events.on('tool.setCoordSpace', (value) => {
+            setCoordSpace(value);
+        });
+        events.on('tool.toggleCoordSpace', () => {
+            setCoordSpace(coordSpace === 'local' ? 'world' : 'local');
+        });
+    }
+    register(name, tool) {
+        this.tools.set(name, tool);
+        this.events.on(`tool.${name}`, () => {
+            this.activate(name);
+        });
+    }
+    get(toolName) {
+        return (toolName && this.tools.get(toolName)) ?? null;
+    }
+    activate(toolName) {
+        if (toolName === this.active) {
+            // re-activating the currently active tool deactivates it
+            if (toolName) {
+                this.activate(null);
+            }
+        }
+        else {
+            // deactive old tool
+            if (this.active) {
+                const tool = this.tools.get(this.active);
+                tool.deactivate();
+                this.events.fire(`tool.${this.active}.deactivated`);
+                this.events.fire('tool.deactivated', this.active);
+            }
+            this.active = toolName;
+            // activate the new
+            if (this.active) {
+                const tool = this.tools.get(this.active);
+                tool.activate();
+            }
+            this.events.fire(`tool.${toolName}.activated`);
+            this.events.fire('tool.activated', toolName);
+        }
+    }
+}
+
+/**
+ * Manages the active animation track and provides undo-wrapped
+ * key operations. Resolves which track the user is interacting
+ * with and ensures all mutations are undoable.
+ *
+ * For now, the active track is always the camera track.
+ * When selection-based switching is added, getActiveTrack()
+ * will inspect the current selection.
+ */
+const registerTrackManagerEvents = (events) => {
+    // Get the animation track of the currently active element.
+    // For now, always returns the camera animation track.
+    const getActiveTrack = () => {
+        return events.invoke('camera.animTrack') ?? null;
+    };
+    // Helper: execute an edit on the active track wrapped in undo.
+    // The editFn must return true if it modified the track, false if it was a no-op.
+    const trackEdit = (name, editFn) => {
+        const track = getActiveTrack();
+        if (!track)
+            return;
+        const before = track.snapshot();
+        if (!editFn(track))
+            return;
+        const after = track.snapshot();
+        events.fire('edit.add', new AnimTrackEditOp(name, track, before, after), true);
+    };
+    // Get keys from active track
+    events.function('track.keys', () => {
+        const track = getActiveTrack();
+        return track ? track.keys : [];
+    });
+    // Add key to active track
+    events.on('track.addKey', (frame) => {
+        const keyFrame = frame ?? events.invoke('timeline.frame');
+        trackEdit('addKey', track => track.addKey(keyFrame));
+    });
+    // Remove key from active track
+    events.on('track.removeKey', (frame) => {
+        const keyFrame = frame ?? events.invoke('timeline.frame');
+        trackEdit('removeKey', track => track.removeKey(keyFrame));
+    });
+    // Move key in active track
+    events.on('track.moveKey', (fromFrame, toFrame) => {
+        trackEdit('moveKey', track => track.moveKey(fromFrame, toFrame));
+    });
+    // Copy key in active track
+    events.on('track.copyKey', (fromFrame, toFrame) => {
+        trackEdit('copyKey', track => track.copyKey(fromFrame, toFrame));
+    });
+};
+
+const mat$1 = new Mat4();
+const quat = new Quat();
+const transform$1 = new Transform$1();
+class EntityTransformHandler {
+    events;
+    splat;
+    top;
+    pop;
+    bindMat = new Mat4();
+    constructor(events) {
+        this.events = events;
+        events.on('pivot.started', (pivot) => {
+            if (this.splat) {
+                this.start();
+            }
+        });
+        events.on('pivot.moved', (pivot) => {
+            if (this.splat) {
+                this.update(pivot.transform);
+            }
+        });
+        events.on('pivot.ended', (pivot) => {
+            if (this.splat) {
+                this.end();
+            }
+        });
+        events.on('pivot.origin', (mode) => {
+            if (this.splat) {
+                this.placePivot();
+            }
+        });
+        events.on('camera.focalPointPicked', (details) => {
+            if (this.splat && ['move', 'rotate', 'scale'].includes(this.events.invoke('tool.active'))) {
+                const pivot = events.invoke('pivot');
+                const newt = new Transform$1(details.position, pivot.transform.rotation, pivot.transform.scale);
+                const op = new PlacePivotOp({ pivot, oldt: pivot.transform.clone(), newt });
+                events.fire('edit.add', op);
+            }
+        });
+    }
+    placePivot() {
+        // place initial pivot point
+        const origin = this.events.invoke('pivot.origin');
+        this.splat.getPivot(origin === 'center' ? 'center' : 'boundCenter', false, transform$1);
+        this.events.invoke('pivot').place(transform$1);
+    }
+    activate() {
+        this.splat = this.events.invoke('selection');
+        if (this.splat) {
+            this.placePivot();
+        }
+    }
+    deactivate() {
+        this.splat = null;
+    }
+    start() {
+        const pivot = this.events.invoke('pivot');
+        const { transform } = pivot;
+        const { entity } = this.splat;
+        // calculate bind matrix
+        this.bindMat.setTRS(transform.position, transform.rotation, transform.scale);
+        this.bindMat.invert();
+        this.bindMat.mul2(this.bindMat, entity.getLocalTransform());
+        const p = entity.getLocalPosition();
+        const r = entity.getLocalRotation();
+        const s = entity.getLocalScale();
+        // create op
+        this.top = new EntityTransformOp({
+            splat: this.splat,
+            oldt: new Transform$1(p, r, s),
+            newt: new Transform$1(p, r, s)
+        });
+        this.pop = new PlacePivotOp({
+            pivot,
+            oldt: transform.clone(),
+            newt: transform.clone()
+        });
+    }
+    update(transform) {
+        mat$1.setTRS(transform.position, transform.rotation, transform.scale);
+        mat$1.mul2(mat$1, this.bindMat);
+        quat.setFromMat4(mat$1);
+        const t = mat$1.getTranslation();
+        const r = quat;
+        const s = mat$1.getScale();
+        this.splat.move(t, r, s);
+        this.top.newt.set(t, r, s);
+        this.pop.newt.copy(transform);
+    }
+    end() {
+        // if anything changed then register the op with undo/redo system
+        const { oldt, newt } = this.top;
+        if (!oldt.equals(newt)) {
+            this.events.fire('edit.add', new MultiOp([this.top, this.pop]));
+        }
+        this.top = null;
+        this.pop = null;
+    }
+}
+
+// stores the transform pivot location in world space
+// the transform tools (translate, rotate, scale) and transform panel modify this pivot
+// then the active transform handler applies the changes to the current selection.
+class Pivot {
+    transform = new Transform$1();
+    place;
+    start;
+    move;
+    moveTRS;
+    end;
+    constructor(events) {
+        this.place = (transform) => {
+            if (!this.transform.equals(transform)) {
+                this.transform.copy(transform);
+                events.fire('pivot.placed', this);
+            }
+        };
+        this.start = () => {
+            events.fire('pivot.started', this);
+        };
+        this.move = (transform) => {
+            if (!this.transform.equals(transform)) {
+                this.transform.copy(transform);
+                events.fire('pivot.moved', this);
+            }
+        };
+        this.moveTRS = (position, rotation, scale) => {
+            if (!this.transform.equalsTRS(position, rotation, scale)) {
+                this.transform.set(position, rotation, scale);
+                events.fire('pivot.moved', this);
+            }
+        };
+        this.end = () => {
+            events.fire('pivot.ended', this);
+        };
+    }
+}
+const registerPivotEvents = (events) => {
+    const pivot = new Pivot(events);
+    events.function('pivot', () => {
+        return pivot;
+    });
+    // pivot mode
+    let origin = 'center';
+    const setOrigin = (o) => {
+        if (o !== origin) {
+            origin = o;
+            events.fire('pivot.origin', origin);
+        }
+    };
+    events.function('pivot.origin', () => {
+        return origin;
+    });
+    events.on('pivot.setOrigin', (o) => {
+        setOrigin(o === 'center' ? 'center' : 'boundCenter');
+    });
+    events.on('pivot.toggleOrigin', () => {
+        setOrigin(origin === 'center' ? 'boundCenter' : 'center');
+    });
+};
+
+const mat = new Mat4();
+const mat2 = new Mat4();
+const transform = new Transform$1();
+class SplatsTransformHandler {
+    events;
+    splat;
+    pivotStart = new Transform$1();
+    localToPivot = new Mat4();
+    worldToLocal = new Mat4();
+    transform = new Mat4();
+    paletteMap = new Map();
+    constructor(events) {
+        this.events = events;
+        events.on('pivot.started', (pivot) => {
+            if (this.splat) {
+                this.start();
+            }
+        });
+        events.on('pivot.moved', (pivot) => {
+            if (this.splat) {
+                this.update(pivot.transform);
+            }
+        });
+        events.on('pivot.ended', (pivot) => {
+            if (this.splat) {
+                this.end();
+            }
+        });
+        events.on('selection.changed', (splat) => {
+            if (this.splat && splat === this.splat) {
+                this.placePivot();
+            }
+        });
+        events.on('pivot.origin', (mode) => {
+            if (this.splat) {
+                this.placePivot();
+            }
+        });
+        events.on('camera.focalPointPicked', (details) => {
+            if (this.splat && ['move', 'rotate', 'scale'].includes(this.events.invoke('tool.active'))) {
+                const pivot = events.invoke('pivot');
+                const oldt = pivot.transform.clone();
+                const newt = new Transform$1(details.position, pivot.transform.rotation, pivot.transform.scale);
+                const op = new PlacePivotOp({ pivot, oldt, newt });
+                events.fire('edit.add', op);
+            }
+        });
+    }
+    placePivot() {
+        const origin = this.events.invoke('pivot.origin');
+        this.splat.getPivot(origin === 'center' ? 'center' : 'boundCenter', true, transform);
+        this.events.invoke('pivot').place(transform);
+    }
+    activate() {
+        this.splat = this.events.invoke('selection');
+        if (this.splat) {
+            this.placePivot();
+        }
+    }
+    deactivate() {
+        this.splat = null;
+    }
+    start() {
+        const pivot = this.events.invoke('pivot');
+        const { transform } = pivot;
+        const { splat } = this;
+        const { transformPalette } = splat;
+        mat.setTRS(transform.position, transform.rotation, transform.scale);
+        // calculate local -> pivot transform
+        this.localToPivot.invert(mat);
+        this.localToPivot.mul2(this.localToPivot, splat.entity.getLocalTransform());
+        // calculate the world -> local transform
+        this.worldToLocal.invert(splat.entity.getLocalTransform());
+        this.pivotStart.copy(transform);
+        // allocate a new transform for the current selection
+        const state = splat.splatData.getProp('state');
+        const indices = splat.transformTexture.lock();
+        const { paletteMap } = this;
+        paletteMap.clear();
+        for (let i = 0; i < state.length; ++i) {
+            if (state[i] === State.selected) {
+                const oldIdx = indices[i];
+                let newIdx;
+                if (!paletteMap.has(oldIdx)) {
+                    newIdx = transformPalette.alloc();
+                    paletteMap.set(oldIdx, newIdx);
+                }
+                else {
+                    newIdx = paletteMap.get(oldIdx);
+                }
+                indices[i] = newIdx;
+            }
+        }
+        splat.transformTexture.unlock();
+        // initialize transforms
+        this.paletteMap.forEach((newIdx, oldIdx) => {
+            transformPalette.getTransform(oldIdx, mat);
+            transformPalette.setTransform(newIdx, mat);
+        });
+        splat.selectionAlpha = 0;
+        splat.scene.outline.enabled = false;
+        splat.scene.underlay.enabled = false;
+    }
+    update(transform) {
+        // calculate updated new pivot -> world transform
+        mat.setTRS(transform.position, transform.rotation, transform.scale);
+        mat.mul2(mat, this.localToPivot); // local -> world
+        mat.mul2(this.worldToLocal, mat); // world -> local
+        this.transform.copy(mat);
+        // update the transform palette
+        const { transformPalette } = this.splat;
+        this.paletteMap.forEach((newIdx, oldIdx) => {
+            transformPalette.getTransform(oldIdx, mat2);
+            mat2.mul2(mat, mat2);
+            transformPalette.setTransform(newIdx, mat2);
+        });
+        // route through the shared queue so overlapping drag ticks don't race
+        // on CalcBound's shared render targets / readback buffers. fire-and-
+        // forget is fine: the final bound is recomputed when end() awaits
+        // updatePositions -> updateSorting -> updateLocalBounds.
+        this.events.invoke('queue', () => this.splat.updateLocalBounds());
+    }
+    async end() {
+        const { splat, transform, paletteMap } = this;
+        // create op for splat transform (already applied to GPU during update())
+        const top = new SplatsTransformOp({
+            splat,
+            transform: transform.clone(),
+            paletteMap: new Map(paletteMap)
+        });
+        // create op for pivot placement
+        const pivot = this.events.invoke('pivot');
+        const oldt = this.pivotStart.clone();
+        const newt = pivot.transform.clone();
+        const pop = new PlacePivotOp({ pivot, newt, oldt });
+        // record the editop on the shared command queue BEFORE awaiting any async work.
+        // events.fire synchronously enqueues the add, so any subsequent undo/redo
+        // (e.g. user pressing Ctrl+Z while updatePositions is still resolving) is
+        // guaranteed to land AFTER this op on the queue — which means the undo will
+        // revert this transform operation rather than the prior selection op.
+        this.events.fire('edit.add', new MultiOp([top, pop]), true);
+        // enqueue the GPU readback onto the same shared queue so any subsequent
+        // undo/redo waits for it to finish before mutating the sorter's centers buffer.
+        // TODO: consider moving this to update() function above so splats are sorted correctly
+        // for render during drag (which is slower).
+        await this.events.invoke('queue', () => splat.updatePositions());
+        splat.selectionAlpha = 1;
+        splat.scene.outline.enabled = true;
+        splat.scene.underlay.enabled = true;
+    }
+}
+
+const registerTransformHandlerEvents = (events) => {
+    const transformHandlers = [];
+    const push = (handler) => {
+        if (transformHandlers.length > 0) {
+            const transformHandler = transformHandlers[transformHandlers.length - 1];
+            transformHandler.deactivate();
+        }
+        transformHandlers.push(handler);
+        handler.activate();
+    };
+    const pop = () => {
+        if (transformHandlers.length > 0) {
+            const transformHandler = transformHandlers.pop();
+            transformHandler.deactivate();
+        }
+        if (transformHandlers.length > 0) {
+            const transformHandler = transformHandlers[transformHandlers.length - 1];
+            transformHandler.activate();
+        }
+    };
+    // bind transform target when selection changes
+    const entityTransformHandler = new EntityTransformHandler(events);
+    const splatsTransformHandler = new SplatsTransformHandler(events);
+    const update = (splat) => {
+        pop();
+        if (splat) {
+            if (splat.numSelected > 0) {
+                push(splatsTransformHandler);
+            }
+            else {
+                push(entityTransformHandler);
+            }
+        }
+    };
+    events.on('selection.changed', update);
+    events.on('splat.stateChanged', update);
+    events.on('transformHandler.push', (handler) => {
+        push(handler);
+    });
+    events.on('transformHandler.pop', () => {
+        pop();
+    });
+    registerPivotEvents(events);
+};
+
+const corners = Array.from({ length: 8 }, () => new Vec3());
+const screenCorners = Array.from({ length: 8 }, () => new Vec3());
+const cornerInFront = new Array(8);
+const screenBoundCenter = new Vec3();
+const worldBoundCenter = new Vec3();
+const tmpVec = new Vec3();
+// indices into the 8-corner array, ordered as (sx, sy, sz) where each s is 0 or 1
+// corner index = sx*4 + sy*2 + sz
+const cornerIndex = (sx, sy, sz) => sx * 4 + sy * 2 + sz;
+// for each axis, the 4 pairs of corner indices that form the parallel edges along that axis
+const axisEdges = [
+    // X edges: vary sx from 0->1, hold sy, sz constant
+    [
+        [cornerIndex(0, 0, 0), cornerIndex(1, 0, 0)],
+        [cornerIndex(0, 0, 1), cornerIndex(1, 0, 1)],
+        [cornerIndex(0, 1, 0), cornerIndex(1, 1, 0)],
+        [cornerIndex(0, 1, 1), cornerIndex(1, 1, 1)]
+    ],
+    // Y edges
+    [
+        [cornerIndex(0, 0, 0), cornerIndex(0, 1, 0)],
+        [cornerIndex(0, 0, 1), cornerIndex(0, 1, 1)],
+        [cornerIndex(1, 0, 0), cornerIndex(1, 1, 0)],
+        [cornerIndex(1, 0, 1), cornerIndex(1, 1, 1)]
+    ],
+    // Z edges
+    [
+        [cornerIndex(0, 0, 0), cornerIndex(0, 0, 1)],
+        [cornerIndex(0, 1, 0), cornerIndex(0, 1, 1)],
+        [cornerIndex(1, 0, 0), cornerIndex(1, 0, 1)],
+        [cornerIndex(1, 1, 0), cornerIndex(1, 1, 1)]
+    ]
+];
+class BoundDimensionsOverlay {
+    constructor(events, scene, canvasContainer) {
+        const ns = 'http://www.w3.org/2000/svg';
+        const svg = document.createElementNS(ns, 'svg');
+        svg.classList.add('tool-svg', 'bound-dimensions-svg', 'hidden');
+        svg.id = 'bound-dimensions-svg';
+        canvasContainer.dom.appendChild(svg);
+        const labels = [];
+        for (let i = 0; i < 3; i++) {
+            const text = document.createElementNS(ns, 'text');
+            text.classList.add(['bound-dim-x', 'bound-dim-y', 'bound-dim-z'][i]);
+            text.setAttribute('text-anchor', 'middle');
+            text.setAttribute('dominant-baseline', 'middle');
+            svg.appendChild(text);
+            labels.push(text);
+        }
+        events.on('prerender', () => {
+            const selection = events.invoke('selection');
+            if (!selection ||
+                !selection.visible ||
+                !events.invoke('camera.boundDimensions')) {
+                svg.classList.add('hidden');
+                return;
+            }
+            svg.classList.remove('hidden');
+            const width = canvasContainer.dom.clientWidth;
+            const height = canvasContainer.dom.clientHeight;
+            const camera = scene.camera;
+            const transform = selection.entity.getWorldTransform();
+            const bound = selection.localBound;
+            const { center, halfExtents } = bound;
+            // compute 8 world-space corners
+            for (let i = 0; i < 8; i++) {
+                const sx = (i >> 2) & 1;
+                const sy = (i >> 1) & 1;
+                const sz = i & 1;
+                const local = corners[i];
+                local.set(center.x + (sx ? 1 : -1) * halfExtents.x, center.y + (sy ? 1 : -1) * halfExtents.y, center.z + (sz ? 1 : -1) * halfExtents.z);
+                transform.transformPoint(local, local);
+            }
+            // determine which corners are in front of the camera (for behind-camera culling)
+            const cameraPos = camera.mainCamera.getPosition();
+            const cameraFwd = camera.mainCamera.forward;
+            for (let i = 0; i < 8; i++) {
+                tmpVec.sub2(corners[i], cameraPos);
+                cornerInFront[i] = tmpVec.dot(cameraFwd) > 0;
+            }
+            // project all corners to screen
+            for (let i = 0; i < 8; i++) {
+                camera.worldToScreen(corners[i], screenCorners[i]);
+            }
+            // project bound center to screen (used to choose the outer-most edge)
+            transform.transformPoint(center, worldBoundCenter);
+            camera.worldToScreen(worldBoundCenter, screenBoundCenter);
+            const scx = screenBoundCenter.x * width;
+            const scy = screenBoundCenter.y * height;
+            for (let axis = 0; axis < 3; axis++) {
+                const edges = axisEdges[axis];
+                let bestEdge = -1;
+                let bestScore = -Infinity;
+                // pick the parallel edge on the outer silhouette: farthest screen-space distance
+                // from the projected box centroid. Ties are common in orthographic projection
+                // (opposite edges are exactly equidistant), so require a meaningful difference
+                // before swapping the chosen edge to avoid frame-to-frame flicker.
+                for (let e = 0; e < edges.length; e++) {
+                    const [a, b] = edges[e];
+                    if (!cornerInFront[a] || !cornerInFront[b])
+                        continue;
+                    const mxe = (screenCorners[a].x + screenCorners[b].x) * 0.5 * width;
+                    const mye = (screenCorners[a].y + screenCorners[b].y) * 0.5 * height;
+                    const dxe = mxe - scx;
+                    const dye = mye - scy;
+                    const score = dxe * dxe + dye * dye;
+                    if (score > bestScore + 1) {
+                        bestScore = score;
+                        bestEdge = e;
+                    }
+                }
+                const text = labels[axis];
+                if (bestEdge < 0) {
+                    // no parallel edge has both endpoints in front of the camera
+                    text.setAttribute('visibility', 'hidden');
+                    continue;
+                }
+                text.setAttribute('visibility', 'visible');
+                const [a, b] = edges[bestEdge];
+                const sa = screenCorners[a];
+                const sb = screenCorners[b];
+                // world-space edge length
+                const length = corners[a].distance(corners[b]);
+                // screen-space endpoints in pixels
+                const x0 = sa.x * width;
+                const y0 = sa.y * height;
+                const x1 = sb.x * width;
+                const y1 = sb.y * height;
+                const mx = (x0 + x1) * 0.5;
+                const my = (y0 + y1) * 0.5;
+                let theta = Math.atan2(y1 - y0, x1 - x0);
+                // flip 180° to keep text upright
+                if (Math.cos(theta) < 0) {
+                    theta += Math.PI;
+                }
+                // perpendicular offset so the label sits outside the box
+                const perpX = -Math.sin(theta);
+                const perpY = Math.cos(theta);
+                const toCenterX = scx - mx;
+                const toCenterY = scy - my;
+                const dot = perpX * toCenterX + perpY * toCenterY;
+                const sign = dot > 0 ? -1 : 1;
+                const offsetPx = 10;
+                const ox = perpX * offsetPx * sign;
+                const oy = perpY * offsetPx * sign;
+                const thetaDeg = theta * 180 / Math.PI;
+                text.setAttribute('transform', `translate(${(mx + ox).toFixed(1)}, ${(my + oy).toFixed(1)}) rotate(${thetaDeg.toFixed(1)})`);
+                text.textContent = length.toFixed(2);
+            }
+        });
+    }
+}
+
+class HistogramData {
+    bins;
+    numValues;
+    minValue;
+    maxValue;
+    constructor(numBins) {
+        this.bins = [];
+        for (let i = 0; i < numBins; ++i) {
+            this.bins.push({ selected: 0, unselected: 0 });
+        }
+        this.numValues = 0;
+        this.minValue = 0;
+        this.maxValue = 0;
+    }
+    bucketValue(bucket) {
+        return this.minValue + bucket * this.bucketSize;
+    }
+    get bucketSize() {
+        return (this.maxValue - this.minValue) / this.bins.length;
+    }
+    valueToBucket(value) {
+        const n = this.minValue === this.maxValue ? 0 : (value - this.minValue) / (this.maxValue - this.minValue);
+        return Math.min(this.bins.length - 1, Math.floor(n * this.bins.length));
+    }
+}
+class Histogram {
+    canvas;
+    context;
+    histogram;
+    pixelData;
+    events = new Events();
+    constructor(numBins, height) {
+        const canvas = document.createElement('canvas');
+        canvas.setAttribute('id', 'histogram-canvas');
+        canvas.width = numBins;
+        canvas.height = height;
+        canvas.style.width = '100%';
+        canvas.style.height = '100%';
+        const context = canvas.getContext('2d');
+        context.globalCompositeOperation = 'copy';
+        context.fillStyle = 'black';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        this.canvas = canvas;
+        this.context = context;
+        this.histogram = new HistogramData(numBins);
+        this.pixelData = context.createImageData(canvas.width, canvas.height);
+        let dragging = false;
+        let dragStart = 0;
+        let dragEnd = 0;
+        let activePointerId = -1;
+        const offsetToBucket = (offset) => {
+            const rect = this.canvas.getBoundingClientRect();
+            const bins = this.histogram.bins.length;
+            return Math.max(0, Math.min(bins - 1, Math.floor((offset - rect.left) / rect.width * bins)));
+        };
+        const bucketToOffset = (bucket) => {
+            const rect = this.canvas.getBoundingClientRect();
+            return bucket / this.histogram.bins.length * rect.width;
+        };
+        const updateHighlight = () => {
+            const rect = this.canvas.getBoundingClientRect();
+            const h = this.histogram;
+            const bins = h.bins.length;
+            const start = Math.min(dragStart, dragEnd);
+            const end = Math.max(dragStart, dragEnd);
+            // anchorEdge / cursorEdge are bucket-boundary indices in [0, bins].
+            // they identify the OUTER edges of the highlight rect: anchorEdge
+            // is the side closest to the click, cursorEdge is the side closest
+            // to the live pointer. when dragging right (or zero-width), anchor
+            // is the left edge of dragStart and cursor is the right edge of
+            // dragEnd; reversed when dragging left.
+            const draggingRight = dragEnd >= dragStart;
+            const anchorEdge = draggingRight ? dragStart : dragStart + 1;
+            const cursorEdge = draggingRight ? dragEnd + 1 : dragEnd;
+            const edgeX = (i) => i / bins * rect.width;
+            const edgeValue = (i) => h.minValue + i * h.bucketSize;
+            this.events.fire('highlight', {
+                x: bucketToOffset(start),
+                y: 0,
+                width: (end - start + 1) / bins * rect.width,
+                height: rect.height,
+                startBucket: start,
+                endBucket: end,
+                anchorBucket: dragStart,
+                cursorBucket: dragEnd,
+                anchorX: edgeX(anchorEdge),
+                cursorX: edgeX(cursorEdge),
+                anchorValue: edgeValue(anchorEdge),
+                cursorValue: edgeValue(cursorEdge)
+            });
+        };
+        // unify drag-end behavior so pointerup commits and pointercancel /
+        // lostpointercapture abort without leaving `dragging` stuck true. all
+        // three event paths funnel here, so the SVG highlight rect cannot be
+        // orphaned by a missed pointerup (e.g. release off-canvas, alt-tab,
+        // OS modal interrupt).
+        const endDrag = (commit, shiftKey = false, ctrlKey = false) => {
+            if (!dragging)
+                return;
+            dragging = false;
+            if (activePointerId !== -1) {
+                try {
+                    this.canvas.releasePointerCapture(activePointerId);
+                }
+                catch {
+                    // capture may already be lost (the very thing we're
+                    // recovering from); swallow.
+                }
+                activePointerId = -1;
+            }
+            if (commit) {
+                const op = shiftKey ? 'add' : (ctrlKey ? 'remove' : 'set');
+                this.events.fire('select', op, Math.min(dragStart, dragEnd), Math.max(dragStart, dragEnd));
+            }
+            else {
+                this.events.fire('cancelHighlight');
+            }
+        };
+        this.canvas.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const h = this.histogram;
+            if (h.numValues) {
+                this.canvas.setPointerCapture(e.pointerId);
+                activePointerId = e.pointerId;
+                dragging = true;
+                dragStart = dragEnd = offsetToBucket(e.clientX);
+                updateHighlight();
+            }
+        });
+        this.canvas.addEventListener('pointerup', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            endDrag(true, e.shiftKey, e.ctrlKey);
+        });
+        // pointercancel signals user intent to abort (OS modal, alt-tab,
+        // multi-touch, etc.). pointer is gone, nothing to commit.
+        this.canvas.addEventListener('pointercancel', () => endDrag(false));
+        // lostpointercapture is informational, not a user-intent signal. in the
+        // normal pointerup flow it fires AFTER our pointerup handler has run, by
+        // which time `dragging` is false and endDrag short-circuits. when it
+        // fires mid-drag without a prior pointerup (Chrome occasionally reorders
+        // these around DOM mutation / extension-injected events), the prior
+        // behaviour was to silently abort — which produces the "click sometimes
+        // doesn't register" symptom. commit instead, using the modifier state
+        // on the event so add/remove/set are preserved.
+        this.canvas.addEventListener('lostpointercapture', (e) => {
+            endDrag(true, e.shiftKey, e.ctrlKey);
+        });
+        this.canvas.addEventListener('pointermove', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const h = this.histogram;
+            if (h.numValues) {
+                if (dragging) {
+                    dragEnd = offsetToBucket(e.clientX);
+                    updateHighlight();
+                }
+                const rect = this.canvas.getBoundingClientRect();
+                const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+                const binIndex = Math.min(h.bins.length - 1, Math.floor(x * h.bins.length));
+                const bin = h.bins[binIndex];
+                // continuous (non-bucketed) value at the cursor's pixel x.
+                // x is already clamped to [0, 1] above.
+                const cursorValue = h.minValue + x * (h.maxValue - h.minValue);
+                this.events.fire('updateOverlay', {
+                    x: e.offsetX,
+                    y: e.offsetY,
+                    bucketIndex: binIndex,
+                    value: h.bucketValue(binIndex),
+                    size: h.bucketSize,
+                    cursorValue,
+                    selected: bin.selected,
+                    unselected: bin.unselected,
+                    total: h.numValues
+                });
+            }
+        });
+        this.canvas.addEventListener('pointerenter', () => {
+            this.events.fire('showOverlay');
+        });
+        this.canvas.addEventListener('pointerleave', () => {
+            this.events.fire('hideOverlay');
+        });
+    }
+    render(logScale) {
+        const canvas = this.canvas;
+        const context = this.context;
+        const pixelData = this.pixelData;
+        const pixels = new Uint32Array(pixelData.data.buffer);
+        const binMap = logScale ? (x) => Math.log(x + 1) : (x) => x;
+        const bins = this.histogram.bins.map((v) => {
+            return {
+                selected: binMap(v.unselected + v.selected),
+                unselected: binMap(v.unselected)
+            };
+        });
+        const binMax = bins.reduce((a, v) => Math.max(a, v.selected), 0);
+        let i = 0;
+        for (let y = 0; y < canvas.height; y++) {
+            for (let x = 0; x < bins.length; x++) {
+                const bin = bins[x];
+                const targetMin = binMax / canvas.height * (canvas.height - 1 - y);
+                if (targetMin >= bin.selected) {
+                    pixels[i++] = 0xff000000;
+                }
+                else {
+                    const targetMax = targetMin + binMax / canvas.height;
+                    if (bin.selected === bin.unselected || targetMax < bin.unselected) {
+                        pixels[i++] = 0xffff7777;
+                    }
+                    else {
+                        pixels[i++] = 0xff00ffff;
+                    }
+                }
+            }
+        }
+        context.putImageData(pixelData, 0, 0);
+    }
+    setData(options) {
+        const bins = this.histogram.bins;
+        const n = Math.min(bins.length, options.selected.length);
+        for (let i = 0; i < n; i++) {
+            bins[i].selected = options.selected[i];
+            bins[i].unselected = options.unselected[i];
+        }
+        this.histogram.numValues = options.numValues;
+        this.histogram.minValue = options.min;
+        this.histogram.maxValue = options.max;
+        this.render(options.logScale);
+    }
+}
+
+// gpu propMode constants. these must match the propMode dispatch in
+// src/shaders/splat-value-shader.ts.
+//
+// modes 5..7 and 18..20 read the final on-screen color (DC + evaluated SH for
+// the current view direction), so they are camera-dependent.
+// modes 66..68 read the raw f_dc_N coefficients reconstructed from the
+// already-decoded splatColor texture.
+const PROP_MODE = {
+    x: 0,
+    y: 1,
+    z: 2,
+    distance: 3,
+    'camera-depth': 4,
+    red: 5,
+    green: 6,
+    blue: 7,
+    opacity: 8,
+    scale_0: 9,
+    scale_1: 10,
+    scale_2: 11,
+    volume: 12,
+    'surface-area': 13,
+    rot_0: 14,
+    rot_1: 15,
+    rot_2: 16,
+    rot_3: 17,
+    hue: 18,
+    saturation: 19,
+    value: 20,
+    f_dc_0: 66,
+    f_dc_1: 67,
+    f_dc_2: 68
+};
+// f_rest_N maps to mode (21 + N). max 45 SH coefficients (shBands 3).
+const F_REST_BASE_MODE = 21;
+const SH_NUM_COEFFS = { 0: 0, 1: 3, 2: 8, 3: 15 };
+const propModeFor = (prop) => {
+    if (prop in PROP_MODE)
+        return PROP_MODE[prop];
+    const m = /^f_rest_(\d+)$/.exec(prop);
+    if (m)
+        return F_REST_BASE_MODE + parseInt(m[1], 10);
+    return undefined;
+};
+// final-color (DC + evaluated SH for current view direction) — depends on
+// world-space splat position, camera position and ColorGrade.
+const isFinalColorMode = (mode) => {
+    return (mode >= 5 && mode <= 7) || (mode >= 18 && mode <= 20);
+};
+// what kinds of state changes affect a given prop's histogram. mirrors the
+// previous per-event filtering, but consulted only inside hash().
+const isCameraDependentMode = (mode) => mode === 4 /* camera-depth */ || isFinalColorMode(mode);
+const isPositionDependentMode = (mode) => {
+    return mode === 0 || mode === 1 || mode === 2 || // x / y / z
+        mode === 3 || mode === 4 || // distance / camera-depth
+        isFinalColorMode(mode);
+};
+// ColorGrade-dependent. f_dc_* (raw DC, modes 66..68) bypasses ColorGrade.
+const isColorGradeDependentMode = (mode) => mode === 8 /* opacity */ || isFinalColorMode(mode);
+const hashInputs = (i) => {
+    const m = i.mode;
+    const camMatters = i.onScreenOnly || isCameraDependentMode(m);
+    const posMatters = isPositionDependentMode(m);
+    const cgMatters = isColorGradeDependentMode(m);
+    return `${i.splatId}|${m}|${i.onScreenOnly ? 1 : 0}|${i.logScale ? 1 : 0}|` +
+        `${camMatters ? i.cameraVersion : 0}|${i.stateVersion}|` +
+        `${cgMatters ? i.colorGradeVersion : 0}|${posMatters ? i.positionsVersion : 0}`;
+};
+class DataPanel extends Container {
+    constructor(events, tooltips, args = {}) {
+        args = {
+            ...args,
+            id: 'data-panel',
+            hidden: true,
+            flex: true,
+            flexDirection: 'row'
+        };
+        super(args);
+        // resize handle
+        const resizeHandle = document.createElement('div');
+        resizeHandle.id = 'data-panel-resize-handle';
+        this.dom.appendChild(resizeHandle);
+        let resizing = false;
+        let startY = 0;
+        let startHeight = 0;
+        resizeHandle.addEventListener('pointerdown', (event) => {
+            if (event.isPrimary) {
+                resizing = true;
+                startY = event.clientY;
+                startHeight = this.dom.offsetHeight;
+                resizeHandle.setPointerCapture(event.pointerId);
+                event.preventDefault();
+            }
+        });
+        resizeHandle.addEventListener('pointermove', (event) => {
+            if (resizing) {
+                const delta = startY - event.clientY;
+                const newHeight = Math.max(120, Math.min(1000, startHeight + delta));
+                this.dom.style.height = `${newHeight}px`;
+            }
+        });
+        resizeHandle.addEventListener('pointerup', (event) => {
+            if (resizing && event.isPrimary) {
+                resizeHandle.releasePointerCapture(event.pointerId);
+            }
+        });
+        resizeHandle.addEventListener('lostpointercapture', () => {
+            resizing = false;
+        });
+        // build the data controls
+        const controlsContainer = new Container({
+            id: 'data-controls-container'
+        });
+        const controls = new Container({
+            id: 'data-controls'
+        });
+        // track the selected data property
+        let selectedDataProp = 'x';
+        // data list box
+        const dataListBox = new Container({
+            id: 'data-list-box'
+        });
+        const logScale = new Container({
+            class: 'data-panel-toggle-row',
+            flex: true,
+            flexDirection: 'row'
+        });
+        const logScaleLabel = new Label({
+            class: 'data-panel-toggle-label'
+        });
+        i18n.bindText(logScaleLabel, 'panel.splat-data.log-scale');
+        const logScaleValue = new BooleanInput({
+            type: 'toggle',
+            class: 'data-panel-toggle',
+            value: false
+        });
+        logScale.append(logScaleLabel);
+        logScale.append(logScaleValue);
+        const showAll = new Container({
+            class: 'data-panel-toggle-row',
+            flex: true,
+            flexDirection: 'row'
+        });
+        const showAllLabel = new Label({
+            class: 'data-panel-toggle-label'
+        });
+        i18n.bindText(showAllLabel, 'panel.splat-data.show-all');
+        const showAllValue = new BooleanInput({
+            type: 'toggle',
+            class: 'data-panel-toggle',
+            value: false
+        });
+        showAll.append(showAllLabel);
+        showAll.append(showAllValue);
+        const onScreenOnly = new Container({
+            class: 'data-panel-toggle-row',
+            flex: true,
+            flexDirection: 'row'
+        });
+        const onScreenOnlyLabel = new Label({
+            class: 'data-panel-toggle-label'
+        });
+        i18n.bindText(onScreenOnlyLabel, 'panel.splat-data.on-screen-only');
+        const onScreenOnlyValue = new BooleanInput({
+            type: 'toggle',
+            class: 'data-panel-toggle',
+            value: false
+        });
+        onScreenOnly.append(onScreenOnlyLabel);
+        onScreenOnly.append(onScreenOnlyValue);
+        const populateDataSelector = (splat) => {
+            // default prop localizations - order defines display order. "red",
+            // "green", "blue" and HSV here are the final on-screen color (DC
+            // + evaluated SH for the current view direction).
+            const localizations = {
+                x: `${i18n.t('panel.splat-data.position')} X`,
+                y: `${i18n.t('panel.splat-data.position')} Y`,
+                z: `${i18n.t('panel.splat-data.position')} Z`,
+                opacity: i18n.t('panel.splat-data.opacity'),
+                red: i18n.t('panel.splat-data.red'),
+                green: i18n.t('panel.splat-data.green'),
+                blue: i18n.t('panel.splat-data.blue'),
+                scale_0: i18n.t('panel.splat-data.scale-x'),
+                scale_1: i18n.t('panel.splat-data.scale-y'),
+                scale_2: i18n.t('panel.splat-data.scale-z'),
+                rot_0: `${i18n.t('panel.splat-data.quat')} W`,
+                rot_1: `${i18n.t('panel.splat-data.quat')} X`,
+                rot_2: `${i18n.t('panel.splat-data.quat')} Y`,
+                rot_3: `${i18n.t('panel.splat-data.quat')} Z`,
+                distance: i18n.t('panel.splat-data.distance'),
+                'camera-depth': i18n.t('panel.splat-data.camera-depth'),
+                volume: i18n.t('panel.splat-data.volume'),
+                'surface-area': i18n.t('panel.splat-data.surface-area'),
+                hue: i18n.t('panel.splat-data.hue'),
+                saturation: i18n.t('panel.splat-data.saturation'),
+                value: i18n.t('panel.splat-data.value')
+            };
+            // "Show All" extras: raw DC coefficients first, then spherical
+            // harmonics coefficients labelled with their channel (R/G/B) and
+            // within-channel index. all filtered by the splat's actual SH band
+            // count so we never offer a mode the GPU shader can't decode.
+            const extras = {
+                f_dc_0: i18n.t('panel.splat-data.dc-red'),
+                f_dc_1: i18n.t('panel.splat-data.dc-green'),
+                f_dc_2: i18n.t('panel.splat-data.dc-blue')
+            };
+            const shBands = splat.entity.gsplat.instance.resource.shBands ?? 0;
+            const numCoeffs = SH_NUM_COEFFS[shBands] ?? 0;
+            const channels = ['R', 'G', 'B'];
+            const maxFRest = numCoeffs * 3;
+            for (let i = 0; i < maxFRest; i++) {
+                const channel = channels[Math.floor(i / numCoeffs)];
+                const idx = i % numCoeffs;
+                extras[`f_rest_${i}`] = `${channel} ${i18n.t('panel.splat-data.sh')} ${idx}`;
+            }
+            const dataProps = splat.splatData.getElement('vertex').properties.map(p => p.name);
+            const derivedProps = ['distance', 'camera-depth', 'volume', 'surface-area', 'red', 'green', 'blue', 'hue', 'saturation', 'value'];
+            const availableProps = new Set(dataProps.concat(derivedProps));
+            // build ordered default props from localizations keys, filtered to available
+            const defaultProps = Object.keys(localizations).filter(p => availableProps.has(p));
+            // build ordered extra props from extras keys, filtered to available
+            const extraProps = showAllValue.value ?
+                Object.keys(extras).filter(p => availableProps.has(p)) :
+                [];
+            const allProps = [...defaultProps, ...extraProps];
+            // if the current selection is no longer in the list (e.g. "All
+            // Properties" turned off after picking f_rest_5, or selection moved
+            // to a splat with fewer SH bands), fall back to the first available
+            // prop so inputs.mode doesn't stay pinned to an unsupported propMode
+            // with no active row to indicate it.
+            if (allProps.length > 0 && !allProps.includes(selectedDataProp)) {
+                selectedDataProp = allProps[0];
+                // eslint-disable-next-line no-use-before-define
+                inputs.mode = propModeFor(selectedDataProp) ?? 0;
+            }
+            // clear existing items
+            dataListBox.dom.innerHTML = '';
+            allProps.forEach((prop) => {
+                const item = document.createElement('div');
+                item.classList.add('data-list-item');
+                if (prop === selectedDataProp) {
+                    item.classList.add('active');
+                }
+                item.textContent = localizations[prop] ?? extras[prop] ?? prop;
+                item.addEventListener('click', () => {
+                    selectedDataProp = prop;
+                    // eslint-disable-next-line no-use-before-define
+                    inputs.mode = propModeFor(prop) ?? 0;
+                    dataListBox.dom.querySelectorAll('.data-list-item').forEach((el) => {
+                        el.classList.remove('active');
+                    });
+                    item.classList.add('active');
+                    tick(); // eslint-disable-line no-use-before-define
+                });
+                dataListBox.dom.appendChild(item);
+            });
+        };
+        // ordered: visible-only (histogram filter), log scale (histogram
+        // display), then all-properties (list filter, sitting right above the
+        // property list it affects).
+        controls.append(onScreenOnly);
+        controls.append(logScale);
+        controls.append(showAll);
+        controls.append(dataListBox);
+        // tooltips explain what each toggle actually does. registered on the
+        // row containers so the entire row (label + toggle) shares one
+        // hover target.
+        tooltips.register(onScreenOnly, () => i18n.t('tooltip.splat-data.on-screen-only'), 'right');
+        tooltips.register(logScale, () => i18n.t('tooltip.splat-data.log-scale'), 'right');
+        tooltips.register(showAll, () => i18n.t('tooltip.splat-data.show-all'), 'right');
+        controlsContainer.append(controls);
+        // build histogram
+        const histogram = new Histogram(256, 128);
+        const histogramContainer = new Container({
+            id: 'histogram-container'
+        });
+        // wrap the canvas, SVG highlight overlay and stats overlay so the
+        // parent can be a flex column with a fixed info row underneath. without
+        // this wrapper, the canvas's inline width/height:100% consumes the
+        // whole container and pushes the info row out of view.
+        const histogramCanvasArea = document.createElement('div');
+        histogramCanvasArea.id = 'histogram-canvas-area';
+        histogramCanvasArea.appendChild(histogram.canvas);
+        // top-right stats overlay: shows the aggregate counts for the hovered
+        // bucket or the drag range. pointer-events: none so it never blocks
+        // the canvas pointer interactions.
+        const statsOverlay = document.createElement('div');
+        statsOverlay.id = 'histogram-stats-overlay';
+        statsOverlay.style.display = 'none';
+        const statsCountRow = document.createElement('div');
+        statsCountRow.className = 'histogram-stats-row';
+        const statsCountLabel = document.createElement('span');
+        statsCountLabel.className = 'histogram-stats-label';
+        i18n.onChange(() => {
+            statsCountLabel.textContent = `${i18n.t('panel.splat-data.totals.splats')}:`;
+        });
+        const statsCountValue = document.createElement('span');
+        statsCountValue.className = 'histogram-stats-value';
+        statsCountRow.appendChild(statsCountLabel);
+        statsCountRow.appendChild(statsCountValue);
+        const statsSelectedRow = document.createElement('div');
+        statsSelectedRow.className = 'histogram-stats-row';
+        const statsSelectedLabel = document.createElement('span');
+        statsSelectedLabel.className = 'histogram-stats-label';
+        i18n.onChange(() => {
+            statsSelectedLabel.textContent = `${i18n.t('panel.splat-data.totals.selected')}:`;
+        });
+        const statsSelectedValue = document.createElement('span');
+        statsSelectedValue.className = 'histogram-stats-value';
+        statsSelectedRow.appendChild(statsSelectedLabel);
+        statsSelectedRow.appendChild(statsSelectedValue);
+        statsOverlay.appendChild(statsCountRow);
+        statsOverlay.appendChild(statsSelectedRow);
+        histogramCanvasArea.appendChild(statsOverlay);
+        histogramContainer.dom.appendChild(histogramCanvasArea);
+        // info row pinned underneath the histogram canvas. min sits left, max
+        // sits right. while hovering, the cursor label slides along to show
+        // the bucket value under the pointer. while dragging, the anchor label
+        // sits at the click position (where the drag started) and the cursor
+        // label tracks the live pointer, so the user can read start -> end.
+        const histogramInfoRow = document.createElement('div');
+        histogramInfoRow.id = 'histogram-info-row';
+        const histogramInfoMin = document.createElement('div');
+        histogramInfoMin.className = 'histogram-info-min';
+        const histogramInfoAnchor = document.createElement('div');
+        histogramInfoAnchor.className = 'histogram-info-anchor';
+        const histogramInfoCursor = document.createElement('div');
+        histogramInfoCursor.className = 'histogram-info-cursor';
+        const histogramInfoMax = document.createElement('div');
+        histogramInfoMax.className = 'histogram-info-max';
+        histogramInfoRow.appendChild(histogramInfoMin);
+        histogramInfoRow.appendChild(histogramInfoAnchor);
+        histogramInfoRow.appendChild(histogramInfoMax);
+        // cursor last so it stacks above min/max (same row, absolute positioning).
+        histogramInfoRow.appendChild(histogramInfoCursor);
+        histogramContainer.dom.appendChild(histogramInfoRow);
+        this.append(controlsContainer);
+        this.append(histogramContainer);
+        // current splat
+        let splat;
+        // rebuild the localized property list when the language changes
+        i18n.onChange(() => {
+            if (splat) {
+                populateDataSelector(splat);
+            }
+        });
+        let pendingToken = 0;
+        let lastGpuMode = 0;
+        let lastHash = '';
+        const viewProjection = new Mat4();
+        // single source of truth for everything that could trigger a refresh.
+        // subscribers update one field and call tick(); tick hashes the inputs
+        // (with per-mode dependency filtering) and only schedules a GPU pass
+        // when the hash actually changed.
+        const inputs = {
+            splatId: -1,
+            mode: 0,
+            onScreenOnly: false,
+            logScale: false,
+            cameraVersion: 0,
+            stateVersion: 0,
+            colorGradeVersion: 0,
+            positionsVersion: 0
+        };
+        const buildGpuOpts = () => {
+            const cam = splat.scene.camera.camera;
+            const opts = {
+                entityMatrix: splat.entity.getWorldTransform(),
+                viewMatrix: cam.viewMatrix,
+                cameraPos: splat.scene.camera.position
+            };
+            if (inputs.onScreenOnly) {
+                viewProjection.mul2(cam.projectionMatrix, cam.viewMatrix);
+                opts.viewProjection = viewProjection;
+                opts.onScreenOnly = true;
+            }
+            return opts;
+        };
+        const scheduleUpdate = () => {
+            if (!splat || this.hidden)
+                return;
+            const mode = inputs.mode;
+            const opts = buildGpuOpts();
+            // pendingToken collapses bursts of triggers within a single queue
+            // tick (e.g. rapid camera-settle + color-grade) so only the latest
+            // intent issues a GPU pass. ordering vs select / history mutations
+            // is provided by the shared command queue.
+            const myToken = ++pendingToken;
+            splat.scene.commandQueue.enqueue(async () => {
+                if (myToken !== pendingToken)
+                    return;
+                try {
+                    const result = await splat.scene.dataProcessor.calcHistogram(splat, mode, opts);
+                    if (myToken !== pendingToken)
+                        return;
+                    lastGpuMode = mode;
+                    histogram.setData({
+                        selected: result.selected,
+                        unselected: result.unselected,
+                        min: result.min,
+                        max: result.max,
+                        numValues: result.numValues,
+                        logScale: inputs.logScale
+                    });
+                    // eslint-disable-next-line no-use-before-define
+                    refreshRange();
+                }
+                catch (err) {
+                    // clear lastHash so the next tick with the same inputs retries
+                    // instead of being deduped against the failed pass.
+                    lastHash = '';
+                    throw err;
+                }
+            });
+        };
+        // format a numeric bucket value compactly for the overlay readout.
+        // mode-aware: index-only modes (like 'state') would round, but all
+        // current props are floats so a fixed-precision render is fine.
+        const formatValue = (v) => {
+            if (!Number.isFinite(v))
+                return '-';
+            const abs = Math.abs(v);
+            if (abs !== 0 && (abs < 0.01 || abs >= 10000)) {
+                return v.toExponential(2);
+            }
+            return v.toFixed(3);
+        };
+        const refreshRange = () => {
+            const h = histogram.histogram;
+            if (!h.numValues) {
+                histogramInfoMin.textContent = '';
+                histogramInfoMax.textContent = '';
+            }
+            else {
+                histogramInfoMin.textContent = formatValue(h.minValue);
+                histogramInfoMax.textContent = formatValue(h.maxValue);
+            }
+        };
+        refreshRange();
+        const tick = () => {
+            if (!splat || this.hidden)
+                return;
+            const h = hashInputs(inputs);
+            if (h === lastHash)
+                return;
+            lastHash = h;
+            scheduleUpdate();
+        };
+        events.on('splat.stateChanged', (splat_) => {
+            // only react when the change is for the splat we're currently
+            // displaying. another splat's stateChanged is irrelevant to this
+            // histogram.
+            if (splat_ === splat) {
+                inputs.stateVersion++;
+                tick();
+            }
+        });
+        events.on('splat.positionsChanged', (splat_) => {
+            if (splat_ === splat) {
+                inputs.positionsVersion++;
+                tick();
+            }
+        });
+        events.on('splat.moved', (splat_) => {
+            if (splat_ === splat) {
+                inputs.positionsVersion++;
+                tick();
+            }
+        });
+        // bump cameraVersion only after the camera has stopped moving for
+        // CAMERA_SETTLE_MS, so a single drag doesn't spam GPU passes. whether
+        // the bump triggers a refresh is decided per-prop inside hashInputs.
+        const CAMERA_SETTLE_MS = 150;
+        let cameraTimer = null;
+        const lastCameraMatrix = new Mat4();
+        const clearCameraTimer = () => {
+            if (cameraTimer !== null) {
+                clearTimeout(cameraTimer);
+                cameraTimer = null;
+            }
+        };
+        events.on('prerender', (cameraMatrix) => {
+            // skip when panel is hidden — no need to schedule a refresh that
+            // would short-circuit in tick(); also drop any in-flight timer so
+            // it doesn't fire against a hidden panel.
+            if (this.hidden) {
+                clearCameraTimer();
+                return;
+            }
+            if (!cameraMatrix.equals(lastCameraMatrix)) {
+                lastCameraMatrix.copy(cameraMatrix);
+                clearCameraTimer();
+                cameraTimer = window.setTimeout(() => {
+                    cameraTimer = null;
+                    inputs.cameraVersion++;
+                    tick();
+                }, CAMERA_SETTLE_MS);
+            }
+        });
+        onScreenOnlyValue.on('change', () => {
+            inputs.onScreenOnly = onScreenOnlyValue.value;
+            tick();
+        });
+        const colorEvents = [
+            'splat.tintClr', 'splat.temperature', 'splat.saturation',
+            'splat.brightness', 'splat.blackPoint', 'splat.whitePoint',
+            'splat.transparency'
+        ];
+        colorEvents.forEach((name) => {
+            events.on(name, (splat_) => {
+                if (splat_ === splat) {
+                    inputs.colorGradeVersion++;
+                    tick();
+                }
+            });
+        });
+        events.on('selection.changed', (selection) => {
+            if (selection instanceof Splat) {
+                splat = selection;
+                inputs.splatId = splat.uid;
+                inputs.mode = propModeFor(selectedDataProp) ?? 0;
+                populateDataSelector(splat);
+                tick();
+            }
+        });
+        events.on('statusBar.panelChanged', (panel) => {
+            if (panel === 'splatData') {
+                // defer until panel is visible (this.hidden flips)
+                requestAnimationFrame(() => {
+                    // panel just became visible; clear the dedupe hash so the
+                    // next tick definitely fires.
+                    lastHash = '';
+                    tick();
+                    // scroll the selected list item into view
+                    const activeItem = dataListBox.dom.querySelector('.data-list-item.active');
+                    if (activeItem) {
+                        activeItem.scrollIntoView({ block: 'nearest' });
+                    }
+                });
+            }
+        });
+        logScaleValue.on('change', () => {
+            inputs.logScale = logScaleValue.value;
+            tick();
+        });
+        showAllValue.on('change', () => {
+            if (splat) {
+                populateDataSelector(splat);
+                // populateDataSelector may have remapped selectedDataProp when
+                // the previous one was hidden by toggling extras off; refresh
+                // the histogram in case inputs.mode changed.
+                tick();
+            }
+        });
+        // is the user mid-drag? while true, hover updates are suppressed and
+        // the anchor label remains pinned at the click position. cleared on
+        // pointerup / cancel.
+        let dragging = false;
+        const applyAlign = (el, align) => {
+            el.classList.toggle('align-left', align === 'left');
+            el.classList.toggle('align-right', align === 'right');
+        };
+        const setLabel = (el, x, value, align) => {
+            el.style.left = `${x}px`;
+            el.textContent = formatValue(value);
+            applyAlign(el, align);
+        };
+        /** Keep cursor readout inside #histogram-info-row horizontal padding. */
+        const clampCursorX = (align) => {
+            const el = histogramInfoCursor;
+            if (!el.textContent)
+                return;
+            const w = el.offsetWidth;
+            const R = histogramInfoRow.clientWidth;
+            if (w <= 0 || R <= 0)
+                return;
+            const lo = 4;
+            const hi = R - 4;
+            const x = parseFloat(el.style.left);
+            if (!Number.isFinite(x))
+                return;
+            let nx = x;
+            if (align === 'center') {
+                const hw = w * 0.5;
+                nx = hi - lo < w ? (lo + hi) * 0.5 : Math.min(hi - hw, Math.max(lo + hw, x));
+            }
+            else if (align === 'left') {
+                nx = hi - lo < w ? lo : Math.min(hi - w, Math.max(lo, x));
+            }
+            else {
+                // `left` style is the chip's right edge
+                nx = hi - lo < w ? hi : Math.min(hi, Math.max(lo + w, x));
+            }
+            if (nx !== x)
+                el.style.left = `${nx}px`;
+        };
+        const setCursorLabel = (x, value, align) => {
+            setLabel(histogramInfoCursor, x, value, align);
+            requestAnimationFrame(() => clampCursorX(align));
+        };
+        const setAnchorLabel = (x, value, align) => {
+            setLabel(histogramInfoAnchor, x, value, align);
+        };
+        const clearLabel = (el) => {
+            el.textContent = '';
+            // reset alignment so the next hover starts from the centered default.
+            applyAlign(el, 'center');
+        };
+        const clearCursorLabel = () => clearLabel(histogramInfoCursor);
+        const clearAnchorLabel = () => clearLabel(histogramInfoAnchor);
+        const showStats = (count, selected, total) => {
+            const pct = total ? (count / total * 100).toFixed(1) : '0.0';
+            const fmt = (n) => n.toLocaleString();
+            statsCountValue.textContent = `${fmt(count)} (${pct}%)`;
+            statsSelectedValue.textContent = fmt(selected);
+            statsOverlay.style.display = '';
+        };
+        const hideStats = () => {
+            statsOverlay.style.display = 'none';
+        };
+        histogram.events.on('showOverlay', () => {
+            // pointermove will populate the readout; nothing else to do here.
+        });
+        histogram.events.on('hideOverlay', () => {
+            // pointer left the canvas. only clear the hover UI; if a drag is
+            // in progress (capture is still active), the highlight handler
+            // keeps driving the labels.
+            if (!dragging) {
+                clearCursorLabel();
+                hideStats();
+            }
+        });
+        histogram.events.on('updateOverlay', (info) => {
+            if (dragging)
+                return; // drag handler owns the labels mid-gesture
+            if (!histogram.histogram.numValues)
+                return;
+            // continuous (non-bucketed) value at the cursor pixel, centered.
+            setCursorLabel(info.x, info.cursorValue, 'center');
+            showStats(info.selected + info.unselected, info.selected, info.total);
+        });
+        // highlight
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('id', 'histogram-svg');
+        // create rect element
+        const rect = document.createElementNS(svg.namespaceURI, 'rect');
+        rect.setAttribute('id', 'highlight-rect');
+        rect.setAttribute('fill', 'rgba(255, 102, 0, 0.2)');
+        rect.setAttribute('stroke', '#f60');
+        rect.setAttribute('stroke-width', '1');
+        rect.setAttribute('stroke-dasharray', '5, 5');
+        svg.appendChild(rect);
+        histogramCanvasArea.appendChild(svg);
+        histogram.events.on('highlight', (info) => {
+            rect.setAttribute('x', info.x.toString());
+            rect.setAttribute('y', info.y.toString());
+            rect.setAttribute('width', info.width.toString());
+            rect.setAttribute('height', info.height.toString());
+            svg.style.display = 'inline';
+            dragging = true;
+            // anchor and cursor sit at the outer edges of the highlight rect.
+            // align them so their text grows OUT of the rect: the left-most
+            // label is right-aligned (text grows left), the right-most label
+            // is left-aligned (text grows right). dragging-right is the
+            // default direction (also covers the zero-width click case).
+            const draggingRight = info.cursorBucket >= info.anchorBucket;
+            const anchorAlign = draggingRight ? 'right' : 'left';
+            const cursorAlign = draggingRight ? 'left' : 'right';
+            setAnchorLabel(info.anchorX, info.anchorValue, anchorAlign);
+            setCursorLabel(info.cursorX, info.cursorValue, cursorAlign);
+            // sum stats over the selected bucket range.
+            const h = histogram.histogram;
+            let count = 0;
+            let selected = 0;
+            for (let i = info.startBucket; i <= info.endBucket; ++i) {
+                const bin = h.bins[i];
+                count += bin.selected + bin.unselected;
+                selected += bin.selected;
+            }
+            showStats(count, selected, h.numValues);
+        });
+        // aborted drag (pointer released off-canvas / cancelled / capture lost).
+        // hide the highlight rect and clear the drag labels / stats so the
+        // readout doesn't stay stuck on a range the user never committed.
+        histogram.events.on('cancelHighlight', () => {
+            svg.style.display = 'none';
+            dragging = false;
+            clearAnchorLabel();
+            clearCursorLabel();
+            hideStats();
+        });
+        histogram.events.on('select', (op, start, end) => {
+            svg.style.display = 'none';
+            dragging = false;
+            clearAnchorLabel();
+            // cursor label + stats will repopulate on the next pointermove if
+            // the pointer is still inside the canvas; clear them now for the
+            // case where the gesture ended off-canvas.
+            clearCursorLabel();
+            hideStats();
+            if (!splat)
+                return;
+            // capture state synchronously at drag-end and enqueue the whole
+            // gpu pass + select fire on the shared command queue. queue ordering
+            // guarantees this select runs after any in-flight histogram update
+            // and that any subsequent operation runs after this select's
+            // edit.add lands in history. no defensive token / target-splat
+            // checks are needed.
+            const targetSplat = splat;
+            const mode = lastGpuMode;
+            const minValue = histogram.histogram.minValue;
+            const maxValue = histogram.histogram.maxValue;
+            const numBins = histogram.histogram.bins.length;
+            const opts = buildGpuOpts();
+            targetSplat.scene.commandQueue.enqueue(async () => {
+                const data = await targetSplat.scene.dataProcessor.selectByRange(targetSplat, mode, {
+                    ...opts,
+                    min: minValue,
+                    max: maxValue,
+                    numBins,
+                    rangeStart: start,
+                    rangeEnd: end
+                });
+                // SelectOp (via 'select.mask') consumes the bytes synchronously
+                // in its constructor, so the buffer is safe to release once
+                // events.fire returns.
+                events.fire('select.mask', op, data);
+                targetSplat.scene.dataProcessor.releaseMask(data);
+            });
+        });
+    }
+}
+
+// Inline SVG for the SuperSplat logo
+const logoSvg = `
+<svg xmlns='http://www.w3.org/2000/svg' width="64" height="64" viewBox='64 64 384 384'>
+  <path fill='#f26722' d='M129.83,217c9.75,0,17.64-7.9,17.64-17.64s-7.9-17.64-17.64-17.64-17.64,7.9-17.64,17.64,7.9,17.64,17.64,17.64Z'/>
+  <path fill='#f26722' d='M388.74,253.94c-12.46,0-22.57,10.11-22.57,22.57s10.11,22.57,22.57,22.57,22.57-10.11,22.57-22.57-10.11-22.57-22.57-22.57h0Z'/>
+  <path fill='#f26722' d='M345.26,161.1h.02c.37-.05.65-.22.97-.33,16.78-2.32,29.75-16.57,29.75-33.99,0-19.04-15.43-34.46-34.46-34.46s-34.46,15.43-34.46,34.46c0,4.29.88,8.35,2.32,12.14.04.12-.01.25.04.38,10.55,29.18-22.33,23.62-39.07,20.74-.49-.09-.88-.07-1.32-.11-4.27-.56-8.59-.97-13.03-.97-53.93,0-97.64,43.71-97.64,97.64,0,9.84,1.48,19.32,4.2,28.28.04.1,0,.17.05.27,8.97,30.15-14.83,25.49-25.52,25.69-1.04-.13-2.09-.32-3.18-.32-13.51,0-24.45,10.94-24.45,24.45s10.94,24.45,24.45,24.45c11.69,0,21.44-8.22,23.85-19.19h.02c6.31-26.57,25.9-18.02,31.15-12.67.2.2.4.26.59.42,17.44,16.25,40.75,26.26,66.47,26.26.67,0,1.34-.09,2.01-.1.66.01,1.31.04,2.04.04,9.7-.04,17.82,10.91,4.94,29.68h.13c-4.42,6.01-7.1,13.36-7.1,21.41,0,20.09,16.29,36.39,36.39,36.39s36.39-16.29,36.39-36.39c0-15.4-9.61-28.49-23.12-33.81-.32-.15-.61-.29-.98-.45-12.28-4.94-25.43-17.69-6.89-27.1l-.04-.1c31.93-16.06,53.88-49.02,53.88-87.2,0-21.15-6.8-40.68-18.23-56.66-.13-.23-.23-.47-.44-.74-23.15-31.67-2.37-36.07,10.3-38.09h-.01Z'/>
+  <path fill='white' d='M230.79,284.71c0,7.95-6.44,14.38-14.38,14.38s-14.38-6.44-14.38-14.38v-22.95c0-7.95,6.44-14.38,14.38-14.38s14.38,6.44,14.38,14.38v22.95Z'/>
+  <path fill='white' d='M309.78,284.71c0,7.95-6.44,14.38-14.38,14.38s-14.38-6.44-14.38-14.38v-22.95c0-7.95,6.44-14.38,14.38-14.38s14.38,6.44,14.38,14.38v22.95Z'/>
+</svg>
+`;
+class AboutPopup extends Container {
+    constructor(args = {}) {
+        args = {
+            ...args,
+            id: 'about-popup',
+            hidden: true,
+            tabIndex: -1
+        };
+        super(args);
+        // Handle keyboard events
+        this.dom.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                this.hidden = true;
+            }
+            e.stopPropagation();
+        });
+        // Close when clicking outside dialog
+        this.on('click', () => {
+            this.hidden = true;
+        });
+        const dialog = new Container({
+            id: 'about-dialog'
+        });
+        // Prevent clicks inside dialog from closing
+        dialog.on('click', (event) => {
+            event.stopPropagation();
+        });
+        // Header bar
+        const header = new Label({
+            id: 'about-header',
+            text: 'About'
+        });
+        // Content area
+        const content = new Container({
+            id: 'about-content'
+        });
+        // Logo
+        const logoContainer = new Container({
+            id: 'about-logo'
+        });
+        logoContainer.dom.innerHTML = logoSvg;
+        logoContainer.dom.addEventListener('click', () => {
+            window.open('https://github.com/playcanvas/supersplat', '_blank')?.focus();
+        });
+        // App name and version
+        const appInfo = new Container({
+            id: 'about-app-info'
+        });
+        appInfo.dom.addEventListener('click', () => {
+            window.open('https://github.com/playcanvas/supersplat', '_blank')?.focus();
+        });
+        const appName = new Label({
+            id: 'about-app-name',
+            text: 'SuperSplat'
+        });
+        const appVersionLabel = new Label({
+            id: 'about-app-version',
+            text: `v${version}`
+        });
+        appInfo.append(appName);
+        appInfo.append(appVersionLabel);
+        // Dependencies
+        const depsContainer = new Container({
+            id: 'about-deps'
+        });
+        // PCUI
+        const pcuiRow = new Container({
+            class: 'about-dep-row'
+        });
+        pcuiRow.dom.addEventListener('click', () => {
+            window.open('https://github.com/playcanvas/pcui', '_blank')?.focus();
+        });
+        const pcuiName = new Label({ class: 'about-dep-name', text: 'PCUI' });
+        const pcuiVersionL = new Label({ class: 'about-dep-version', text: `v${version$3}` });
+        const pcuiRev = new Label({ class: 'about-dep-revision', text: `(${revision$2.substring(0, 7)})` });
+        pcuiRow.append(pcuiName);
+        pcuiRow.append(pcuiVersionL);
+        pcuiRow.append(pcuiRev);
+        // Engine
+        const engineRow = new Container({
+            class: 'about-dep-row'
+        });
+        engineRow.dom.addEventListener('click', () => {
+            window.open('https://github.com/playcanvas/engine', '_blank')?.focus();
+        });
+        const engineName = new Label({ class: 'about-dep-name', text: 'PlayCanvas' });
+        const engineVer = new Label({ class: 'about-dep-version', text: `v${version$2}` });
+        const engineRev = new Label({ class: 'about-dep-revision', text: `(${revision$1.substring(0, 7)})` });
+        engineRow.append(engineName);
+        engineRow.append(engineVer);
+        engineRow.append(engineRev);
+        depsContainer.append(pcuiRow);
+        depsContainer.append(engineRow);
+        // Assemble content
+        content.append(logoContainer);
+        content.append(appInfo);
+        content.append(depsContainer);
+        // Assemble dialog
+        dialog.append(header);
+        dialog.append(content);
+        this.append(dialog);
+        // Focus when shown so keyboard events work
+        this.on('show', () => {
+            this.dom.focus();
+        });
+    }
+}
+
+var img$A = "data:image/svg+xml,%3csvg width='38' height='38' viewBox='0 0 38 38' fill='none' xmlns='http://www.w3.org/2000/svg'%3e%3cpath fill-rule='evenodd' clip-rule='evenodd' d='M25.1369 19.0001C24.602 19.0001 24.1696 19.4201 24.1696 19.9376C24.1696 22.5222 22.0001 24.625 19.3333 24.625C16.6666 24.625 14.497 22.5222 14.497 19.9376C14.497 17.4411 16.5273 15.4124 19.0693 15.2764L18.812 15.5249C18.4338 15.8914 18.4338 16.4839 18.812 16.8505C19.0006 17.0333 19.2482 17.1251 19.4958 17.1251C19.7435 17.1251 19.9911 17.0333 20.1797 16.8505L22.1142 14.9755C22.4924 14.6089 22.4924 14.0164 22.1142 13.6499L20.1797 11.7749C19.8015 11.4084 19.1902 11.4084 18.812 11.7749C18.4338 12.1415 18.4338 12.734 18.812 13.1005L19.107 13.3865C15.4798 13.5036 12.5625 16.393 12.5625 19.9376C12.5625 23.5563 15.6007 26.5 19.3333 26.5C23.066 26.5 26.1042 23.5563 26.1042 19.9376C26.1042 19.4201 25.6718 19.0001 25.1369 19.0001' fill='currentColor'/%3e%3c/svg%3e";
+
+var img$z = "data:image/svg+xml,%3csvg width='38' height='38' viewBox='0 0 38 38' fill='none' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M11 19C11 14.5817 14.5817 11 19 11V11C23.4183 11 27 14.5817 27 19V19C27 23.4183 23.4183 27 19 27V27C14.5817 27 11 23.4183 11 19V19Z' stroke='currentColor' stroke-width='1.5' stroke-dasharray='4 2' fill-opacity='0' /%3e%3cpath d='M15 19C15 16.7909 16.7909 15 19 15V15C21.2091 15 23 16.7909 23 19V19C23 21.2091 21.2091 23 19 23V23C16.7909 23 15 21.2091 15 19V19Z' fill='currentColor'/%3e%3c/svg%3e";
+
+var img$y = "data:image/svg+xml,%3csvg width='38' height='38' viewBox='0 0 38 38' fill='none' version='1.1' id='svg6' sodipodi:docname='select-flood.svg' inkscape:version='1.1.2 (b8e25be833%2c 2022-02-05)' xmlns:inkscape='http://www.inkscape.org/namespaces/inkscape' xmlns:sodipodi='http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd' xmlns='http://www.w3.org/2000/svg' xmlns:svg='http://www.w3.org/2000/svg'%3e %3csodipodi:namedview id='namedview8' pagecolor='white' bordercolor='%23666666' borderopacity='1.0' inkscape:pageshadow='2' inkscape:pageopacity='0.0' inkscape:pagecheckerboard='0' showgrid='false' inkscape:zoom='22.973684' inkscape:cx='19' inkscape:cy='18.978236' inkscape:window-width='3840' inkscape:window-height='2071' inkscape:window-x='3831' inkscape:window-y='-9' inkscape:window-maximized='1' inkscape:current-layer='svg6' /%3e %3cdefs id='defs10' /%3e %3cpath style='fill:none%3bfill-opacity:1%3bstroke:currentColor%3bstroke-width:0.53494%3bstroke-linecap:butt%3bstroke-linejoin:miter%3bstroke-miterlimit:1%3bstroke-dasharray:none%3bstroke-opacity:1' id='path3661' d='M8.9%2c28c-2.1%2c1.3.5%2c2.2%2c5.8%2c2.1%2c5.9%2c0%2c5.4-2.2-.1-2.9' /%3e %3cpath style='fill:currentColor%3bfill-opacity:1%3bstroke:currentColor%3bstroke-width:0.53494%3bstroke-linecap:butt%3bstroke-linejoin:miter%3bstroke-miterlimit:4%3bstroke-dasharray:none%3bstroke-opacity:1' id='path4426' class='st1' d='M11.5%2c22.6s-2.3%2c4.9.2%2c4.9c2.7%2c0-.2-4.9-.2-4.9Z'/%3e %3cpath style='fill:currentColor%3bfill-opacity:1%3bstroke:currentColor%3bstroke-width:0.53494%3bstroke-linecap:butt%3bstroke-linejoin:miter%3bstroke-miterlimit:4%3bstroke-dasharray:none%3bstroke-opacity:1' d='M29.7%2c6.1c.3%2c2-2.7%2c3.5-3.8%2c4.9l.9%2c1.3c0%2c.3-1%2c1-1.3%2c1.3s-.1%2c1-.7.8-1.2-1.4-1.4-1.4c-.5%2c0-6%2c6-7%2c6.6-1.1.2-3%2c2.6-3.9%2c1.4s1.4-2.5%2c1.6-3.7l7-6.6c.2-.6-1.8-1.6-1.1-2.1s.5%2c0%2c.7-.2c1.2-.8%2c1-2%2c2.4-.2h.2c.9-.8%2c3-3.4%2c4.2-3.6s2.1.4%2c2.2%2c1.4ZM12.6%2c20.9c.8.8%2c2.6-1.4%2c3.6-1.5l6.8-6.5c.1-.3-1.5-1.7-1.8-2l-7.1%2c6.7c-.1%2c1-2.4%2c2.4-1.6%2c3.3Z'/%3e %3c/svg%3e";
+
+var img$x = "data:image/svg+xml,%3c%3fxml version='1.0' encoding='UTF-8' standalone='no'%3f%3e%3csvg width='38' height='38' viewBox='0 0 38 38' fill='none' version='1.1' id='svg6' sodipodi:docname='select-flood.svg' inkscape:version='1.1.2 (b8e25be833%2c 2022-02-05)' xmlns:inkscape='http://www.inkscape.org/namespaces/inkscape' xmlns:sodipodi='http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd' xmlns='http://www.w3.org/2000/svg' xmlns:svg='http://www.w3.org/2000/svg'%3e %3csodipodi:namedview id='namedview8' pagecolor='white' bordercolor='%23666666' borderopacity='1.0' inkscape:pageshadow='2' inkscape:pageopacity='0.0' inkscape:pagecheckerboard='0' showgrid='false' inkscape:zoom='22.973684' inkscape:cx='19' inkscape:cy='18.978236' inkscape:window-width='3840' inkscape:window-height='2071' inkscape:window-x='3831' inkscape:window-y='-9' inkscape:window-maximized='1' inkscape:current-layer='svg6' /%3e %3cdefs id='defs10' /%3e %3cpath d='m 11.607432%2c24.820997 c -2.0630273%2c1.289509 0.472335%2c2.188385 5.846656%2c2.141224 5.89276%2c-0.05171 5.38816%2c-2.234301 -0.129112%2c-2.886482' stroke='currentColor' stroke-width='1.5' stroke-dasharray='4%2c 2' fill-opacity='0' id='path2' style='stroke-width:1%3bstroke-miterlimit:4%3bstroke-dasharray:2.66667%2c 1.33333%3bstroke-dashoffset:0' sodipodi:nodetypes='csc' /%3e %3cpath style='fill:currentColor%3bfill-opacity:1%3bstroke:none%3bstroke-width:1.42993%3bstroke-linecap:butt%3bstroke-linejoin:miter%3bstroke-miterlimit:4%3bstroke-dasharray:none%3bstroke-opacity:1' d='m 14.545439%2c18.041431 5.273075%2c-9.1020046 7.703167%2c4.3682296 -4.125194%2c6.973354 -6.067192%2c-3.451102 z' id='path3661' /%3e %3cpath style='fill:currentColor%3bfill-opacity:1%3bstroke:currentColor%3bstroke-width:0.53494%3bstroke-linecap:butt%3bstroke-linejoin:miter%3bstroke-miterlimit:4%3bstroke-dasharray:none%3bstroke-opacity:1' d='m 14.674469%2c18.821785 c 0%2c0 -2.263225%2c4.933546 0.217259%2c4.926237 2.671897%2c-0.0079 -0.217259%2c-4.926237 -0.217259%2c-4.926237 z' id='path4426' sodipodi:nodetypes='csc' /%3e%3c/svg%3e";
+
+var img$w = "data:image/svg+xml,%3csvg width='38' height='38' viewBox='0 0 38 38' fill='none' xmlns='http://www.w3.org/2000/svg'%3e%3cpath fill-rule='evenodd' clip-rule='evenodd' d='M22.0831 10.9413C23.1429 10.9357 24.0754 11.6408 24.3565 12.6603L24.6802 13.8339L23.4489 14.17L23.1252 12.9964C22.9974 12.5329 22.5736 12.2124 22.0919 12.215L20.0088 12.226L20 10.9524L22.0831 10.9413ZM16.3578 10.9751L18.4409 10.9641L18.4496 12.2377L16.3665 12.2488C15.8979 12.2513 15.4865 12.5592 15.3534 13.0072L14.892 14.5604L13.6675 14.1969L14.1289 12.6437C14.4217 11.6581 15.3267 10.9806 16.3578 10.9751ZM25.0038 15.0075L25.3275 16.1811C25.6147 17.2229 25.1486 18.3241 24.2002 18.8439L23.1295 19.4308L22.5131 18.3144L23.5838 17.7275C24.0148 17.4912 24.2268 16.9907 24.0962 16.5172L23.7725 15.3436L25.0038 15.0075ZM12.2833 18.8565L13.2061 15.7501L14.4306 16.1136L13.5078 19.22L12.2833 18.8565ZM11.3605 21.9628L11.8219 20.4096L13.0464 20.7732L12.585 22.3264C12.4506 22.7788 12.6321 23.2658 13.0304 23.5215L14.1207 24.2215L13.4306 25.2921L12.3404 24.5922C11.4641 24.0297 11.0649 22.9582 11.3605 21.9628ZM19.6953 24.1541L19.0164 25.6793C18.4343 26.9871 16.8191 27.4675 15.6112 26.692L14.5209 25.9921L15.211 24.9214L16.3012 25.6214C16.8503 25.9738 17.5845 25.7555 17.8491 25.161L18.5279 23.6358L19.6953 24.1541Z' fill='currentColor'/%3e%3cpath d='M22.6649 26.2004C22.5798 26.1153 22.5157 26.0116 22.4777 25.8975L21.4002 22.6651C21.1396 21.8834 21.8834 21.1396 22.6651 21.4002L25.8975 22.4777C26.0117 22.5157 26.1154 22.5798 26.2004 22.6649V22.6649C26.503 22.9675 26.503 23.4581 26.2004 23.7607L23.7607 26.2004C23.4581 26.503 22.9675 26.503 22.6649 26.2004V26.2004Z' fill='currentColor'/%3e%3c/svg%3e";
+
+var img$v = "data:image/svg+xml,%3csvg width='38' height='38' viewBox='0 0 38 38' fill='none' xmlns='http://www.w3.org/2000/svg'%3e %3cpath d='M21.6634 25.716C21.2372 26.5644 20.0524 26.5946 19.7797 25.764L17.0491 17.4463C16.7833 16.6367 17.6452 15.7799 18.4524 16.0512L26.7108 18.8274C27.5386 19.1056 27.501 20.2904 26.6511 20.7118L24.3958 21.6809L27.4216 24.7067C27.7978 25.083 27.7071 25.7837 27.219 26.2719C26.7308 26.76 26.0301 26.8507 25.6538 26.4745L22.5935 23.4142L21.6634 25.716Z' fill='currentColor'/%3e %3cpath d='M11 11H12.5V12.5H11V11Z' fill='currentColor'/%3e %3cpath d='M11 14H12.5V15.5H11V14Z' fill='currentColor'/%3e %3cpath d='M11 17H12.5V18.5H11V17Z' fill='currentColor'/%3e %3cpath d='M14 17H15.5V18.5H14V17Z' fill='currentColor'/%3e %3cpath d='M14 11H15.5V12.5H14V11Z' fill='currentColor'/%3e %3cpath d='M17 11H18.5V12.5H17V11Z' fill='currentColor'/%3e %3cpath d='M20 11H21.5V12.5H20V11Z' fill='currentColor'/%3e %3cpath d='M20 14H21.5V15.5H20V14Z' fill='currentColor'/%3e%3c/svg%3e";
+
+var img$u = "data:image/svg+xml,%3csvg width='38' height='38' viewBox='0 0 38 38' fill='none' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M22.6649 26.2004C22.5798 26.1153 22.5157 26.0116 22.4777 25.8975L21.4002 22.6651C21.1396 21.8834 21.8834 21.1396 22.6651 21.4002L25.8975 22.4777C26.0117 22.5157 26.1154 22.5798 26.2004 22.6649V22.6649C26.503 22.9675 26.503 23.4581 26.2004 23.7607L23.7607 26.2004C23.4581 26.503 22.9675 26.503 22.6649 26.2004V26.2004Z' fill='currentColor'/%3e%3cpath fill-rule='evenodd' clip-rule='evenodd' d='m 8.7128906%2c11.257813 2.1542974%2c4.226562 1.158203%2c-0.589844 -1.150391%2c-2.255859 0.455078%2c0.01758 0.04883%2c-1.298828 z m 3.9648434%2c0.148437 -0.04883%2c1.298828 5.197266%2c0.195313 0.04883%2c-1.298828 z m 6.496094%2c0.244141 -0.04883%2c1.298828 5.195312%2c0.195312 0.04883%2c-1.298828 z m 6.496094%2c0.24414 -0.04883%2c1.298828 0.816406%2c0.03125 -1.117188%2c1.361329 1.003907%2c0.824218 2.779297%2c-3.386718 z m -1.175781%2c3.695313 -3.298829%2c4.021484 1.00586%2c0.824219 L 25.5%2c16.416016 Z m -11.878907%2c0.46289 -1.158203%2c0.589844 2.359375%2c4.634766 1.160157%2c-0.591797 z m 2.951172%2c5.791016 -1.158203%2c0.591797 2.359375%2c4.632812 1.158203%2c-0.589843 z' fill='currentColor'/%3e%3c/svg%3e";
+
+var img$t = "data:image/svg+xml,%3csvg width='38' height='38' viewBox='0 0 38 38' fill='none' xmlns='http://www.w3.org/2000/svg'%3e%3cpath fill-rule='evenodd' clip-rule='evenodd' d='M16.3645 10.5293C17.0464 10.347 17.7625 10.25 18.5 10.25C19.2375 10.25 19.9536 10.347 20.6355 10.5293L20.2482 11.9784C19.6914 11.8296 19.1056 11.75 18.5 11.75C17.8944 11.75 17.3086 11.8296 16.7518 11.9784L16.3645 10.5293ZM11.3545 14.3738C12.0788 13.1221 13.1221 12.0788 14.3738 11.3545L15.125 12.6529C14.9598 12.7485 14.799 12.8509 14.643 12.9597C17.1237 13.9206 19.8763 13.9206 22.357 12.9597C22.201 12.8509 22.0402 12.7485 21.875 12.6529L22.6262 11.3545C23.8779 12.0788 24.9212 13.1221 25.6455 14.3738L24.3471 15.125C24.0398 14.5938 23.662 14.1083 23.2267 13.6812C20.2171 15.0134 16.7829 15.0134 13.7733 13.6812C13.338 14.1083 12.9602 14.5938 12.6529 15.125L11.3545 14.3738ZM10.25 18.5C10.25 17.7625 10.347 17.0464 10.5293 16.3645L11.9784 16.7518C11.8906 17.0803 11.8269 17.419 11.7894 17.7658C16.1247 19.3372 20.8753 19.3372 25.2106 17.7658C25.1731 17.419 25.1094 17.0803 25.0216 16.7518L26.4707 16.3645C26.653 17.0464 26.75 17.7625 26.75 18.5C26.75 19.2375 26.653 19.9536 26.4707 20.6355L25.0216 20.2482C25.1445 19.7885 25.2201 19.3091 25.2428 18.8151C20.8742 20.3208 16.1258 20.3208 11.7572 18.8151C11.7799 19.3091 11.8555 19.7885 11.9784 20.2482L10.5293 20.6355C10.347 19.9536 10.25 19.2375 10.25 18.5ZM14.3738 25.6455C13.1221 24.9212 12.0788 23.8779 11.3545 22.6262L12.6529 21.875C12.8207 22.165 13.0095 22.4415 13.2172 22.7022C16.6638 23.7308 20.3362 23.7308 23.7828 22.7022C23.9905 22.4415 24.1793 22.165 24.3471 21.875L25.6455 22.6262C24.9212 23.8779 23.8779 24.9212 22.6262 25.6455L21.875 24.3471C22.0058 24.2714 22.1338 24.1915 22.2589 24.1075C19.7769 24.5957 17.2231 24.5957 14.7411 24.1075C14.8662 24.1915 14.9942 24.2714 15.125 24.3471L14.3738 25.6455ZM18.5 26.75C17.7625 26.75 17.0464 26.653 16.3645 26.4707L16.7518 25.0216C17.3086 25.1704 17.8944 25.25 18.5 25.25C19.1056 25.25 19.6914 25.1704 20.2482 25.0216L20.6355 26.4707C19.9536 26.653 19.2375 26.75 18.5 26.75Z' fill='currentColor'/%3e%3c/svg%3e";
+
+var img$s = "data:image/svg+xml,%3csvg width='38' height='38' viewBox='0 0 38 38' fill='none' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M12.5 14C12.5 12.8954 13.3954 12 14.5 12H24.5C25.6046 12 26.5 12.8954 26.5 14V24C26.5 25.1046 25.6046 26 24.5 26H14.5C13.3954 26 12.5 25.1046 12.5 24V14Z' stroke='currentColor' stroke-width='1.5' stroke-dasharray='4 2' fill-opacity='0' /%3e%3cpath fill-rule='evenodd' clip-rule='evenodd' d='M19.5 18C18.9477 18 18.5 18.4477 18.5 19C18.5 19.5523 18.9477 20 19.5 20C20.0523 20 20.5 19.5523 20.5 19C20.5 18.4477 20.0523 18 19.5 18ZM17.5 19C17.5 17.8954 18.3954 17 19.5 17C20.6046 17 21.5 17.8954 21.5 19C21.5 20.1046 20.6046 21 19.5 21C18.3954 21 17.5 20.1046 17.5 19Z' fill='currentColor'/%3e%3c/svg%3e";
+
+var img$r = "data:image/svg+xml,%3csvg width='38' height='38' viewBox='0 0 38 38' fill='none' xmlns='http://www.w3.org/2000/svg'%3e%3cpath fill-rule='evenodd' clip-rule='evenodd' d='M19.5597 13.3858L19.8547 13.0999C20.2319 12.7343 20.2319 12.1408 19.8547 11.7742C19.4765 11.4086 18.8642 11.4086 18.487 11.7742L16.5525 13.6493C16.1743 14.0159 16.1743 14.6093 16.5525 14.975L18.487 16.85C18.6756 17.0338 18.9232 17.1247 19.1708 17.1247C19.4185 17.1247 19.6651 17.0338 19.8547 16.85C20.2319 16.4844 20.2319 15.8909 19.8547 15.5243L19.5974 15.2759C22.1394 15.4128 24.1696 17.4407 24.1696 19.9373C24.1696 22.5221 21.9991 24.6249 19.3333 24.6249C16.6666 24.6249 14.497 22.5221 14.497 19.9373C14.497 19.4198 14.0637 18.9998 13.5298 18.9998C12.9949 18.9998 12.5625 19.4198 12.5625 19.9373C12.5625 23.5562 15.5997 26.5 19.3333 26.5C23.066 26.5 26.1042 23.5562 26.1042 19.9373C26.1042 16.3934 23.1869 13.503 19.5597 13.3858' fill='currentColor'/%3e%3c/svg%3e";
+
+// import cropSvg from './svg/crop.svg';
+const createSvg$9 = (svgString) => {
+    const decodedStr = decodeURIComponent(svgString.substring('data:image/svg+xml,'.length));
+    return new DOMParser().parseFromString(decodedStr, 'image/svg+xml').documentElement;
+};
+class BottomToolbar extends Container {
+    constructor(events, tooltips, args = {}) {
+        args = {
+            ...args,
+            id: 'bottom-toolbar'
+        };
+        super(args);
+        this.dom.addEventListener('pointerdown', (event) => {
+            event.stopPropagation();
+        });
+        const undo = new Button({
+            id: 'bottom-toolbar-undo',
+            class: 'bottom-toolbar-button',
+            enabled: false
+        });
+        const redo = new Button({
+            id: 'bottom-toolbar-redo',
+            class: 'bottom-toolbar-button',
+            enabled: false
+        });
+        const picker = new Button({
+            id: 'bottom-toolbar-picker',
+            class: 'bottom-toolbar-tool'
+        });
+        const polygon = new Button({
+            id: 'bottom-toolbar-polygon',
+            class: 'bottom-toolbar-tool'
+        });
+        const brush = new Button({
+            id: 'bottom-toolbar-brush',
+            class: 'bottom-toolbar-tool'
+        });
+        const flood = new Button({
+            id: 'bottom-toolbar-flood',
+            class: 'bottom-toolbar-tool'
+        });
+        const lasso = new Button({
+            id: 'bottom-toolbar-lasso',
+            class: 'bottom-toolbar-tool'
+        });
+        const sphere = new Button({
+            id: 'bottom-toolbar-sphere',
+            class: 'bottom-toolbar-tool'
+        });
+        const box = new Button({
+            id: 'bottom-toolbar-box',
+            class: 'bottom-toolbar-tool'
+        });
+        const eyedropper = new Button({
+            id: 'bottom-toolbar-eyedropper',
+            class: 'bottom-toolbar-tool'
+        });
+        // const crop = new Button({
+        //     id: 'bottom-toolbar-crop',
+        //     class: ['bottom-toolbar-tool', 'disabled']
+        // });
+        const translate = new Button({
+            id: 'bottom-toolbar-translate',
+            class: 'bottom-toolbar-tool',
+            icon: 'E111'
+        });
+        const rotate = new Button({
+            id: 'bottom-toolbar-rotate',
+            class: 'bottom-toolbar-tool',
+            icon: 'E113'
+        });
+        const scale = new Button({
+            id: 'bottom-toolbar-scale',
+            class: 'bottom-toolbar-tool',
+            icon: 'E112'
+        });
+        const measure = new Button({
+            id: 'bottom-toolbar-measure',
+            class: 'bottom-toolbar-tool',
+            icon: 'E358'
+        });
+        const coordSpace = new Button({
+            id: 'bottom-toolbar-coord-space',
+            class: 'bottom-toolbar-toggle',
+            icon: 'E118'
+        });
+        const origin = new Button({
+            id: 'bottom-toolbar-origin',
+            class: ['bottom-toolbar-toggle'],
+            icon: 'E189'
+        });
+        undo.dom.appendChild(createSvg$9(img$r));
+        redo.dom.appendChild(createSvg$9(img$A));
+        picker.dom.appendChild(createSvg$9(img$v));
+        polygon.dom.appendChild(createSvg$9(img$u));
+        brush.dom.appendChild(createSvg$9(img$z));
+        flood.dom.appendChild(createSvg$9(img$x));
+        sphere.dom.appendChild(createSvg$9(img$t));
+        box.dom.appendChild(createSvg$9(img$s));
+        lasso.dom.appendChild(createSvg$9(img$w));
+        eyedropper.dom.appendChild(createSvg$9(img$y));
+        // crop.dom.appendChild(createSvg(cropSvg));
+        this.append(undo);
+        this.append(redo);
+        this.append(new Element$1({ class: 'bottom-toolbar-separator' }));
+        this.append(picker);
+        this.append(lasso);
+        this.append(polygon);
+        this.append(brush);
+        this.append(flood);
+        this.append(eyedropper);
+        this.append(new Element$1({ class: 'bottom-toolbar-separator' }));
+        this.append(sphere);
+        this.append(box);
+        // this.append(crop);
+        this.append(new Element$1({ class: 'bottom-toolbar-separator' }));
+        this.append(translate);
+        this.append(rotate);
+        this.append(scale);
+        this.append(new Element$1({ class: 'bottom-toolbar-separator' }));
+        this.append(measure);
+        this.append(coordSpace);
+        this.append(origin);
+        undo.dom.addEventListener('click', () => events.fire('edit.undo'));
+        redo.dom.addEventListener('click', () => events.fire('edit.redo'));
+        polygon.dom.addEventListener('click', () => events.fire('tool.polygonSelection'));
+        lasso.dom.addEventListener('click', () => events.fire('tool.lassoSelection'));
+        brush.dom.addEventListener('click', () => events.fire('tool.brushSelection'));
+        flood.dom.addEventListener('click', () => events.fire('tool.floodSelection'));
+        picker.dom.addEventListener('click', () => events.fire('tool.rectSelection'));
+        eyedropper.dom.addEventListener('click', () => events.fire('tool.eyedropperSelection'));
+        sphere.dom.addEventListener('click', () => events.fire('tool.sphereSelection'));
+        box.dom.addEventListener('click', () => events.fire('tool.boxSelection'));
+        translate.dom.addEventListener('click', () => events.fire('tool.move'));
+        rotate.dom.addEventListener('click', () => events.fire('tool.rotate'));
+        scale.dom.addEventListener('click', () => events.fire('tool.scale'));
+        measure.dom.addEventListener('click', () => events.fire('tool.measure'));
+        coordSpace.dom.addEventListener('click', () => events.fire('tool.toggleCoordSpace'));
+        origin.dom.addEventListener('click', () => events.fire('pivot.toggleOrigin'));
+        events.on('edit.canUndo', (value) => {
+            undo.enabled = value;
+        });
+        events.on('edit.canRedo', (value) => {
+            redo.enabled = value;
+        });
+        events.on('tool.activated', (toolName) => {
+            picker.class[toolName === 'rectSelection' ? 'add' : 'remove']('active');
+            brush.class[toolName === 'brushSelection' ? 'add' : 'remove']('active');
+            flood.class[toolName === 'floodSelection' ? 'add' : 'remove']('active');
+            polygon.class[toolName === 'polygonSelection' ? 'add' : 'remove']('active');
+            lasso.class[toolName === 'lassoSelection' ? 'add' : 'remove']('active');
+            sphere.class[toolName === 'sphereSelection' ? 'add' : 'remove']('active');
+            box.class[toolName === 'boxSelection' ? 'add' : 'remove']('active');
+            translate.class[toolName === 'move' ? 'add' : 'remove']('active');
+            rotate.class[toolName === 'rotate' ? 'add' : 'remove']('active');
+            scale.class[toolName === 'scale' ? 'add' : 'remove']('active');
+            measure.class[toolName === 'measure' ? 'add' : 'remove']('active');
+            eyedropper.class[toolName === 'eyedropperSelection' ? 'add' : 'remove']('active');
+        });
+        events.on('tool.coordSpace', (space) => {
+            coordSpace.dom.classList[space === 'local' ? 'add' : 'remove']('active');
+        });
+        events.on('pivot.origin', (o) => {
+            origin.dom.classList[o === 'boundCenter' ? 'add' : 'remove']('active');
+        });
+        // Helper to compose localized tooltip text with shortcut
+        const shortcutManager = events.invoke('shortcutManager');
+        const tooltip = (localeKey, shortcutId) => () => {
+            const text = i18n.t(localeKey);
+            if (shortcutId) {
+                const shortcut = shortcutManager.formatShortcut(shortcutId);
+                if (shortcut) {
+                    return i18n.formatTooltipWithShortcut(text, shortcut);
+                }
+            }
+            return text;
+        };
+        // register tooltips
+        tooltips.register(undo, tooltip('tooltip.bottom-toolbar.undo', 'edit.undo'));
+        tooltips.register(redo, tooltip('tooltip.bottom-toolbar.redo', 'edit.redo'));
+        tooltips.register(picker, tooltip('tooltip.bottom-toolbar.rect', 'tool.rectSelection'));
+        tooltips.register(lasso, tooltip('tooltip.bottom-toolbar.lasso', 'tool.lassoSelection'));
+        tooltips.register(polygon, tooltip('tooltip.bottom-toolbar.polygon', 'tool.polygonSelection'));
+        tooltips.register(brush, tooltip('tooltip.bottom-toolbar.brush', 'tool.brushSelection'));
+        tooltips.register(flood, tooltip('tooltip.bottom-toolbar.flood', 'tool.floodSelection'));
+        tooltips.register(sphere, tooltip('tooltip.bottom-toolbar.sphere'));
+        tooltips.register(box, tooltip('tooltip.bottom-toolbar.box'));
+        tooltips.register(translate, tooltip('tooltip.bottom-toolbar.translate', 'tool.move'));
+        tooltips.register(rotate, tooltip('tooltip.bottom-toolbar.rotate', 'tool.rotate'));
+        tooltips.register(scale, tooltip('tooltip.bottom-toolbar.scale', 'tool.scale'));
+        tooltips.register(measure, tooltip('tooltip.bottom-toolbar.measure'));
+        tooltips.register(coordSpace, tooltip('tooltip.bottom-toolbar.local-space', 'tool.toggleCoordSpace'));
+        tooltips.register(origin, tooltip('tooltip.bottom-toolbar.bound-center'));
+        tooltips.register(eyedropper, tooltip('tooltip.bottom-toolbar.eyedropper', 'tool.eyedropperSelection'));
+    }
+}
+
+// pcui slider doesn't include start and end events
+class MyFancySliderInput extends SliderInput {
+    _onSlideStart(pageX) {
+        super._onSlideStart(pageX);
+        this.emit('slide:start');
+    }
+    _onSlideEnd(pageX) {
+        super._onSlideEnd(pageX);
+        this.emit('slide:end');
+    }
+}
+class ColorPanel extends Container {
+    constructor(events, tooltips, args = {}) {
+        args = {
+            ...args,
+            id: 'color-panel',
+            class: 'panel',
+            hidden: true
+        };
+        super(args);
+        // stop pointer events bubbling
+        ['pointerdown', 'pointerup', 'pointermove', 'wheel', 'dblclick'].forEach((eventName) => {
+            this.dom.addEventListener(eventName, (event) => event.stopPropagation());
+        });
+        // header
+        const header = new Container({
+            class: 'panel-header'
+        });
+        const icon = new Label({
+            class: 'panel-header-icon',
+            text: '\uE146'
+        });
+        const label = new Label({
+            class: 'panel-header-label'
+        });
+        i18n.bindText(label, 'panel.colors');
+        header.append(icon);
+        header.append(label);
+        // tint
+        const tintRow = new Container({
+            class: 'color-panel-row'
+        });
+        const tintLabel = new Label({
+            class: 'color-panel-row-label'
+        });
+        i18n.bindText(tintLabel, 'panel.colors.tint');
+        const tintPicker = new ColorPicker({
+            class: 'color-panel-row-picker',
+            value: [1, 1, 1]
+        });
+        tintRow.append(tintLabel);
+        tintRow.append(tintPicker);
+        // temperature
+        const temperatureRow = new Container({
+            class: 'color-panel-row'
+        });
+        const temperatureLabel = new Label({
+            class: 'color-panel-row-label'
+        });
+        i18n.bindText(temperatureLabel, 'panel.colors.temperature');
+        const temperatureSlider = new MyFancySliderInput({
+            class: 'color-panel-row-slider',
+            min: -0.5,
+            max: 0.5,
+            step: 0.005,
+            value: 0
+        });
+        temperatureRow.append(temperatureLabel);
+        temperatureRow.append(temperatureSlider);
+        // saturation
+        const saturationRow = new Container({
+            class: 'color-panel-row'
+        });
+        const saturationLabel = new Label({
+            class: 'color-panel-row-label'
+        });
+        i18n.bindText(saturationLabel, 'panel.colors.saturation');
+        const saturationSlider = new MyFancySliderInput({
+            class: 'color-panel-row-slider',
+            min: 0,
+            max: 2,
+            step: 0.1,
+            value: 1
+        });
+        saturationRow.append(saturationLabel);
+        saturationRow.append(saturationSlider);
+        // brightness
+        const brightnessRow = new Container({
+            class: 'color-panel-row'
+        });
+        const brightnessLabel = new Label({
+            class: 'color-panel-row-label'
+        });
+        i18n.bindText(brightnessLabel, 'panel.colors.brightness');
+        const brightnessSlider = new MyFancySliderInput({
+            class: 'color-panel-row-slider',
+            min: -1,
+            max: 1,
+            step: 0.1,
+            value: 1
+        });
+        brightnessRow.append(brightnessLabel);
+        brightnessRow.append(brightnessSlider);
+        // black point
+        const blackPointRow = new Container({
+            class: 'color-panel-row'
+        });
+        const blackPointLabel = new Label({
+            class: 'color-panel-row-label'
+        });
+        i18n.bindText(blackPointLabel, 'panel.colors.black-point');
+        const blackPointSlider = new MyFancySliderInput({
+            class: 'color-panel-row-slider',
+            min: 0,
+            max: 1,
+            step: 0.01,
+            value: 0
+        });
+        blackPointRow.append(blackPointLabel);
+        blackPointRow.append(blackPointSlider);
+        // white point
+        const whitePointRow = new Container({
+            class: 'color-panel-row'
+        });
+        const whitePointLabel = new Label({
+            class: 'color-panel-row-label'
+        });
+        i18n.bindText(whitePointLabel, 'panel.colors.white-point');
+        const whitePointSlider = new MyFancySliderInput({
+            class: 'color-panel-row-slider',
+            min: 0,
+            max: 1,
+            step: 0.01,
+            value: 1
+        });
+        whitePointRow.append(whitePointLabel);
+        whitePointRow.append(whitePointSlider);
+        // transparency
+        const transparencyRow = new Container({
+            class: 'color-panel-row'
+        });
+        const transparencyLabel = new Label({
+            class: 'color-panel-row-label'
+        });
+        i18n.bindText(transparencyLabel, 'panel.colors.transparency');
+        const transparencySlider = new MyFancySliderInput({
+            class: 'color-panel-row-slider',
+            min: -6,
+            max: 6,
+            step: 0.01,
+            value: 1
+        });
+        transparencyRow.append(transparencyLabel);
+        transparencyRow.append(transparencySlider);
+        // control row
+        const controlRow = new Container({
+            class: 'color-panel-control-row'
+        });
+        const reset = new Label({
+            class: 'panel-header-button',
+            text: '\uE304'
+        });
+        controlRow.append(new Label({ class: 'panel-header-spacer' }));
+        controlRow.append(reset);
+        controlRow.append(new Label({ class: 'panel-header-spacer' }));
+        this.append(header);
+        this.append(tintRow);
+        this.append(temperatureRow);
+        this.append(saturationRow);
+        this.append(brightnessRow);
+        this.append(blackPointRow);
+        this.append(whitePointRow);
+        this.append(transparencyRow);
+        this.append(new Label({ class: 'panel-header-spacer' }));
+        this.append(controlRow);
+        // handle ui updates
+        let suppress = false;
+        let selected = null;
+        let op = null;
+        const updateUIFromState = (splat) => {
+            if (suppress)
+                return;
+            suppress = true;
+            tintPicker.value = splat ? [splat.tintClr.r, splat.tintClr.g, splat.tintClr.b] : [1, 1, 1];
+            temperatureSlider.value = splat ? splat.temperature : 0;
+            saturationSlider.value = splat ? splat.saturation : 0;
+            brightnessSlider.value = splat ? splat.brightness : 0;
+            blackPointSlider.value = splat ? splat.blackPoint : 0;
+            whitePointSlider.value = splat ? splat.whitePoint : 1;
+            transparencySlider.value = splat ? Math.log(splat.transparency) : 0;
+            suppress = false;
+        };
+        const start = () => {
+            if (selected) {
+                op = new SetSplatColorAdjustmentOp({
+                    splat: selected,
+                    newState: {
+                        tintClr: selected.tintClr.clone(),
+                        temperature: selected.temperature,
+                        saturation: selected.saturation,
+                        brightness: selected.brightness,
+                        blackPoint: selected.blackPoint,
+                        whitePoint: selected.whitePoint,
+                        transparency: selected.transparency
+                    },
+                    oldState: {
+                        tintClr: selected.tintClr.clone(),
+                        temperature: selected.temperature,
+                        saturation: selected.saturation,
+                        brightness: selected.brightness,
+                        blackPoint: selected.blackPoint,
+                        whitePoint: selected.whitePoint,
+                        transparency: selected.transparency
+                    }
+                });
+            }
+        };
+        const end = () => {
+            if (op) {
+                const { newState } = op;
+                newState.tintClr.set(tintPicker.value[0], tintPicker.value[1], tintPicker.value[2]);
+                newState.temperature = temperatureSlider.value;
+                newState.saturation = saturationSlider.value;
+                newState.brightness = brightnessSlider.value;
+                newState.blackPoint = blackPointSlider.value;
+                newState.whitePoint = whitePointSlider.value;
+                newState.transparency = Math.exp(transparencySlider.value);
+                events.fire('edit.add', op);
+                op = null;
+            }
+        };
+        const updateOp = (setFunc) => {
+            if (!suppress) {
+                suppress = true;
+                if (op) {
+                    setFunc(op);
+                    op.do();
+                }
+                else if (selected) {
+                    start();
+                    setFunc(op);
+                    op.do();
+                    end();
+                }
+                suppress = false;
+            }
+        };
+        [temperatureSlider, saturationSlider, brightnessSlider, blackPointSlider, whitePointSlider, transparencySlider].forEach((slider) => {
+            slider.on('slide:start', start);
+            slider.on('slide:end', end);
+        });
+        tintPicker.on('picker:color:start', start);
+        tintPicker.on('picker:color:end', end);
+        tintPicker.on('change', (value) => {
+            updateOp((op) => {
+                op.newState.tintClr.set(value[0], value[1], value[2]);
+            });
+        });
+        temperatureSlider.on('change', (value) => {
+            updateOp((op) => {
+                op.newState.temperature = value;
+            });
+        });
+        saturationSlider.on('change', (value) => {
+            updateOp((op) => {
+                op.newState.saturation = value;
+            });
+        });
+        brightnessSlider.on('change', (value) => {
+            updateOp((op) => {
+                op.newState.brightness = value;
+            });
+        });
+        blackPointSlider.on('change', (value) => {
+            updateOp((op) => {
+                op.newState.blackPoint = value;
+            });
+            if (value > whitePointSlider.value) {
+                whitePointSlider.value = value;
+            }
+        });
+        whitePointSlider.on('change', (value) => {
+            updateOp((op) => {
+                op.newState.whitePoint = value;
+            });
+            if (value < blackPointSlider.value) {
+                blackPointSlider.value = value;
+            }
+        });
+        transparencySlider.on('change', (value) => {
+            updateOp((op) => {
+                op.newState.transparency = Math.exp(value);
+            });
+        });
+        reset.on('click', () => {
+            if (selected) {
+                const op = new SetSplatColorAdjustmentOp({
+                    splat: selected,
+                    newState: {
+                        tintClr: new Color(1, 1, 1),
+                        temperature: 0,
+                        saturation: 1,
+                        brightness: 0,
+                        blackPoint: 0,
+                        whitePoint: 1,
+                        transparency: 1
+                    },
+                    oldState: {
+                        tintClr: selected.tintClr.clone(),
+                        temperature: selected.temperature,
+                        saturation: selected.saturation,
+                        brightness: selected.brightness,
+                        blackPoint: selected.blackPoint,
+                        whitePoint: selected.whitePoint,
+                        transparency: selected.transparency
+                    }
+                });
+                events.fire('edit.add', op);
+            }
+        });
+        events.on('selection.changed', (splat) => {
+            selected = splat;
+            updateUIFromState(splat);
+        });
+        events.on('splat.tintClr', updateUIFromState);
+        events.on('splat.temperature', updateUIFromState);
+        events.on('splat.saturation', updateUIFromState);
+        events.on('splat.brightness', updateUIFromState);
+        events.on('splat.blackPoint', updateUIFromState);
+        events.on('splat.whitePoint', updateUIFromState);
+        events.on('splat.transparency', updateUIFromState);
+        tooltips.register(reset, () => i18n.t('panel.colors.reset'), 'bottom');
+        // handle panel visibility
+        const setVisible = (visible) => {
+            if (visible === this.hidden) {
+                this.hidden = !visible;
+                events.fire('colorPanel.visible', visible);
+            }
+        };
+        events.function('colorPanel.visible', () => {
+            return !this.hidden;
+        });
+        events.on('colorPanel.setVisible', (visible) => {
+            setVisible(visible);
+        });
+        events.on('colorPanel.toggleVisible', () => {
+            setVisible(this.hidden);
+        });
+        events.on('viewPanel.visible', (visible) => {
+            if (visible) {
+                setVisible(false);
+            }
+        });
+    }
+}
+
+var img$q = "data:image/svg+xml,%3csvg width='16' height='16' viewBox='0 0 12 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3e%3cpath fill-rule='evenodd' clip-rule='evenodd' d='M3 11C2.17157 11 1.5 10.3284 1.5 9.5L1.5 3.5C1.5 2.67157 2.17157 2 3 2L6 2C6.82843 2 7.5 2.67157 7.5 3.5L7.5 4.5C7.5 4.77614 7.27614 5 7 5C6.72386 5 6.5 4.77614 6.5 4.5L6.5 3.5C6.5 3.22386 6.27614 3 6 3L3 3C2.72386 3 2.5 3.22386 2.5 3.5L2.5 9.5C2.5 9.77614 2.72386 10 3 10L6 10C6.27614 10 6.5 9.77614 6.5 9.5L6.5 8.5C6.5 8.22386 6.72386 8 7 8C7.27614 8 7.5 8.22386 7.5 8.5L7.5 9.5C7.5 10.3284 6.82843 11 6 11L3 11ZM9 7L8.2 7.6C7.97909 7.76568 7.93432 8.07908 8.1 8.3C8.26569 8.52091 8.57909 8.56568 8.8 8.4L10.3733 7.22C10.8533 6.86 10.8533 6.14 10.3733 5.78L8.8 4.6C8.57909 4.43431 8.26569 4.47909 8.1 4.7C7.93432 4.92091 7.97909 5.23431 8.2 5.4L9.00001 6L5.5 6C5.22386 6 5 6.22386 5 6.5C5 6.77614 5.22386 7 5.5 7L9 7Z' fill='currentColor'/%3e%3c/svg%3e";
+
+const createSvg$8 = (svgString, args = {}) => {
+    const decodedStr = decodeURIComponent(svgString.substring('data:image/svg+xml,'.length));
+    return new Element$1({
+        dom: new DOMParser().parseFromString(decodedStr, 'image/svg+xml').documentElement,
+        ...args
+    });
+};
+const removeKnownExtension = (filename) => {
+    // remove known extensions (ordered from longest to shortest for compound extensions)
+    const knownExtensions = [
+        '.compressed.ply',
+        '.ksplat',
+        '.splat',
+        '.html',
+        '.ply',
+        '.sog',
+        '.spz',
+        '.lcc',
+        '.zip'
+    ];
+    for (let i = 0; i < knownExtensions.length; ++i) {
+        const ext = knownExtensions[i];
+        if (filename.endsWith(ext)) {
+            return filename.slice(0, -ext.length);
+        }
+    }
+    return filename;
+};
+class ExportPopup extends Container {
+    show;
+    hide;
+    destroy;
+    constructor(events, args = {}) {
+        args = {
+            id: 'export-popup',
+            hidden: true,
+            tabIndex: -1,
+            ...args
+        };
+        super(args);
+        // UI
+        const dialog = new Container({
+            id: 'dialog'
+        });
+        // header
+        const header = new Container({
+            id: 'header'
+        });
+        const headerText = new Label({
+            id: 'header'
+        });
+        i18n.bindText(headerText, 'popup.export.header');
+        header.append(createSvg$8(img$q, {
+            id: 'icon'
+        }));
+        header.append(headerText);
+        // content
+        const content = new Container({ id: 'content' });
+        // type
+        const viewerTypeRow = new Container({
+            class: 'row'
+        });
+        const viewerTypeLabel = new Label({
+            class: 'label'
+        });
+        i18n.bindText(viewerTypeLabel, 'popup.export.type');
+        const viewerTypeSelect = new SelectInput({
+            class: 'select',
+            defaultValue: 'html'
+        });
+        i18n.bindOptions(viewerTypeSelect, () => [
+            { v: 'html', t: i18n.t('popup.export.html') },
+            { v: 'zip', t: i18n.t('popup.export.package') }
+        ]);
+        viewerTypeRow.append(viewerTypeLabel);
+        viewerTypeRow.append(viewerTypeSelect);
+        // viewer: animation
+        const animationLabel = new Label({ class: 'label' });
+        i18n.bindText(animationLabel, 'popup.export.animation');
+        const animationToggle = new BooleanInput({ class: 'boolean', type: 'toggle', value: false });
+        const animationRow = new Container({ class: 'row' });
+        animationRow.append(animationLabel);
+        animationRow.append(animationToggle);
+        // viewer: loop mode
+        const loopLabel = new Label({ class: 'label' });
+        i18n.bindText(loopLabel, 'popup.export.loop-mode');
+        const loopSelect = new SelectInput({
+            class: 'select',
+            defaultValue: 'repeat'
+        });
+        i18n.bindOptions(loopSelect, () => [
+            { v: 'none', t: i18n.t('popup.export.loop-mode.none') },
+            { v: 'repeat', t: i18n.t('popup.export.loop-mode.repeat') },
+            { v: 'pingpong', t: i18n.t('popup.export.loop-mode.pingpong') }
+        ]);
+        const loopRow = new Container({ class: 'row' });
+        loopRow.append(loopLabel);
+        loopRow.append(loopSelect);
+        // viewer: clear color
+        const colorRow = new Container({
+            class: 'row'
+        });
+        const colorLabel = new Label({
+            class: 'label'
+        });
+        i18n.bindText(colorLabel, 'popup.export.background-color');
+        const colorPicker = new ColorPicker({
+            class: 'color-picker',
+            value: [1, 1, 1, 1]
+        });
+        colorRow.append(colorLabel);
+        colorRow.append(colorPicker);
+        // viewer: fov
+        const fovRow = new Container({
+            class: 'row'
+        });
+        const fovLabel = new Label({
+            class: 'label'
+        });
+        i18n.bindText(fovLabel, 'popup.export.fov');
+        const fovSlider = new SliderInput({
+            class: 'slider',
+            min: 10,
+            max: 120,
+            precision: 0,
+            value: 60
+        });
+        fovRow.append(fovLabel);
+        fovRow.append(fovSlider);
+        // compress
+        const compressRow = new Container({
+            class: 'row'
+        });
+        const compressLabel = new Label({
+            class: 'label'
+        });
+        i18n.bindText(compressLabel, 'popup.export.compress-ply');
+        const compressBoolean = new BooleanInput({
+            class: 'boolean',
+            type: 'toggle'
+        });
+        compressRow.append(compressLabel);
+        compressRow.append(compressBoolean);
+        // spherical harmonic bands
+        const bandsRow = new Container({
+            class: 'row'
+        });
+        const bandsLabel = new Label({
+            class: 'label'
+        });
+        i18n.bindText(bandsLabel, 'popup.export.sh-bands');
+        const bandsSlider = new SliderInput({
+            class: 'slider',
+            min: 0,
+            max: 3,
+            precision: 0,
+            value: 3
+        });
+        bandsRow.append(bandsLabel);
+        bandsRow.append(bandsSlider);
+        // sog iterations
+        const iterationsRow = new Container({
+            class: 'row'
+        });
+        const iterationsLabel = new Label({
+            class: 'label'
+        });
+        i18n.bindText(iterationsLabel, 'popup.export.iterations');
+        const iterationsSlider = new SliderInput({
+            class: 'slider',
+            min: 1,
+            max: 20,
+            precision: 0,
+            value: 10
+        });
+        iterationsRow.append(iterationsLabel);
+        iterationsRow.append(iterationsSlider);
+        // spz version
+        const spzVersionRow = new Container({
+            class: 'row'
+        });
+        const spzVersionLabel = new Label({
+            class: 'label'
+        });
+        i18n.bindText(spzVersionLabel, 'popup.export.spz-version');
+        const spzVersionSelect = new SelectInput({
+            class: 'select',
+            defaultValue: '4'
+        });
+        i18n.bindOptions(spzVersionSelect, () => [
+            { v: '4', t: i18n.t('popup.export.spz-version.4') },
+            { v: '3', t: i18n.t('popup.export.spz-version.3') }
+        ]);
+        spzVersionRow.append(spzVersionLabel);
+        spzVersionRow.append(spzVersionSelect);
+        // filename
+        const filenameRow = new Container({
+            class: 'row'
+        });
+        const filenameLabel = new Label({
+            class: 'label'
+        });
+        i18n.bindText(filenameLabel, 'popup.export.filename');
+        const filenameEntry = new TextInput({
+            class: 'text-input'
+        });
+        filenameRow.append(filenameLabel);
+        filenameRow.append(filenameEntry);
+        // content
+        content.append(viewerTypeRow);
+        content.append(animationRow);
+        content.append(loopRow);
+        content.append(colorRow);
+        content.append(fovRow);
+        content.append(compressRow);
+        content.append(bandsRow);
+        content.append(iterationsRow);
+        content.append(spzVersionRow);
+        content.append(filenameRow);
+        // footer
+        const footer = new Container({ id: 'footer' });
+        const cancelButton = new Button({
+            class: 'button'
+        });
+        i18n.bindText(cancelButton, 'popup.cancel');
+        const exportButton = new Button({
+            class: 'button'
+        });
+        i18n.bindText(exportButton, 'popup.export');
+        footer.append(cancelButton);
+        footer.append(exportButton);
+        dialog.append(header);
+        dialog.append(content);
+        dialog.append(footer);
+        this.append(dialog);
+        // handlers
+        let onCancel;
+        let onExport;
+        cancelButton.on('click', () => onCancel());
+        exportButton.on('click', () => onExport());
+        const keydown = (e) => {
+            switch (e.key) {
+                case 'Escape':
+                    onCancel();
+                    break;
+                case 'Enter':
+                    if (!e.shiftKey)
+                        onExport();
+                    break;
+                default:
+                    e.stopPropagation();
+                    break;
+            }
+        };
+        const updateExtension = (ext) => {
+            filenameEntry.value = removeKnownExtension(filenameEntry.value) + ext;
+        };
+        compressBoolean.on('change', () => {
+            updateExtension(compressBoolean.value ? '.compressed.ply' : '.ply');
+        });
+        viewerTypeSelect.on('change', () => {
+            updateExtension(viewerTypeSelect.value === 'html' ? '.html' : '.zip');
+        });
+        animationToggle.on('change', (value) => {
+            loopSelect.enabled = value;
+        });
+        const reset = (exportType, splatNames, hasPoses) => {
+            const allRows = [
+                viewerTypeRow, animationRow, loopRow, colorRow, fovRow, compressRow, bandsRow, iterationsRow, spzVersionRow, filenameRow
+            ];
+            const activeRows = {
+                ply: [compressRow, bandsRow, filenameRow],
+                splat: [filenameRow],
+                sog: [bandsRow, iterationsRow, filenameRow],
+                spz: [bandsRow, spzVersionRow, filenameRow],
+                viewer: [viewerTypeRow, animationRow, loopRow, colorRow, fovRow, bandsRow, filenameRow]
+            }[exportType];
+            allRows.forEach((r) => {
+                r.hidden = activeRows.indexOf(r) === -1;
+            });
+            bandsSlider.value = events.invoke('view.bands');
+            // ply
+            compressBoolean.value = false;
+            // sog
+            iterationsSlider.value = 10;
+            // spz
+            spzVersionSelect.value = '4';
+            // filename
+            filenameEntry.value = splatNames[0];
+            switch (exportType) {
+                case 'ply':
+                    updateExtension('.ply');
+                    break;
+                case 'splat':
+                    updateExtension('.splat');
+                    break;
+                case 'sog':
+                    updateExtension('.sog');
+                    break;
+                case 'spz':
+                    updateExtension('.spz');
+                    break;
+                case 'viewer':
+                    updateExtension(viewerTypeSelect.value === 'html' ? '.html' : '.zip');
+                    break;
+            }
+            // viewer
+            const bgClr = events.invoke('bgClr');
+            animationToggle.value = hasPoses;
+            animationToggle.enabled = hasPoses;
+            loopSelect.value = 'repeat';
+            loopSelect.enabled = hasPoses;
+            colorPicker.value = [bgClr.r, bgClr.g, bgClr.b];
+            fovSlider.value = events.invoke('camera.fov');
+        };
+        this.show = (exportType, splatNames, showFilenameEdit) => {
+            const frames = events.invoke('timeline.frames');
+            const frameRate = events.invoke('timeline.frameRate');
+            const smoothness = events.invoke('timeline.smoothness');
+            const orderedPoses = events.invoke('camera.poses')
+                .slice()
+                .filter(p => p.frame >= 0 && p.frame < frames)
+                .sort((a, b) => a.frame - b.frame);
+            reset(exportType, splatNames, orderedPoses.length > 0);
+            // filename is only shown in safari where file picker is not supported
+            filenameRow.hidden = !showFilenameEdit;
+            this.hidden = false;
+            this.dom.addEventListener('keydown', keydown);
+            this.dom.focus();
+            const assemblePlyOptions = () => {
+                return {
+                    filename: filenameEntry.value,
+                    splatIdx: 'all',
+                    serializeSettings: {
+                        maxSHBands: bandsSlider.value
+                    },
+                    compressedPly: compressBoolean.value
+                };
+            };
+            const assembleSplatOptions = () => {
+                return {
+                    filename: filenameEntry.value,
+                    splatIdx: 'all',
+                    serializeSettings: {}
+                };
+            };
+            const assembleSogOptions = () => {
+                return {
+                    filename: filenameEntry.value,
+                    splatIdx: 'all',
+                    serializeSettings: {
+                        maxSHBands: bandsSlider.value
+                    },
+                    sogIterations: iterationsSlider.value
+                };
+            };
+            const assembleSpzOptions = () => {
+                return {
+                    filename: filenameEntry.value,
+                    splatIdx: 'all',
+                    serializeSettings: {
+                        maxSHBands: bandsSlider.value
+                    },
+                    spzVersion: spzVersionSelect.value === '3' ? 3 : 4
+                };
+            };
+            const assembleViewerOptions = () => {
+                const fov = fovSlider.value;
+                // use current viewport as start pose
+                const pose = events.invoke('camera.getPose');
+                const p = pose?.position;
+                const t = pose?.target;
+                const cameras = (p && t) ? [{
+                        initial: {
+                            position: [p.x, p.y, p.z],
+                            target: [t.x, t.y, t.z],
+                            fov
+                        }
+                    }] : [];
+                const includeAnimation = animationToggle.value;
+                const animTracks = [];
+                if (includeAnimation && orderedPoses.length > 0) {
+                    const times = [];
+                    const position = [];
+                    const target = [];
+                    const fovKeys = [];
+                    for (let i = 0; i < orderedPoses.length; ++i) {
+                        const op = orderedPoses[i];
+                        times.push(op.frame);
+                        position.push(op.position.x, op.position.y, op.position.z);
+                        target.push(op.target.x, op.target.y, op.target.z);
+                        fovKeys.push(op.fov ?? fov);
+                    }
+                    animTracks.push({
+                        name: 'cameraAnim',
+                        duration: frames / frameRate,
+                        frameRate,
+                        loopMode: loopSelect.value,
+                        interpolation: 'spline',
+                        smoothness,
+                        keyframes: {
+                            times,
+                            values: { position, target, fov: fovKeys }
+                        }
+                    });
+                }
+                const bgColor = colorPicker.value.slice(0, 3);
+                const experienceSettings = {
+                    version: 2,
+                    tonemapping: 'none',
+                    highPrecisionRendering: false,
+                    background: { color: bgColor },
+                    postEffectSettings: defaultPostEffectSettings,
+                    animTracks,
+                    cameras,
+                    annotations: [],
+                    startMode: includeAnimation ? 'animTrack' : 'default'
+                };
+                return {
+                    filename: filenameEntry.value,
+                    splatIdx: 'all',
+                    serializeSettings: {
+                        maxSHBands: bandsSlider.value
+                    },
+                    viewerExportSettings: {
+                        type: viewerTypeSelect.value,
+                        experienceSettings
+                    }
+                };
+            };
+            return new Promise((resolve) => {
+                onCancel = () => {
+                    resolve(null);
+                };
+                onExport = () => {
+                    switch (exportType) {
+                        case 'ply':
+                            resolve(assemblePlyOptions());
+                            break;
+                        case 'splat':
+                            resolve(assembleSplatOptions());
+                            break;
+                        case 'sog':
+                            resolve(assembleSogOptions());
+                            break;
+                        case 'spz':
+                            resolve(assembleSpzOptions());
+                            break;
+                        case 'viewer':
+                            resolve(assembleViewerOptions());
+                            break;
+                    }
+                };
+            }).finally(() => {
+                this.dom.removeEventListener('keydown', keydown);
+                this.hide();
+            });
+        };
+        this.hide = () => {
+            this.hidden = true;
+        };
+        this.destroy = () => {
+            this.hide();
+            super.destroy();
+        };
+    }
+}
+
+const createSvg$7 = (svgString, args = {}) => {
+    const decodedStr = decodeURIComponent(svgString.substring('data:image/svg+xml,'.length));
+    return new Element$1({
+        dom: new DOMParser().parseFromString(decodedStr, 'image/svg+xml').documentElement,
+        ...args
+    });
+};
+class ImageSettingsDialog extends Container {
+    show;
+    hide;
+    destroy;
+    constructor(events, args = {}) {
+        args = {
+            ...args,
+            id: 'image-settings-dialog',
+            class: 'settings-dialog',
+            hidden: true,
+            tabIndex: -1
+        };
+        super(args);
+        const dialog = new Container({
+            id: 'dialog'
+        });
+        // header
+        const headerIcon = createSvg$7(img$q, { id: 'icon' });
+        const headerText = new Label({ id: 'text' });
+        i18n.bindText(headerText, () => i18n.t('popup.render-image.header').toUpperCase());
+        const header = new Container({ id: 'header' });
+        header.append(headerIcon);
+        header.append(headerText);
+        // preset
+        const presetLabel = new Label({ class: 'label' });
+        i18n.bindText(presetLabel, 'popup.render-image.preset');
+        const presetSelect = new SelectInput({
+            class: 'select',
+            defaultValue: 'viewport'
+        });
+        i18n.bindOptions(presetSelect, () => [
+            { v: 'viewport', t: i18n.t('popup.render-image.resolution-current') },
+            { v: 'HD', t: 'HD' },
+            { v: 'QHD', t: 'QHD' },
+            { v: '4K', t: '4K' },
+            { v: 'custom', t: i18n.t('popup.render-image.resolution-custom') }
+        ]);
+        const presetRow = new Container({ class: 'row' });
+        presetRow.append(presetLabel);
+        presetRow.append(presetSelect);
+        // resolution
+        const resolutionLabel = new Label({ class: 'label' });
+        i18n.bindText(resolutionLabel, 'popup.render-image.resolution');
+        const resolutionValue = new VectorInput({
+            class: 'vector-input',
+            dimensions: 2,
+            min: 4,
+            max: 16000,
+            precision: 0,
+            value: [1024, 768]
+        });
+        const resolutionRow = new Container({ class: 'row', enabled: false });
+        resolutionRow.append(resolutionLabel);
+        resolutionRow.append(resolutionValue);
+        // transparent background
+        const transparentBgLabel = new Label({ class: 'label' });
+        i18n.bindText(transparentBgLabel, 'popup.render-image.transparent-bg');
+        const transparentBgBoolean = new BooleanInput({ class: 'boolean', value: false });
+        const transparentBgRow = new Container({ class: 'row' });
+        transparentBgRow.append(transparentBgLabel);
+        transparentBgRow.append(transparentBgBoolean);
+        // show debug overlays
+        const showDebugLabel = new Label({ class: 'label' });
+        i18n.bindText(showDebugLabel, 'popup.render-image.show-debug');
+        const showDebugBoolean = new BooleanInput({ class: 'boolean', value: false });
+        const showDebugRow = new Container({ class: 'row' });
+        showDebugRow.append(showDebugLabel);
+        showDebugRow.append(showDebugBoolean);
+        // content
+        const content = new Container({ id: 'content' });
+        content.append(presetRow);
+        content.append(resolutionRow);
+        content.append(transparentBgRow);
+        content.append(showDebugRow);
+        // footer
+        const footer = new Container({ id: 'footer' });
+        const cancelButton = new Button({
+            class: 'button'
+        });
+        i18n.bindText(cancelButton, 'panel.render.cancel');
+        const okButton = new Button({
+            class: 'button'
+        });
+        i18n.bindText(okButton, 'panel.render.ok');
+        footer.append(cancelButton);
+        footer.append(okButton);
+        dialog.append(header);
+        dialog.append(content);
+        dialog.append(footer);
+        this.append(dialog);
+        let targetSize;
+        // Handle custom resolution activation
+        const updateResolution = () => {
+            const widths = {
+                'viewport': targetSize.width,
+                'HD': 1920,
+                'QHD': 2560,
+                '4K': 3840
+            };
+            const heights = {
+                'viewport': targetSize.height,
+                'HD': 1080,
+                'QHD': 1440,
+                '4K': 2160
+            };
+            resolutionValue.value = [
+                widths[presetSelect.value] ?? resolutionValue.value[0],
+                heights[presetSelect.value] ?? resolutionValue.value[1]
+            ];
+        };
+        presetSelect.on('change', () => {
+            resolutionRow.enabled = presetSelect.value === 'custom';
+            if (presetSelect.value !== 'custom') {
+                updateResolution();
+            }
+        });
+        // handle key bindings for enter and escape
+        let onCancel;
+        let onOK;
+        cancelButton.on('click', () => onCancel());
+        okButton.on('click', () => onOK());
+        const keydown = (e) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopPropagation();
+                onCancel();
+            }
+        };
+        // reset UI and configure for current state
+        const reset = () => {
+            updateResolution();
+        };
+        // function implementations
+        this.show = () => {
+            targetSize = events.invoke('targetSize');
+            reset();
+            this.hidden = false;
+            document.addEventListener('keydown', keydown);
+            this.dom.focus();
+            return new Promise((resolve) => {
+                onCancel = () => {
+                    resolve(null);
+                };
+                onOK = () => {
+                    const [width, height] = resolutionValue.value;
+                    const imageSettings = {
+                        width,
+                        height,
+                        transparentBg: transparentBgBoolean.value,
+                        showDebug: showDebugBoolean.value
+                    };
+                    resolve(imageSettings);
+                };
+            }).finally(() => {
+                document.removeEventListener('keydown', keydown);
+                this.hide();
+            });
+        };
+        this.hide = () => {
+            this.hidden = true;
+        };
+        this.destroy = () => {
+            this.hide();
+            super.destroy();
+        };
+    }
+}
+
+const offsetParent = (elem) => {
+    const parent = elem.parentNode;
+    return (parent.tagName === 'BODY' || window.getComputedStyle(parent).position !== 'static') ?
+        parent :
+        offsetParent(parent);
+};
+const arrange = (element, target, direction, padding) => {
+    const rect = target.getBoundingClientRect();
+    const parentRect = offsetParent(element).getBoundingClientRect();
+    const style = element.style;
+    switch (direction) {
+        case 'left':
+            break;
+        case 'right':
+            style.left = `${rect.right - parentRect.left + padding}px`;
+            style.top = `${rect.top - parentRect.top}px`;
+            break;
+        case 'top':
+            break;
+        case 'bottom':
+            style.left = `${rect.left - parentRect.left}px`;
+            style.top = `${rect.bottom - parentRect.top + padding}px`;
+            break;
+    }
+};
+const isString = (value) => {
+    return !value || typeof value === 'string' || value instanceof String;
+};
+const createIcon = (icon) => {
+    return isString(icon) ?
+        new Label({ class: 'menu-row-icon', text: icon && String.fromCodePoint(parseInt(icon, 16)) }) :
+        icon;
+};
+// create the row text label; if `text` is a resolver, bind it so the row
+// re-localizes when the language changes (auto-unbinds on label destroy)
+const createTextLabel = (text) => {
+    const label = new Label({ class: 'menu-row-text' });
+    i18n.bindText(label, text);
+    return label;
+};
+// Detect if we're on a touch device
+const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+class MenuPanel extends Container {
+    parentPanel = null;
+    menuItems = [];
+    constructor(menuItems, args = {}) {
+        args = {
+            ...args,
+            class: 'menu-panel',
+            hidden: true
+        };
+        super(args);
+        this.on('hide', () => {
+            for (const menuItem of this.menuItems) {
+                if (menuItem.subMenu) {
+                    menuItem.subMenu.hidden = true;
+                }
+            }
+        });
+        this.on('show', async () => {
+            for (let i = 0; i < this.menuItems.length; i++) {
+                const menuItem = this.menuItems[i];
+                if (menuItem.isEnabled) {
+                    this.dom.children.item(i).ui.enabled = await menuItem.isEnabled();
+                }
+                if (menuItem.isVisible) {
+                    this.dom.children.item(i).ui.hidden = !(await menuItem.isVisible());
+                }
+            }
+        });
+        this.setItems(menuItems);
+    }
+    setItems(menuItems) {
+        this.menuItems = menuItems;
+        this.clear();
+        for (const menuItem of menuItems) {
+            const type = menuItem.subMenu ? 'menu' : menuItem.text ? 'button' : 'separator';
+            let row = null;
+            let activate = null;
+            let deactivate = null;
+            switch (type) {
+                case 'button': {
+                    row = new Container({ class: 'menu-row' });
+                    const icon = createIcon(menuItem.icon);
+                    const text = createTextLabel(menuItem.text);
+                    const postscript = isString(menuItem.extra) ? new Label({ class: 'menu-row-postscript', text: menuItem.extra }) : menuItem.extra;
+                    row.append(icon);
+                    row.append(text);
+                    row.append(postscript);
+                    break;
+                }
+                case 'menu': {
+                    row = new Container({ class: 'menu-row' });
+                    const icon = createIcon(menuItem.icon);
+                    const text = createTextLabel(menuItem.text);
+                    const postscript = new Label({ class: 'menu-row-postscript', text: '\u232A' });
+                    row.append(icon);
+                    row.append(text);
+                    row.append(postscript);
+                    // set parent panel
+                    menuItem.subMenu.parentPanel = this;
+                    const childPanel = menuItem.subMenu;
+                    if (childPanel) {
+                        activate = () => {
+                            if (childPanel.hidden) {
+                                childPanel.position(row.dom, 'right', 2);
+                                childPanel.hidden = !childPanel.hidden;
+                            }
+                            deactivate = () => {
+                                childPanel.hidden = true;
+                            };
+                        };
+                    }
+                    break;
+                }
+                case 'separator':
+                    this.append(new Container({ class: 'menu-row-separator' }));
+                    break;
+            }
+            if (row) {
+                let timer = -1;
+                // For desktop: use hover behavior
+                if (!isTouchDevice) {
+                    row.dom.addEventListener('pointerenter', () => {
+                        timer = window.setTimeout(() => {
+                            if (deactivate) {
+                                deactivate();
+                            }
+                            if (activate) {
+                                activate();
+                            }
+                        }, 250);
+                    });
+                    row.dom.addEventListener('pointerleave', () => {
+                        if (timer !== -1) {
+                            clearTimeout(timer);
+                            timer = -1;
+                        }
+                    });
+                }
+                row.dom.addEventListener('pointerdown', (event) => {
+                    event.stopPropagation();
+                });
+                row.dom.addEventListener('pointerup', (event) => {
+                    event.stopPropagation();
+                    if (!row.disabled) {
+                        // Handle submenu items differently on touch devices
+                        if (menuItem.subMenu) {
+                            if (isTouchDevice) {
+                                // On touch devices: tap to open/close submenu
+                                if (menuItem.subMenu.hidden) {
+                                    // Close other submenus in this panel first
+                                    if (deactivate) {
+                                        deactivate();
+                                    }
+                                    if (activate) {
+                                        activate();
+                                    }
+                                }
+                                else {
+                                    // Close the submenu if it's already open
+                                    menuItem.subMenu.hidden = true;
+                                }
+                            }
+                            // On desktop, submenus are handled by hover, so don't close the root panel
+                        }
+                        else if (menuItem.onSelect) {
+                            // Regular menu item: execute action and close menu
+                            this.rootPanel.hidden = true;
+                            menuItem.onSelect();
+                        }
+                    }
+                });
+                this.append(row);
+            }
+        }
+    }
+    get rootPanel() {
+        // eslint-disable-next-line  @typescript-eslint/no-this-alias
+        let panel = this;
+        while (panel.parentPanel) {
+            panel = panel.parentPanel;
+        }
+        return panel;
+    }
+    position(parent, direction, padding = 2) {
+        arrange(this.dom, parent, direction, padding);
+    }
+}
+
+var img$p = "data:image/svg+xml,%3csvg width='12' height='12' viewBox='0 0 12 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3e %3cpath fill-rule='evenodd' clip-rule='evenodd' d='M3.10535 2.19302C3.27488 1.97505 3.58902 1.93578 3.80699 2.10532L7.29211 4.81596C8.06423 5.4165 8.06423 6.58348 7.29211 7.18402L3.80699 9.89467C3.58902 10.0642 3.27488 10.0249 3.10535 9.80696C2.93581 9.58899 2.97508 9.27485 3.19305 9.10532L6.67817 6.39467C6.93554 6.19449 6.93554 5.8055 6.67817 5.60532L3.19305 2.89467C2.97508 2.72513 2.93581 2.411 3.10535 2.19302Z' fill='currentColor'/%3e%3c/svg%3e";
+
+var img$o = "data:image/svg+xml,%3csvg width='16' height='16' viewBox='0 0 16 16' fill='none' xmlns='http://www.w3.org/2000/svg'%3e %3cpath fill-rule='evenodd' clip-rule='evenodd' d='M2 5.33333C2 4.22876 2.89543 3.33333 4 3.33333H12C13.1046 3.33333 14 4.22876 14 5.33333V10.6667C14 11.7712 13.1046 12.6667 12 12.6667H4C2.89543 12.6667 2 11.7712 2 10.6667V5.33333ZM4 4.66666C3.63181 4.66666 3.33333 4.96514 3.33333 5.33333V10.6667C3.33333 11.0349 3.63181 11.3333 4 11.3333H12C12.3682 11.3333 12.6667 11.0349 12.6667 10.6667V5.33333C12.6667 4.96514 12.3682 4.66666 12 4.66666H4Z' fill='currentColor'/%3e %3cpath fill-rule='evenodd' clip-rule='evenodd' d='M6 12V4H7.33333V12H6Z' fill='currentColor'/%3e%3c/svg%3e";
+
+var img$n = "data:image/svg+xml,%3csvg width='16' height='16' viewBox='6 6 12 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3e%3cpath fill-rule='evenodd' clip-rule='evenodd' d='M14.5 9H16V10H8V9L9.5 9C9.5 8.17157 10.1716 7.5 11 7.5H13C13.8284 7.5 14.5 8.17157 14.5 9ZM10.5 9L13.5 9C13.5 8.72386 13.2761 8.5 13 8.5L11 8.5C10.7239 8.5 10.5 8.72386 10.5 9ZM9.5 10.5V15.5C9.5 15.7761 9.72386 16 10 16H14C14.2761 16 14.5 15.7761 14.5 15.5V10.5H15.5V15.5C15.5 16.3284 14.8284 17 14 17H10C9.17157 17 8.5 16.3284 8.5 15.5V10.5H9.5ZM11.5 11.5C11.5 11.2239 11.2761 11 11 11C10.7239 11 10.5 11.2239 10.5 11.5V14.5C10.5 14.7761 10.7239 15 11 15C11.2761 15 11.5 14.7761 11.5 14.5V11.5ZM13 11C13.2761 11 13.5 11.2239 13.5 11.5V14.5C13.5 14.7761 13.2761 15 13 15C12.7239 15 12.5 14.7761 12.5 14.5V11.5C12.5 11.2239 12.7239 11 13 11Z' fill='currentColor'/%3e%3c/svg%3e";
+
+var img$m = "data:image/svg+xml,%3csvg width='16' height='16' viewBox='0 0 12 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3e%3cpath fill-rule='evenodd' clip-rule='evenodd' d='M1.5 3.5C1.5 2.67157 2.17157 2 3 2H9C9.82843 2 10.5 2.67157 10.5 3.5V8.5C10.5 9.32843 9.82843 10 9 10H8C7.72386 10 7.5 9.77614 7.5 9.5C7.5 9.22386 7.72386 9 8 9H9C9.27614 9 9.5 8.77614 9.5 8.5V3.5C9.5 3.22386 9.27614 3 9 3H3C2.72386 3 2.5 3.22386 2.5 3.5V8.5C2.5 8.77614 2.72386 9 3 9H4C4.27614 9 4.5 9.22386 4.5 9.5C4.5 9.77614 4.27614 10 4 10H3C2.17157 10 1.5 9.32843 1.5 8.5V3.5ZM6.5 7L7.1 7.8C7.26568 8.02091 7.57908 8.06568 7.8 7.9C8.02091 7.73431 8.06568 7.42091 7.9 7.2L6.72 5.62666C6.36 5.14666 5.64 5.14666 5.28 5.62666L4.1 7.2C3.93431 7.42091 3.97908 7.73431 4.2 7.9C4.42091 8.06568 4.73431 8.02091 4.9 7.8L5.5 6.99999V10.5C5.5 10.7761 5.72386 11 6 11C6.27614 11 6.5 10.7761 6.5 10.5V7Z' fill='currentColor'/%3e%3c/svg%3e";
+
+var img$l = "data:image/svg+xml,%3csvg width='16' height='16' viewBox='0 0 12 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3e%3cpath fill-rule='evenodd' clip-rule='evenodd' d='M9 2C9 1.72386 8.77614 1.5 8.5 1.5C8.22386 1.5 8 1.72386 8 2V3H7C6.72386 3 6.5 3.22386 6.5 3.5C6.5 3.77614 6.72386 4 7 4H8V5C8 5.27614 8.22386 5.5 8.5 5.5C8.77614 5.5 9 5.27614 9 5V4H10C10.2761 4 10.5 3.77614 10.5 3.5C10.5 3.22386 10.2761 3 10 3H9V2ZM3.5 3C3.22386 3 3 3.22386 3 3.5V8.5C3 8.77614 3.22386 9 3.5 9H8.5C8.77614 9 9 8.77614 9 8.5V6.5C9 6.22386 9.22386 6 9.5 6C9.77614 6 10 6.22386 10 6.5V8.5C10 9.32843 9.32843 10 8.5 10H3.5C2.67157 10 2 9.32843 2 8.5V3.5C2 2.67157 2.67157 2 3.5 2H5.5C5.77614 2 6 2.22386 6 2.5C6 2.77614 5.77614 3 5.5 3H3.5Z' fill='currentColor'/%3e%3c/svg%3e";
+
+var img$k = "data:image/svg+xml,%3csvg width='16' height='16' viewBox='0 0 12 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M6 3V5C6 5.55228 6.44772 6 7 6H9M9.5 6.41421V8.5C9.5 9.05228 9.05228 9.5 8.5 9.5H3.5C2.94772 9.5 2.5 9.05228 2.5 8.5V3.5C2.5 2.94772 2.94772 2.5 3.5 2.5H5.58579C5.851 2.5 6.10536 2.60536 6.29289 2.79289L9.20711 5.70711C9.39464 5.89464 9.5 6.149 9.5 6.41421Z' stroke='currentColor'/%3e%3c/svg%3e";
+
+var img$j = "data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 12 12' fill='none'%3e %3cg transform='translate(0%2c 12) scale(1%2c -1)'%3e %3cpath fill-rule='evenodd' clip-rule='evenodd' d='M2.5 9C2.5 8.72386 2.72386 8.5 3 8.5L9 8.5C9.27614 8.5 9.5 8.72386 9.5 9C9.5 9.27614 9.27614 9.5 9 9.5L3 9.5C2.72386 9.5 2.5 9.27614 2.5 9ZM5.50001 6L4.90001 5.2C4.73432 4.97909 4.42092 4.93432 4.20001 5.1C3.9791 5.26569 3.93432 5.57909 4.10001 5.8L5.28001 7.37334C5.64001 7.85334 6.36001 7.85334 6.72001 7.37334L7.90001 5.8C8.06569 5.57909 8.02092 5.26569 7.80001 5.1C7.57909 4.93432 7.26569 4.97909 7.10001 5.2L6.50001 6.00001L6.50001 2.5C6.50001 2.22386 6.27615 2 6.00001 2C5.72387 2 5.50001 2.22386 5.50001 2.5L5.50001 6Z' fill='currentColor'/%3e %3c/g%3e%3c/svg%3e";
+
+var img$i = "data:image/svg+xml,%3csvg width='16' height='16' viewBox='0 0 12 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3e%3cpath fill-rule='evenodd' clip-rule='evenodd' d='M4.66421 2C4.26639 2 3.88486 2.15803 3.60355 2.43934L2.43934 3.60355C2.15804 3.88486 2 4.26639 2 4.66421V8.5C2 9.32843 2.67157 10 3.5 10H8.5C9.32843 10 10 9.32843 10 8.5V3.5C10 2.67157 9.32843 2 8.5 2H7.5H5.5H4.66421ZM5 3H4.66421C4.53161 3 4.40443 3.05268 4.31066 3.14645L3.14645 4.31066C3.05268 4.40443 3 4.53161 3 4.66421V8.5C3 8.77614 3.22386 9 3.5 9H8.5C8.77614 9 9 8.77614 9 8.5V3.5C9 3.22386 8.77614 3 8.5 3H8V4.5C8 4.77614 7.77614 5 7.5 5H5.5C5.22386 5 5 4.77614 5 4.5V3Z' fill='currentColor'/%3e%3c/svg%3e";
+
+var img$h = "data:image/svg+xml,%3csvg width='16' height='16' viewBox='0 0 12 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3e%3cpath fill-rule='evenodd' clip-rule='evenodd' d='M2.5 3C2.5 2.72386 2.72386 2.5 3 2.5H4C4.27614 2.5 4.5 2.27614 4.5 2C4.5 1.72386 4.27614 1.5 4 1.5H3C2.17157 1.5 1.5 2.17157 1.5 3V4C1.5 4.27614 1.72386 4.5 2 4.5C2.27614 4.5 2.5 4.27614 2.5 4V3ZM8 1.5C7.72386 1.5 7.5 1.72386 7.5 2C7.5 2.27614 7.72386 2.5 8 2.5H9C9.27614 2.5 9.5 2.72386 9.5 3V4C9.5 4.27614 9.72386 4.5 10 4.5C10.2761 4.5 10.5 4.27614 10.5 4V3C10.5 2.17157 9.82843 1.5 9 1.5H8ZM2.5 8C2.5 7.72386 2.27614 7.5 2 7.5C1.72386 7.5 1.5 7.72386 1.5 8V9C1.5 9.82843 2.17157 10.5 3 10.5H4C4.27614 10.5 4.5 10.2761 4.5 10C4.5 9.72386 4.27614 9.5 4 9.5H3C2.72386 9.5 2.5 9.27614 2.5 9V8ZM10.5 8C10.5 7.72386 10.2761 7.5 10 7.5C9.72386 7.5 9.5 7.72386 9.5 8V9C9.5 9.27614 9.27614 9.5 9 9.5H8C7.72386 9.5 7.5 9.72386 7.5 10C7.5 10.2761 7.72386 10.5 8 10.5H9C9.82843 10.5 10.5 9.82843 10.5 9V8ZM4.5 3.5C3.94772 3.5 3.5 3.94772 3.5 4.5V7.5C3.5 8.05228 3.94772 8.5 4.5 8.5H7.5C8.05228 8.5 8.5 8.05228 8.5 7.5V4.5C8.5 3.94772 8.05228 3.5 7.5 3.5H4.5Z' fill='currentColor'/%3e%3c/svg%3e";
+
+var img$g = "data:image/svg+xml,%3csvg width='16' height='16' viewBox='0 0 12 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M4.49999 5H5.49999V6.5H6.99999V7.5H5.49999V9H4.49999V7.5H2.99999V6.5H4.49999V5Z' fill='currentColor'/%3e%3cpath fill-rule='evenodd' clip-rule='evenodd' d='M9 9H9.49999C10.3284 9 11 8.32843 11 7.5V2.5C11 1.67157 10.3284 1 9.49999 1H4.49999C3.67157 1 2.99999 1.67157 2.99999 2.5V3H2.5C1.67157 3 1 3.67157 1 4.5V9.5C1 10.3284 1.67157 11 2.5 11H7.5C8.32843 11 9 10.3284 9 9.5V9ZM4.49999 2C4.22385 2 3.99999 2.22386 3.99999 2.5V3H7.5C8.32843 3 9 3.67157 9 4.5V8H9.49999C9.77614 8 9.99999 7.77614 9.99999 7.5V2.5C9.99999 2.22386 9.77614 2 9.49999 2H4.49999ZM2 4.5C2 4.22386 2.22386 4 2.5 4H7.5C7.77614 4 8 4.22386 8 4.5V9.5C8 9.77614 7.77614 10 7.5 10H2.5C2.22386 10 2 9.77614 2 9.5V4.5Z' fill='currentColor'/%3e%3c/svg%3e";
+
+var img$f = "data:image/svg+xml,%3csvg width='16' height='16' viewBox='0 0 12 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3e%3cpath fill-rule='evenodd' clip-rule='evenodd' d='M2.5 3C2.5 2.72386 2.72386 2.5 3 2.5H4C4.27614 2.5 4.5 2.27614 4.5 2C4.5 1.72386 4.27614 1.5 4 1.5H3C2.17157 1.5 1.5 2.17157 1.5 3V4C1.5 4.27614 1.72386 4.5 2 4.5C2.27614 4.5 2.5 4.27614 2.5 4V3ZM8 1.5C7.72386 1.5 7.5 1.72386 7.5 2C7.5 2.27614 7.72386 2.5 8 2.5H9C9.27614 2.5 9.5 2.72386 9.5 3V4C9.5 4.27614 9.72386 4.5 10 4.5C10.2761 4.5 10.5 4.27614 10.5 4V3C10.5 2.17157 9.82843 1.5 9 1.5H8ZM2.5 8C2.5 7.72386 2.27614 7.5 2 7.5C1.72386 7.5 1.5 7.72386 1.5 8V9C1.5 9.82843 2.17157 10.5 3 10.5H4C4.27614 10.5 4.5 10.2761 4.5 10C4.5 9.72386 4.27614 9.5 4 9.5H3C2.72386 9.5 2.5 9.27614 2.5 9V8ZM10.5 8C10.5 7.72386 10.2761 7.5 10 7.5C9.72386 7.5 9.5 7.72386 9.5 8V9C9.5 9.27614 9.27614 9.5 9 9.5H8C7.72386 9.5 7.5 9.72386 7.5 10C7.5 10.2761 7.72386 10.5 8 10.5H9C9.82843 10.5 10.5 9.82843 10.5 9V8ZM4.5 3.5C3.94772 3.5 3.5 3.94772 3.5 4.5V7.5C3.5 8.05228 3.94772 8.5 4.5 8.5H7.5C8.05228 8.5 8.5 8.05228 8.5 7.5V4.5C8.5 3.94772 8.05228 3.5 7.5 3.5H4.5ZM4.5 4.5H7.5V7.5H4.5V4.5Z' fill='currentColor'/%3e%3c/svg%3e";
+
+var img$e = "data:image/svg+xml,%3csvg width='16' height='16' viewBox='0 0 12 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3e%3crect x='3' y='6' width='6' height='4' rx='1' stroke='currentColor'/%3e%3cpath d='M8 6V4C8 2.89543 7.10457 2 6 2V2C4.89543 2 4 2.89543 4 4V6' stroke='currentColor'/%3e%3cpath d='M7 8C7 8.55228 6.55228 9 6 9V9C5.44772 9 5 8.55228 5 8V8C5 7.44772 5.44772 7 6 7V7C6.55228 7 7 7.44772 7 8V8Z' fill='currentColor'/%3e%3c/svg%3e";
+
+var img$d = "data:image/svg+xml,%3csvg width='16' height='16' viewBox='0 0 12 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3e%3cpath fill-rule='evenodd' clip-rule='evenodd' d='M3 2.5C2.72386 2.5 2.5 2.72386 2.5 3V4C2.5 4.27614 2.27614 4.5 2 4.5C1.72386 4.5 1.5 4.27614 1.5 4V3C1.5 2.17157 2.17157 1.5 3 1.5H4C4.27614 1.5 4.5 1.72386 4.5 2C4.5 2.27614 4.27614 2.5 4 2.5H3ZM7.5 2C7.5 1.72386 7.72386 1.5 8 1.5H9C9.82843 1.5 10.5 2.17157 10.5 3V4C10.5 4.27614 10.2761 4.5 10 4.5C9.72386 4.5 9.5 4.27614 9.5 4V3C9.5 2.72386 9.27614 2.5 9 2.5H8C7.72386 2.5 7.5 2.27614 7.5 2ZM2 7.5C2.27614 7.5 2.5 7.72386 2.5 8V9C2.5 9.27614 2.72386 9.5 3 9.5H4C4.27614 9.5 4.5 9.72386 4.5 10C4.5 10.2761 4.27614 10.5 4 10.5H3C2.17157 10.5 1.5 9.82843 1.5 9V8C1.5 7.72386 1.72386 7.5 2 7.5ZM10 7.5C10.2761 7.5 10.5 7.72386 10.5 8V9C10.5 9.82843 9.82843 10.5 9 10.5H8C7.72386 10.5 7.5 10.2761 7.5 10C7.5 9.72386 7.72386 9.5 8 9.5H9C9.27614 9.5 9.5 9.27614 9.5 9V8C9.5 7.72386 9.72386 7.5 10 7.5Z' fill='currentColor'/%3e%3c/svg%3e";
+
+var img$c = "data:image/svg+xml,%3csvg width='16' height='16' viewBox='-1 -1 11 11' fill='none' xmlns='http://www.w3.org/2000/svg'%3e%3cpath fill-rule='evenodd' clip-rule='evenodd' d='M2.66421 0C2.26639 0 1.88486 0.158035 1.60355 0.43934L0.43934 1.60355C0.158035 1.88486 0 2.26639 0 2.66421V6.5C0 7.32843 0.671573 8 1.5 8H6.5C7.32843 8 8 7.32843 8 6.5V1.5C8 0.671573 7.32843 0 6.5 0H5.5H3.5H2.66421ZM3 1H2.66421C2.53161 1 2.40443 1.05268 2.31066 1.14645L1.14645 2.31066C1.05268 2.40443 1 2.53161 1 2.66421V6.5C1 6.77614 1.22386 7 1.5 7H6.5C6.77614 7 7 6.77614 7 6.5V1.5C7 1.22386 6.77614 1 6.5 1H6V2.5C6 2.77614 5.77614 3 5.5 3H3.5C3.22386 3 3 2.77614 3 2.5V1Z' fill='currentColor'/%3e%3c/svg%3e";
+
+var img$b = "data:image/svg+xml,%3csvg width='16' height='16' viewBox='0 0 12 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3e%3crect x='3' y='6' width='6' height='4' rx='1' stroke='currentColor'/%3e%3cpath d='M8 6V4C8 2.89543 7.10457 2 6 2V2C4.89543 2 4 2.89543 4 4V4' stroke='currentColor'/%3e%3cpath d='M7 8C7 8.55228 6.55228 9 6 9V9C5.44772 9 5 8.55228 5 8V8C5 7.44772 5.44772 7 6 7V7C6.55228 7 7 7.44772 7 8V8Z' fill='currentColor'/%3e%3c/svg%3e";
+
+const createSvg$6 = (svgString) => {
+    const decodedStr = decodeURIComponent(svgString.substring('data:image/svg+xml,'.length));
+    return new Element$1({
+        dom: new DOMParser().parseFromString(decodedStr, 'image/svg+xml').documentElement
+    });
+};
+const getOpenRecentItems = async (events) => {
+    const files = await recentFiles.get();
+    const items = files.map((file) => {
+        return {
+            text: file.name,
+            onSelect: () => events.invoke('doc.openRecent', file.handle)
+        };
+    });
+    if (items.length > 0) {
+        items.push({}); // separator
+        items.push({
+            text: () => i18n.t('menu.file.open-recent.clear'),
+            icon: createSvg$6(img$n),
+            onSelect: () => recentFiles.clear()
+        });
+    }
+    return items;
+};
+class Menu extends Container {
+    constructor(events, args = {}) {
+        args = {
+            ...args,
+            id: 'menu'
+        };
+        super(args);
+        const menubar = new Container({
+            id: 'menu-bar'
+        });
+        menubar.dom.addEventListener('pointerdown', (event) => {
+            event.stopPropagation();
+        });
+        const scene = new Label({
+            class: 'menu-option'
+        });
+        i18n.bindText(scene, 'menu.file');
+        const render = new Label({
+            class: 'menu-option'
+        });
+        i18n.bindText(render, 'menu.render');
+        const selection = new Label({
+            class: 'menu-option'
+        });
+        i18n.bindText(selection, 'menu.select');
+        const help = new Label({
+            class: 'menu-option'
+        });
+        i18n.bindText(help, 'menu.help');
+        const toggleCollapsed = () => {
+            document.body.classList.toggle('collapsed');
+        };
+        // collapse menu on mobile
+        if (document.body.clientWidth < 600) {
+            toggleCollapsed();
+        }
+        const collapse = createSvg$6(img$o);
+        collapse.dom.classList.add('menu-icon');
+        collapse.dom.setAttribute('id', 'menu-collapse');
+        collapse.dom.addEventListener('click', toggleCollapsed);
+        const arrow = createSvg$6(img$p);
+        arrow.dom.classList.add('menu-icon');
+        arrow.dom.setAttribute('id', 'menu-arrow');
+        arrow.dom.addEventListener('click', toggleCollapsed);
+        const buttonsContainer = new Container({
+            id: 'menu-bar-options'
+        });
+        buttonsContainer.append(scene);
+        buttonsContainer.append(selection);
+        buttonsContainer.append(render);
+        buttonsContainer.append(help);
+        buttonsContainer.append(collapse);
+        buttonsContainer.append(arrow);
+        menubar.append(buttonsContainer);
+        // Get the shortcut manager for displaying keyboard shortcuts
+        const shortcutManager = events.invoke('shortcutManager');
+        const exportMenuPanel = new MenuPanel([{
+                text: () => i18n.t('menu.file.export.ply'),
+                icon: createSvg$6(img$q),
+                isEnabled: () => !events.invoke('scene.empty'),
+                onSelect: () => events.invoke('scene.export', 'ply')
+            }, {
+                text: () => i18n.t('menu.file.export.splat'),
+                icon: createSvg$6(img$q),
+                isEnabled: () => !events.invoke('scene.empty'),
+                onSelect: () => events.invoke('scene.export', 'splat')
+            }, {
+                text: () => i18n.t('menu.file.export.sog'),
+                icon: createSvg$6(img$q),
+                isEnabled: () => !events.invoke('scene.empty'),
+                onSelect: () => events.invoke('scene.export', 'sog')
+            }, {
+                text: () => i18n.t('menu.file.export.spz'),
+                icon: createSvg$6(img$q),
+                isEnabled: () => !events.invoke('scene.empty'),
+                onSelect: () => events.invoke('scene.export', 'spz')
+            }, {
+            // separator
+            }, {
+                text: () => i18n.t('menu.file.export.viewer', { ellipsis: true }),
+                icon: createSvg$6(img$q),
+                isEnabled: () => !events.invoke('scene.empty'),
+                onSelect: () => events.invoke('scene.export', 'viewer')
+            }]);
+        const openRecentMenuPanel = new MenuPanel([]);
+        const fileMenuPanel = new MenuPanel([{
+                text: () => i18n.t('menu.file.new'),
+                icon: createSvg$6(img$l),
+                isEnabled: () => !events.invoke('scene.empty'),
+                onSelect: () => events.invoke('doc.new')
+            }, {
+                text: () => i18n.t('menu.file.open'),
+                icon: createSvg$6(img$k),
+                onSelect: async () => {
+                    await events.invoke('doc.open');
+                }
+            }, {
+                text: () => i18n.t('menu.file.open-recent'),
+                icon: createSvg$6(img$k),
+                subMenu: openRecentMenuPanel,
+                isEnabled: async () => {
+                    // refresh open recent menu items when the parent menu is opened
+                    try {
+                        const items = await getOpenRecentItems(events);
+                        openRecentMenuPanel.setItems(items);
+                        return items.length > 0;
+                    }
+                    catch (error) {
+                        console.error('Failed to load recent files:', error);
+                        return false;
+                    }
+                }
+            }, {
+            // separator
+            }, {
+                text: () => i18n.t('menu.file.save'),
+                icon: createSvg$6(img$i),
+                isEnabled: () => events.invoke('doc.name'),
+                onSelect: async () => await events.invoke('doc.save')
+            }, {
+                text: () => i18n.t('menu.file.save-as', { ellipsis: true }),
+                icon: createSvg$6(img$i),
+                isEnabled: () => !events.invoke('scene.empty'),
+                onSelect: async () => await events.invoke('doc.saveAs')
+            }, {
+            // separator
+            }, {
+                text: () => i18n.t('menu.file.import', { ellipsis: true }),
+                icon: createSvg$6(img$m),
+                onSelect: async () => {
+                    await events.invoke('scene.import');
+                }
+            }, {
+                text: () => i18n.t('menu.file.export'),
+                icon: createSvg$6(img$q),
+                subMenu: exportMenuPanel
+            }, {
+                text: () => i18n.t('menu.file.publish', { ellipsis: true }),
+                icon: createSvg$6(img$j),
+                isEnabled: () => !events.invoke('scene.empty'),
+                onSelect: async () => await events.invoke('show.publishSettingsDialog')
+            }]);
+        const selectionMenuPanel = new MenuPanel([{
+                text: () => i18n.t('menu.select.all'),
+                icon: createSvg$6(img$h),
+                extra: shortcutManager.formatShortcut('select.all'),
+                onSelect: () => events.fire('select.all')
+            }, {
+                text: () => i18n.t('menu.select.none'),
+                icon: createSvg$6(img$d),
+                extra: shortcutManager.formatShortcut('select.none'),
+                onSelect: () => events.fire('select.none')
+            }, {
+                text: () => i18n.t('menu.select.invert'),
+                icon: createSvg$6(img$f),
+                extra: shortcutManager.formatShortcut('select.invert'),
+                onSelect: () => events.fire('select.invert')
+            }, {
+            // separator
+            }, {
+                text: () => i18n.t('menu.select.lock'),
+                icon: createSvg$6(img$e),
+                extra: shortcutManager.formatShortcut('select.hide'),
+                isEnabled: () => events.invoke('selection.splats'),
+                onSelect: () => events.fire('select.hide')
+            }, {
+                text: () => i18n.t('menu.select.unlock'),
+                icon: createSvg$6(img$b),
+                extra: shortcutManager.formatShortcut('select.unhide'),
+                onSelect: () => events.fire('select.unhide')
+            }, {
+                text: () => i18n.t('menu.select.delete'),
+                icon: createSvg$6(img$n),
+                extra: shortcutManager.formatShortcut('select.delete'),
+                isEnabled: () => events.invoke('selection.splats'),
+                onSelect: () => events.fire('select.delete')
+            }, {
+                text: () => i18n.t('menu.select.reset'),
+                onSelect: () => events.fire('scene.reset')
+            }, {
+            // separator
+            }, {
+                text: () => i18n.t('menu.select.duplicate'),
+                icon: createSvg$6(img$g),
+                isEnabled: () => events.invoke('selection.splats'),
+                onSelect: () => events.fire('select.duplicate')
+            }, {
+                text: () => i18n.t('menu.select.separate'),
+                icon: createSvg$6(img$c),
+                isEnabled: () => events.invoke('selection.splats'),
+                onSelect: () => events.fire('select.separate')
+            }]);
+        const renderMenuPanel = new MenuPanel([{
+                text: () => i18n.t('menu.render.image', { ellipsis: true }),
+                icon: createSvg$6(img$q),
+                onSelect: async () => await events.invoke('show.imageSettingsDialog')
+            }, {
+                text: () => i18n.t('menu.render.video', { ellipsis: true }),
+                icon: createSvg$6(img$q),
+                onSelect: async () => await events.invoke('show.videoSettingsDialog')
+            }]);
+        const videoTutorialsMenuPanel = new MenuPanel([{
+                text: () => i18n.t('menu.help.video-tutorials.basics'),
+                icon: 'E261',
+                onSelect: () => window.open('https://youtu.be/MwzaEM2I55I', '_blank')?.focus()
+            }, {
+                text: () => i18n.t('menu.help.video-tutorials.in-depth'),
+                icon: 'E261',
+                onSelect: () => window.open('https://youtu.be/J37rTieKgJ8', '_blank')?.focus()
+            }, {
+                text: () => i18n.t('menu.help.video-tutorials.deleting-floaters'),
+                icon: 'E261',
+                onSelect: () => window.open('https://youtu.be/8qaLfwkkSdU', '_blank')?.focus()
+            }, {
+                text: () => i18n.t('menu.help.video-tutorials.scaling'),
+                icon: 'E261',
+                onSelect: () => window.open('https://youtu.be/fRK1vVMg_EU', '_blank')?.focus()
+            }]);
+        const helpMenuPanel = new MenuPanel([{
+                text: () => i18n.t('menu.help.video-tutorials'),
+                icon: 'E261',
+                subMenu: videoTutorialsMenuPanel
+            }, {
+                text: () => i18n.t('menu.help.user-guide'),
+                icon: 'E232',
+                onSelect: () => window.open('https://developer.playcanvas.com/user-manual/gaussian-splatting/editing/supersplat/', '_blank')?.focus()
+            }, {
+                text: () => i18n.t('menu.help.shortcuts'),
+                icon: 'E136',
+                onSelect: () => events.fire('show.shortcuts')
+            }, {
+            // separator
+            }, {
+                text: () => i18n.t('menu.help.discord'),
+                icon: 'E233',
+                onSelect: () => window.open('https://discord.gg/T3pnhRTTAY', '_blank')?.focus()
+            }, {
+                text: () => i18n.t('menu.help.forum'),
+                icon: 'E432',
+                onSelect: () => window.open('https://forum.playcanvas.com', '_blank')?.focus()
+            }, {
+            // separator
+            }, {
+                text: () => i18n.t('menu.help.github-repo'),
+                icon: 'E259',
+                onSelect: () => window.open('https://github.com/playcanvas/supersplat', '_blank')?.focus()
+            }, {
+                text: () => i18n.t('menu.help.log-issue'),
+                icon: 'E336',
+                onSelect: () => window.open('https://github.com/playcanvas/supersplat/issues', '_blank')?.focus()
+            }, {
+            // separator
+            }, {
+                text: () => i18n.t('menu.help.about'),
+                icon: 'E138',
+                onSelect: () => events.fire('show.about')
+            }]);
+        this.append(menubar);
+        this.append(fileMenuPanel);
+        this.append(openRecentMenuPanel);
+        this.append(exportMenuPanel);
+        this.append(selectionMenuPanel);
+        this.append(renderMenuPanel);
+        this.append(videoTutorialsMenuPanel);
+        this.append(helpMenuPanel);
+        const options = [{
+                dom: scene.dom,
+                menuPanel: fileMenuPanel
+            }, {
+                dom: selection.dom,
+                menuPanel: selectionMenuPanel
+            }, {
+                dom: render.dom,
+                menuPanel: renderMenuPanel
+            }, {
+                dom: help.dom,
+                menuPanel: helpMenuPanel
+            }];
+        options.forEach((option) => {
+            const activate = () => {
+                option.menuPanel.position(option.dom, 'bottom', 2);
+                options.forEach((opt) => {
+                    opt.menuPanel.hidden = opt !== option;
+                });
+            };
+            option.dom.addEventListener('pointerdown', (event) => {
+                if (!option.menuPanel.hidden) {
+                    option.menuPanel.hidden = true;
+                }
+                else {
+                    activate();
+                }
+            });
+            option.dom.addEventListener('pointerenter', (event) => {
+                if (!options.every(opt => opt.menuPanel.hidden)) {
+                    activate();
+                }
+            });
+        });
+        const checkEvent = (event) => {
+            if (!this.dom.contains(event.target)) {
+                options.forEach((opt) => {
+                    opt.menuPanel.hidden = true;
+                });
+            }
+        };
+        window.addEventListener('pointerdown', checkEvent, true);
+        window.addEventListener('pointerup', checkEvent, true);
+    }
+}
+
+var img$a = "data:image/svg+xml,%3csvg width='12' height='12' viewBox='0 0 12 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3e %3cpath d='M2.70711 6.70711C2.31658 6.31658 2.31658 5.68342 2.70711 5.29289L5.29301 2.70699C5.68353 2.31647 6.3167 2.31647 6.70722 2.70699L9.29312 5.29289C9.68365 5.68342 9.68365 6.31658 9.29312 6.70711L6.70722 9.29301C6.3167 9.68353 5.68353 9.68353 5.29301 9.29301L2.70711 6.70711Z' fill='currentColor'/%3e%3c/svg%3e";
+
+var img$9 = "data:image/svg+xml,%3csvg width='12' height='12' viewBox='0 0 12 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3e %3ccircle cx='6' cy='6' r='5' stroke='currentColor'/%3e %3cpath d='M3.70711 6.70711C3.31658 6.31658 3.31658 5.68342 3.70711 5.29289L5.29289 3.70711C5.68342 3.31658 6.31658 3.31658 6.70711 3.70711L8.29289 5.29289C8.68342 5.68342 8.68342 6.31658 8.29289 6.70711L6.70711 8.29289C6.31658 8.68342 5.68342 8.68342 5.29289 8.29289L3.70711 6.70711Z' fill='currentColor'/%3e%3c/svg%3e";
+
+const createSvg$5 = (svgString) => {
+    const decodedStr = decodeURIComponent(svgString.substring('data:image/svg+xml,'.length));
+    return new DOMParser().parseFromString(decodedStr, 'image/svg+xml').documentElement;
+};
+class ModeToggle extends Container {
+    constructor(events, tooltips, args = {}) {
+        args = {
+            id: 'mode-toggle',
+            class: 'centers-mode',
+            ...args
+        };
+        super(args);
+        const centersIcon = new Element$1({
+            id: 'centers-icon',
+            dom: createSvg$5(img$a)
+        });
+        const ringsIcon = new Element$1({
+            id: 'rings-icon',
+            dom: createSvg$5(img$9)
+        });
+        const centersText = new Label({
+            id: 'centers-text'
+        });
+        i18n.bindText(centersText, 'panel.mode.centers');
+        const ringsText = new Label({
+            id: 'rings-text'
+        });
+        i18n.bindText(ringsText, 'panel.mode.rings');
+        this.append(centersIcon);
+        this.append(ringsIcon);
+        this.append(centersText);
+        this.append(ringsText);
+        this.dom.addEventListener('pointerdown', (event) => {
+            event.stopPropagation();
+            events.fire('camera.toggleMode');
+            events.fire('camera.setOverlay', true);
+        });
+        events.on('camera.mode', (mode) => {
+            this.class[mode === 'centers' ? 'add' : 'remove']('centers-mode');
+            this.class[mode === 'rings' ? 'add' : 'remove']('rings-mode');
+        });
+        tooltips.register(this, () => i18n.t('tooltip.right-toolbar.splat-mode'));
+    }
+}
+
+var img$8 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAOI3pUWHRSYXcgcHJvZmlsZSB0eXBlIGV4aWYAAHjapZnpcSQ7DoT/04o1oXiCNIdnxHqw5u8H1tHdkiZm5j0p1F0HiwSBRCZQMvN//13mP/wEF5MJUXIqKR38hBKKqxzk4/yp+9MeYX/un3Dd4vzjunluOC55vv15mtM1/r5unwnOr8pRfJso9+tG+7xRrhVc/jLRtZBXixwH45qoXBN5d96w1wT13NaRSpb3LbR5fo97J/n8M/rhZc/9TPL1PAjeG5GL3rnprT/49P4ywOufM75ykPl0HncwKHHMUD6DT5clOOQnPz0/BYvWvELxfdBHVJ4j+/N18zVawV1D/Bcnp+f7x+vGxp+jsl3/jp98HbnP69Ed67Toi/f1b62R194zu6gh4ep0bereyj5iXGMJXTobTEuH8BeZQvZv4TeD6k7UxtGPxm+3xTpisGyww1a77Nzf3XZMDG4aJxw41wmaXsxeXHHda/yC/trlxBc/iKzzfYc9ePfYYvey5ehmr5ZZeViGOstkVnHxt7/mbx9YS1PB2iM/vsIu59TZmKGR00+GERG7LqfG7eD79+uPxtUTwahe1hQpOLadU7RoX0zgd6A9AyPfZ7pYGdcEuIilI8ZYTwSImvXRJnuIc2ItjswEqGK688E1ImBjdAMjXfA+EZvsdGkeEbuHuui4bLgOmRGJSJYJsSm+EqwQIviRkMFQjT6GGGOKEnMssSafQoopJUlKilW8BCNRkohkKVKzzyHHnLLknEuuxRUPacaSipRcSqmVNSszV56uDKi1ueZbaNG01KTlVlrtwKeHHnvq0nMvvQ43/IA/Rhoy8iijTjuB0gwzzjRl5llmXUBtebPCiistWXmVVZ+oXWH99vsXUbNX1NyOlA6UJ2pcFbmnsEonUWNGwJwJloiLhgBAO43ZkW0ITiOnMTuKIyuiw8ioMRtWI0YEw7QuLnvHzrgzohq5fxU3I+Ejbu6fRs5o6P4yct/j9lPUhspQ3xE7s1CdevilQtTFhjHGHGEJH72u4kJebQXbDE8WL9Kimy53kiXARHpuWxtVr+Tq+nGe7UkSm7UhwkHv48yPA11uCNt5Nleq1xLnqM914bOiV8398L5q837uXCnXsEdakaULb9utDmWVLxdLMJh4zLF0ssUcaWyrYxZO0Rom5QEv9wTtNVjvpngPN1MfByGdLw1BGZPYQw69cRpGjyFPD5BY143c4eTtN9mb8Db389RM9Qibzwh1mPpB0Kori51V1fik49XrxK/t7XqkBITpTdlHgr8MA0B52fOsPfmuEHQrZQSebrm/3TvSaUneDxwAbtsznSnX+Q6Cb9sXx2tikBSOuZeeKFriIXfMhh2ludGpPjSRYhjoGi7j4dhscW8TRO/qafp3Q09r1Flk6nZCj0aroV/d1p2clpJTR/qY9tCA3SbzkHlFgCnPFc8lflzhdLSevGKjbindsMthn53P7lJs5ZAAFmraB0mhTuDx5mvnXMtzvq2sUSMw79j4FsU7UvW++WY2pydyzDwHi3wsl489+eWsK7DndOfedpzhqqVRtqMnc8HgRxS0G7aPpU2dILJXzF1itbMfK8FZRvOA4YE8Oo8cc7T0BmJ1x5s5asG9wA0Ll6uR+UQszrJkVEftIx1ZCRBi835RZPUpdpKs0GLMFRPqAmh9MzEbiquaAnOmRWC1WLPLr3EsL22uY1AAtj1hG7Cg13x3fWFO8tybFHKs3RtiwPLGy2j+V+tXWKFRriVIf7KKpBZqg5cZvdwZJxZh1Wlg9KXzUKXcC38uu1g2DlWkmuZwAc5jsuAQj/44i6TFQchT29EPVcZJI3+CgzO0Gno9N3ckjq9UgjauMFeInu6DzfkjrfBGd/Wmu6ImVXM8xm3CG9/XIyuf1dprL+Uxr42jBaPeQcA14n17KqrPKSYBmVe3DySi5WM/P3P3k2xEx1KrBfO2pGqBYIoEP+SwHUmVUkdOqGRCOv0CyAihRzrV9zrjbHWp+4/vC5vPlUetPg8gK2EQ8SNpQVwLsh65k2YDiQ0JaYlKYc1im6eQWNl7Osipca4EFatsHNEpXkFUnhacotHTSRlxUWZ4VBsYL/C1BhKPRSWJQsUiR3MhS4p7W3trkwJ2jsJwFaq07U80EV0aAielRLiaeoFAkbAJlCaQFZcBizVQsGBMG6SGBZV2bbujuoiDWKbql840EohqvbLbyu5HBeGpFkTBUD5J9p+EAULLF3J7+Go+SvDSNKUY8wy4tVHqyTdbfYChNJvKKdvR3XB0ukTY2XCRi/nKvQ+BPWz0HYZTGYjb80XMytkMj2l2DQhO0kgIyEgKIHXyQAFJmNlzhHtybc2ldhBFNjmTqHjO1cXQCqonF8XfkFRqnPgasYGkGAMvOAryLoo0P6mAYtDq0FPlJQXtcEuwQpbpsJGAsiEwQ2vi+0xAuGujOY44ueMbpSnVigewR80LH4mMFS21AXkoAliIWopjTnrh1Ac+XQBePtktJcpNCkgIcFGBNVEoQ46dCkgoAUAedwzMCl8BOziTT9ghdlapNGnw4mg5dmXINimGV7XU2Oim1/VmxDl4FMxS0pvVNxvajXCV52JxdYYNXZssTp1W4nS15wUyEuTnmai1d5kMNnlDONujXC9glrOWOr4JnUPnVebdvA6OHijyaLPEDle0xI9XsYjKH++6JZ8ifXxC+q48zNvtmFio47x4o4nIEjLQVCvjiFPY7KIXJoFNuIwhFMI+mwaKGwwRSH0GqGwcNAtlad4jLAN33Io2EZ4IAlwiOopVrZvAUaGegfwj9ZynrahDaQdUNIbWCjNNDY6Cd4NukzK5X6QxqUMUYZCls45WYEjanqKcAY1YmrAiNDXDZXo5pa/MMrgKymxgWZG2jQRpSPdkAD0Q0Z19kz87V0yfhA/qGxU4uOkobWHhBifBX6BNQK0Ur2qDQ0HSSW+RHsREV7GWC9gED1QljUQmIcXaEXVdwgJqPCLU9X5auip/Ef/tQhxo3jzYTw/GYXur0Q3K3QzI2ahXiEzyBwM6DejMfqVj6Usbh5oofZt5KK4zhYGwF01HVa5N6wLNZ7vThqlIIPQlWuSVHC3D02cM8jysUilnzAej8kBLm+YUof7pFH7gvRfryj43u5JTNhwHldyx4U7BxlbY1tXPKMmmkN/TpeSX1heVdrOLSjXpW8n5kCwtMDqUyWKpkGFQ0N0q+0Tb7HDjXkTVwVIBQSfRWRaiLQOzowVb1Eatav3k6ceQzDmQvqVImjo1qmW+z72nthsLZQ4enHDkWk/qkRGhC+VcVzDPDH0cPhiyZXKqvR+pCIoa4sNYnR6ShtnQ3UpHiKW+UTWdeQC4YVXVa5p0AXTmlc+aF+hxSbBJcNCatmLIGCMnZD2Bh9BY33PJOdep/oSf6YiT1aICmlazcS4lIxRGKRGsnYFKZPlaNU2svthohaxtmPvuLTMRLdwV3yOR91Fv4bzC7qFgtL5pkUVgqCKobQ/YEca3brOXUS1CyJZuXKFQg/oKYKkAIYVLfebxLHUq9UqmxMji4vzoAmOnPA6vvvRNgYFS/97NgNFrwNmW3a2Jm4cZRV/Gh7q7N+qU0jZpa49WkvaNTleJdaPzWqI+5cjuoDdyjUI3ZmrLoDXdJI9v4glKXRmBjoM8v4gjqW4i4fpmZtemxKRDcJXuiOzH1R51WwdcHmmf1wH+/HYi4NRyDf0ErsAgLfcQjqebXmyDhaZRaYR7ZDhlCKi2p3EE2atQT1ZkemSVeLpgLXp7gO6tAKcEDflN5kJojIeBpqMUbJvJKU2KInYXmlAbZeOgnQEwUa9A43vAhuEKCkJJKftezWhaTnptxfQVGzmWgXNie8X7UbqddmZ968UGOjUSZF4eLlqWiepGgnn5/TfNy7cGGiy8VXHm7HLph66uPQOPwztquBGGvoXVV0EwzKF+0irzF9/mPrAOf1IWUwr7svMZQNgDtGzfUP9r5IJGLpLiAUkLYj3l/aIdocsmYTKJONGYYd/CeUdTs/hPFjB7heaDp1Cl4i1zU8PWLqJNywNrg0koEjxrCTh2eFhnBB5apdEt4B/jB6RWKRdC4dlFaQ+ZKDXTocjJw7v41+kXlWpBfeyiocf00rWrqJBB9AYqx69MbLUZgHeYvx1alQxblKnYv5ZQSPEU2aneKP8m5V8KyyGHFJ7AUv8JdSmkaj3tcotUPa4IXT08UkjEEVGDEEK/0rc5H+wpehKv1zX6amwn8/uLojOxEQ34lG9FxkF+ib4VVrbmq8bsbNJ2WrthPTDP0esAymZi93HtdbMP/a8n9iBFtGp0jBO9G4b6BtCqK2dus2xB2nEb0B5FE/276P8hLrj8Ei3mK1z4+z0gaTcprcG9BsFzqWd6WpQsUltonEIr0x1kv+zHsxUtRdQk8hHfEFzOaK67lqBbGCi2Gg1RN2V3wkyaqMJhh1oDSShKQNHRltDytoy/vN/v1mBpggIyqv7nlTgWvYNL6dcweFBMwVc10d5/ZmtyYedidLo/neUX3yb/ZsCffu+JxKk1wyPDAzu7BSvKTF1t42J254sIRcRhN11tBjlfXiNRXDRvVy8BOhQs5314nCTcB/oifKPJKUr3EyVsj+0nnPn6rN2oOx/J9wF+BOanOxM5ZVX+1ulEGgvHUKNjVayvxa2cE5xbmadN52a6Llz0rfRPg8zHqOtFesbq+6X+9cxvB5lfjwJqJLxTPqNmhz50P9S9XhWNgruKHKHru/05GjRyXqZz1bIXhoKyqCkbuZibV21h+rFPGb5CLDSn99PXwyShM/ouHo3Rc7+n+IczmmfK/XZ//FOD0P5/Z5AnjKdFChxtm7N2cTR65v+Zx884tugEmQAAAYRpQ0NQSUNDIHByb2ZpbGUAAHicfZE9SMNAHMVfW6VVKh2sIOKQoTpZEBVx1CoUoUKoFVp1MLn0C5o0JCkujoJrwcGPxaqDi7OuDq6CIPgB4ujkpOgiJf4vKbSI8eC4H+/uPe7eAf5Ghalm1zigapaRTiaEbG5VCL4ihAFE0IOwxEx9ThRT8Bxf9/Dx9S7Os7zP/Tn6lLzJAJ9APMt0wyLeIJ7etHTO+8RRVpIU4nPiMYMuSPzIddnlN85Fh/08M2pk0vPEUWKh2MFyB7OSoRJPEccUVaN8f9ZlhfMWZ7VSY6178heG89rKMtdpDiOJRSxBhAAZNZRRgYU4rRopJtK0n/DwDzl+kVwyucpg5FhAFSokxw/+B7+7NQuTE25SOAF0v9j2xwgQ3AWaddv+Prbt5gkQeAautLa/2gBmPkmvt7XYERDZBi6u25q8B1zuAINPumRIjhSg6S8UgPcz+qYc0H8L9K65vbX2cfoAZKir1A1wcAiMFil73ePdoc7e/j3T6u8HEfZygJPuyxoAAA0caVRYdFhNTDpjb20uYWRvYmUueG1wAAAAAAA8P3hwYWNrZXQgYmVnaW49Iu+7vyIgaWQ9Ilc1TTBNcENlaGlIenJlU3pOVGN6a2M5ZCI/Pgo8eDp4bXBtZXRhIHhtbG5zOng9ImFkb2JlOm5zOm1ldGEvIiB4OnhtcHRrPSJYTVAgQ29yZSA0LjQuMC1FeGl2MiI+CiA8cmRmOlJERiB4bWxuczpyZGY9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkvMDIvMjItcmRmLXN5bnRheC1ucyMiPgogIDxyZGY6RGVzY3JpcHRpb24gcmRmOmFib3V0PSIiCiAgICB4bWxuczp4bXBNTT0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wL21tLyIKICAgIHhtbG5zOnN0RXZ0PSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvc1R5cGUvUmVzb3VyY2VFdmVudCMiCiAgICB4bWxuczpkYz0iaHR0cDovL3B1cmwub3JnL2RjL2VsZW1lbnRzLzEuMS8iCiAgICB4bWxuczpHSU1QPSJodHRwOi8vd3d3LmdpbXAub3JnL3htcC8iCiAgICB4bWxuczp0aWZmPSJodHRwOi8vbnMuYWRvYmUuY29tL3RpZmYvMS4wLyIKICAgIHhtbG5zOnhtcD0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wLyIKICAgeG1wTU06RG9jdW1lbnRJRD0iZ2ltcDpkb2NpZDpnaW1wOjFhZmYwNDM3LTNiOWMtNDU0MC1hMTUzLTZiZjlkZDBlZWIxYSIKICAgeG1wTU06SW5zdGFuY2VJRD0ieG1wLmlpZDphNGQ1OTg0MC02ZmQzLTRmYWUtOTdkMS1mMWU5MDA0MjQ0MDIiCiAgIHhtcE1NOk9yaWdpbmFsRG9jdW1lbnRJRD0ieG1wLmRpZDo2M2RlZWVkMS05ZmQ0LTRiZjYtODk3OS0yZGQwNTFiNWQ3ZGQiCiAgIGRjOkZvcm1hdD0iaW1hZ2UvcG5nIgogICBHSU1QOkFQST0iMi4wIgogICBHSU1QOlBsYXRmb3JtPSJNYWMgT1MiCiAgIEdJTVA6VGltZVN0YW1wPSIxNjYxMDk0NjQ4OTUzMzQ1IgogICBHSU1QOlZlcnNpb249IjIuMTAuMzAiCiAgIHRpZmY6T3JpZW50YXRpb249IjEiCiAgIHhtcDpDcmVhdG9yVG9vbD0iR0lNUCAyLjEwIj4KICAgPHhtcE1NOkhpc3Rvcnk+CiAgICA8cmRmOlNlcT4KICAgICA8cmRmOmxpCiAgICAgIHN0RXZ0OmFjdGlvbj0ic2F2ZWQiCiAgICAgIHN0RXZ0OmNoYW5nZWQ9Ii8iCiAgICAgIHN0RXZ0Omluc3RhbmNlSUQ9InhtcC5paWQ6ODJiZDExNWItNjA1Ny00Njg2LTgxYzQtYmUxNWMxODA3ZmNlIgogICAgICBzdEV2dDpzb2Z0d2FyZUFnZW50PSJHaW1wIDIuMTAgKE1hYyBPUykiCiAgICAgIHN0RXZ0OndoZW49IjIwMjItMDgtMjFUMTY6MTA6NDgrMDE6MDAiLz4KICAgIDwvcmRmOlNlcT4KICAgPC94bXBNTTpIaXN0b3J5PgogIDwvcmRmOkRlc2NyaXB0aW9uPgogPC9yZGY6UkRGPgo8L3g6eG1wbWV0YT4KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgIAo8P3hwYWNrZXQgZW5kPSJ3Ij8+5TXgPwAAAAZiS0dEAAAAAAAA+UO7fwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAAd0SU1FB+YIFQ8KMIwUIUgAAAm9SURBVHja5VpLjx5HFT2nvs9jDyQONkgosIiEEufFjD2BJRiEwOa1IApjKxDx2LFgYXaINX8AhEBCQuDECCmRZeNkgRCb+BEDEfbgxLFlRYosFjFPjxGyPd+M+7DoV1X1rer+JuMEkpbG8teP6rq3zj333FvNf3/nEaEQwkNAfKo6Xf7D+gck86ae5+1HMicGHpzuWUeMAUArLvN+ZScqla81XJO3RYkL0bs1tU843P4tBcZ0BJwLJ0bvffLMYzxRgmxnx+C26mYqsLVxEGkjjdH49Q1MI6n+SWYQmTjGIKvJhBOgYoeGE1YwIQ96ppNCFNF/GUO0yFpIy0nyR2kHJbvh2iDTcM6YzgGOXWQyEfuMLtejR/EneZDwIdVjGI3zsp5hz0KzvYmVUYyfIbsIoAVNb7Dyknp5hz5y5EMqdJxaD0bGtVBjMkRqnihDUVnEGHN0xBiOoGOzygqWYuAqNfNnBTXZq+HHboMkHx3RoKpX33Je6y3GocWWy+owjEEoCXCudECJgnIlaEJJPj+WccUuqzNAkQVbRUjqCQtGhFo5VgwfogAxETc+SStCqAPGJCGyxYm58uU1Jrgu5khajyeNi0iDKUmhJq44BSpbNLXZjTVaKS8EcgMMYucSRbTQHBlgai0rhwWLaHhfUXJKEqPnPD9cHEodIJo5JAgaIsfEda5nmKWktECh7yTBoulAZFnG0Z9f2oHwrsm3h5UOoGMnd6sjfHytoKwgasM9dKiUEW0WS/vjxQ8wFqldhHXTkloaEkCHigQdOy5nT2rq+kWRk/yZuJIkmZK+NNOkGtLJqcaa4JhwrifefCgHJFinQXKA/g/P0fdEN/AhMU2EseTskKSfNWjwktBRZtZ869U3eK4kQVqsGemYxhjZZJMgILLLxFa6EtLXzDqERibqzEPNAjRVhQ9SV9cCLqX+YEhJJvJ7FbVJqSqYMSBfQqVIlh7R5nVDrg5hnBkc4VghgLUjmr/qCSI8T+/Pofprr9ERdMDmbx/EaP5L7e11uu2MUVWjLj7nzcPBG9v7o+ucC8dA4n3leZa1gAOcjNydIqZMEeIh1t19D2b2H0Cx+1GsnTiC4uVfd8RgkBrYoodBxUtr+RpuDfRBB2R22DVIanWAhRFOVQeEgq69wd19D2b2HUDx8UexdvIIipePRYbQKKDq93TlbZ3NSS9Vx0Tb0w5oMkadBun3Q0BQ8poWVix3qiDPCAsmlSMWD6D4WOWI88cyZW3EoLJrA2YJuK4bmCykymqwjuXa/CodMgNz/51SQnevrQLjTVlH3Dp1BMX5Z9HtlrDbgkzp8p6MZCOWTbxw8oPPSjeU7tMpUY6ipxl614cw+uQ3MHrgo6Yj6qO4chm3Th1F8cqxnh6i3dZRUI0y7FWkGq71uVmCkx9+TrhZJASPBjZtlZw4t92L0Se+CbdjARiN+x1x4dnhDdTBC6QgYzf/nyU4+dHnhRtFb3c21xo37Y8mze33Y7T7a3D3DXDEC0ehi88Fq66o1zGsa93T4n8XwdUff0G4UXTrePX1+adve0sAt+/AaPfX4e7dlXWErlzGrdNHUVx8rndsmW0M5cMJAmYduPqTL5YhMABWwkDPD+ASvn8Bo8e+B757a7ZtXbx2HmuHvwvcWpluYyUXNbWynXVRNRi4s5s+mMjfnaavjAiqFdBoFu4jT8A98pm88Tev49a551H8/iCoSatK/VkoQfWiLcXjlp1jvTHCYDQJidzJTFXos4uRRkebwV1fLQ2/4z15w186juIPvwBWltvUSHZTG9MQH7Q/wkAHMNWYsZK90bGl/RI3A+78CtzCp8E7tmUNL14+juKPB4GV5ZKPHECOgdEstPofI9crWcEy5ikagqFGQNsPSJBcQk11ujTBfMbg/OPgrj3gnRnDVyrDX3yyWvG6gHFw84/DLexF8bufAn85YRjPkLyVKFxSEpn1vgBp1tGMF9ZqbydWZfTEz4Ct7+01XH96CpgsV8UNAY7g5vaDC3vBre/zujfMNmQou5YJVGsUpmUt0AwekohZmNCogJoumUIpnDJ+5TqK88ehM4dKw1GXpiPw4f0lYmrDmzCKehYJku7AOCgEFW7CAOXGCF3LAVkNkN3siHqItA3XKyegs4egSQh1PrQfbuceIDY82sQw2T16p3Jdqk6YMuwI2TvCMbPGAoh5tl25Dl04AS0dAibXmioMdMCD++Dm04bXz+Pm1XKOSmgQb75Mahl292nrvcEGUjmPxaTXJ0dXrkMXT0B//qUHdQAcgQ8sgnN78xwxuQFdOAmdeRKYLAc81b/KyoZJc9YB1K8WhclasMy5Ym+wHN50F7B6zft6YQTcvwjO7QHu7DH84skKMVfzWj4xuWBfNKduZ8a1EgwVlN1ttVve9ELTL02xdq1i7xGw48vgh/sMvwldOgUsPQVNrjZdW+Xi3vpYwGuL0Y9dCxFlQyTcYkr3+phoeRv7gSzTGe57DHi4x/DVFeDV0+WKr/y9MTzccbJ6iFHjpJOpkBdoUpUGU0fuWyPri4VALgtY+Bbw0KcQ9NviY20CvPBz6PJv2qwga2cJYf7u9PgSEjbKVIr3HEhQT+8TJqsGq6jHE0LvF1nb54G5ReCDD+Yd8ddXgaXDwN9OD6ys89Ve9tMyhRxQOWAy/BM7GuHR99z2nQMcIeD1S8C5w8A/XhyWaQLlug6HbNoE6ulFYXUVb8qxbYAjJODKJeAlzxFGE2pYN8juITZdpZnGAZPbYG0GGtt2AvP7gA/0OOL1i8C5Z4B/ncW6vh5N9jmruW2aAfXMYhkCb8UxyBEF8NvvA/88s/Hv3zRTZQFq3TzXuUcGABgXMtUNy0vA80vA9l3AXMIRdMBoc3c5yfAT0QDuDLun/r3+VhuBcRZaHIj01O84lVn9BgK4ugQcXwK25RxheD45vvGbdlyM7WDpo/bEZ1+d5WcCEokxGkfsBOb2t45oELoBqTm4VykhpOnZxd9xgIz7NIShIkdUiCjWesaaZu6IEMAMB6yH+DfyWD4LnDg7cGz2OIChiGITAsLb45gCtV7t080CfWEkw+HJr7mjT28Gf9oyjDI6FBMLpvjD787HmBYHcEqYZ38rPSYHjM838H72ZYNsFni7HjTSIG8DeVmFJQeGUeqLj16x1fN+P9QVIEC3BwFcZ9hMC3u+gfdTcHiHH/la4H8tyw0Nqakd8P9AgtOE1BSHAxWmjvhFNM6/2YqQt+t+eQhIepj5fL6uSbBHshpqh7l7jfFSNiD8ANsNLlA2dMWnKWaG3DtN8RZmPYMENbz5sdGw72tKa4N/l0JIb11s3y4ZPJgshTG0BRi9Q0WAtuC/rByz/QyBVXYAAAAASUVORK5CYII=";
+
+class Popup extends Container {
+    show;
+    hide;
+    destroy;
+    constructor(tooltips, args = {}) {
+        args = {
+            id: 'popup',
+            hidden: true,
+            tabIndex: -1,
+            ...args
+        };
+        super(args);
+        const dialog = new Container({
+            id: 'popup-dialog'
+        });
+        const header = new Label({
+            id: 'popup-header'
+        });
+        const text = new Label({
+            id: 'popup-text'
+        });
+        const linkText = new Label({
+            id: 'popup-link-text'
+        });
+        const linkCopy = new Button({
+            id: 'popup-link-copy',
+            icon: 'E351'
+        });
+        const linkRow = new Container({
+            id: 'popup-link-row'
+        });
+        linkRow.append(linkText);
+        linkRow.append(linkCopy);
+        const okButton = new Button({
+            class: 'popup-button'
+        });
+        i18n.bindText(okButton, 'popup.ok');
+        const cancelButton = new Button({
+            class: 'popup-button'
+        });
+        i18n.bindText(cancelButton, 'popup.cancel');
+        const yesButton = new Button({
+            class: 'popup-button'
+        });
+        i18n.bindText(yesButton, 'popup.yes');
+        const noButton = new Button({
+            class: 'popup-button'
+        });
+        i18n.bindText(noButton, 'popup.no');
+        const buttons = new Container({
+            id: 'popup-buttons'
+        });
+        buttons.append(okButton);
+        buttons.append(cancelButton);
+        buttons.append(yesButton);
+        buttons.append(noButton);
+        dialog.append(header);
+        dialog.append(text);
+        dialog.append(linkRow);
+        dialog.append(buttons);
+        this.append(dialog);
+        let okFn;
+        let cancelFn;
+        let yesFn;
+        let noFn;
+        let containerFn;
+        let copyFn;
+        okButton.on('click', () => {
+            okFn();
+        });
+        cancelButton.on('click', () => {
+            cancelFn();
+        });
+        yesButton.on('click', () => {
+            yesFn();
+        });
+        noButton.on('click', () => {
+            noFn();
+        });
+        this.on('click', () => {
+            containerFn();
+        });
+        dialog.on('click', (event) => {
+            event.stopPropagation();
+        });
+        linkCopy.on('click', () => {
+            copyFn();
+        });
+        this.show = (options) => {
+            header.text = options.header;
+            text.text = options.message;
+            const { type, link } = options;
+            ['error', 'info', 'yesno', 'okcancel'].forEach((t) => {
+                text.class[t === type ? 'add' : 'remove'](t);
+            });
+            // configure based on message type
+            okButton.hidden = type === 'yesno';
+            cancelButton.hidden = type !== 'okcancel';
+            yesButton.hidden = type !== 'yesno';
+            noButton.hidden = type !== 'yesno';
+            this.hidden = false;
+            linkRow.hidden = link === undefined;
+            if (link !== undefined) {
+                linkText.dom.innerHTML = `<a href='${link}' target='_blank'>${link}</a>`;
+                linkCopy.icon = 'E352';
+            }
+            // take keyboard focus so shortcuts stop working
+            this.dom.focus();
+            return new Promise((resolve) => {
+                okFn = () => {
+                    this.hide();
+                    resolve({
+                        action: 'ok'
+                    });
+                };
+                cancelFn = () => {
+                    this.hide();
+                    resolve({ action: 'cancel' });
+                };
+                yesFn = () => {
+                    this.hide();
+                    resolve({ action: 'yes' });
+                };
+                noFn = () => {
+                    this.hide();
+                    resolve({ action: 'no' });
+                };
+                containerFn = () => {
+                    if (type === 'info' && link === undefined) {
+                        cancelFn();
+                    }
+                };
+                copyFn = () => {
+                    navigator.clipboard.writeText(link);
+                    linkCopy.icon = 'E348';
+                };
+            });
+        };
+        this.hide = () => {
+            this.hidden = true;
+        };
+        this.destroy = () => {
+            this.hide();
+            super.destroy();
+        };
+        tooltips.register(linkCopy, () => i18n.t('popup.copy-to-clipboard'));
+    }
+}
+
+class Progress extends Container {
+    setHeader;
+    setText;
+    setProgress;
+    showCancelButton;
+    onCancel;
+    constructor(args = {}) {
+        args = {
+            ...args,
+            id: 'progress-container',
+            hidden: true
+        };
+        super(args);
+        this.onCancel = null;
+        this.dom.tabIndex = 0;
+        const header = new Label({
+            id: 'header'
+        });
+        const text = new Element$1({
+            dom: 'div',
+            id: 'text'
+        });
+        const bar = new Element$1({
+            dom: 'div',
+            id: 'bar',
+            class: 'pulsate'
+        });
+        const cancelButton = new Button({
+            id: 'cancel-button',
+            hidden: true
+        });
+        i18n.bindText(cancelButton, 'panel.render.cancel');
+        cancelButton.on('click', () => {
+            if (this.onCancel)
+                this.onCancel();
+        });
+        const content = new Container({
+            id: 'content'
+        });
+        content.append(text);
+        content.append(bar);
+        content.append(cancelButton);
+        const dialog = new Container({
+            id: 'dialog'
+        });
+        dialog.append(header);
+        dialog.append(content);
+        this.append(dialog);
+        this.dom.addEventListener('keydown', (event) => {
+            if (this.hidden)
+                return;
+            event.stopPropagation();
+            event.preventDefault();
+        });
+        this.setHeader = (headerMsg) => {
+            header.text = headerMsg;
+        };
+        this.setText = (textMsg) => {
+            text.dom.textContent = textMsg;
+        };
+        this.setProgress = (progress) => {
+            bar.dom.style.backgroundImage = `linear-gradient(90deg, #F60 0%, #F60 ${progress}%, #00000000 ${progress}%, #00000000 100%)`;
+        };
+        this.showCancelButton = (show) => {
+            cancelButton.hidden = !show;
+        };
+    }
+}
+
+const createSvg$4 = (svgString, args = {}) => {
+    const decodedStr = decodeURIComponent(svgString.substring('data:image/svg+xml,'.length));
+    return new Element$1({
+        dom: new DOMParser().parseFromString(decodedStr, 'image/svg+xml').documentElement,
+        ...args
+    });
+};
+class PublishSettingsDialog extends Container {
+    show;
+    hide;
+    destroy;
+    constructor(events, args = {}) {
+        args = {
+            ...args,
+            id: 'publish-settings-dialog',
+            class: 'settings-dialog',
+            hidden: true,
+            tabIndex: -1
+        };
+        super(args);
+        const dialog = new Container({
+            id: 'dialog'
+        });
+        // header
+        const headerIcon = createSvg$4(img$q, { id: 'icon' });
+        const headerText = new Label({ id: 'text' });
+        i18n.bindText(headerText, 'popup.publish.header');
+        const header = new Container({ id: 'header' });
+        header.append(headerIcon);
+        header.append(headerText);
+        // overwrite
+        const overwriteLabel = new Label({ class: 'label' });
+        i18n.bindText(overwriteLabel, 'popup.publish.to');
+        const overwriteSelect = new SelectInput({
+            class: 'select'
+        });
+        const overwriteRow = new Container({ class: 'row' });
+        overwriteRow.append(overwriteLabel);
+        overwriteRow.append(overwriteSelect);
+        // title
+        const titleLabel = new Label({ class: 'label' });
+        i18n.bindText(titleLabel, 'popup.publish.title');
+        const titleInput = new TextInput({ class: 'text-input' });
+        const titleRow = new Container({ class: 'row' });
+        titleRow.append(titleLabel);
+        titleRow.append(titleInput);
+        // description
+        const descLabel = new Label({ class: 'label' });
+        i18n.bindText(descLabel, 'popup.publish.description');
+        const descInput = new TextAreaInput({ class: 'text-area' });
+        const descRow = new Container({ class: 'row' });
+        descRow.append(descLabel);
+        descRow.append(descInput);
+        // override model
+        const overrideModelLabel = new Label({ class: 'label' });
+        i18n.bindText(overrideModelLabel, 'popup.publish.override-model');
+        const overrideModelToggle = new BooleanInput({ class: 'boolean', type: 'toggle', value: true });
+        const overrideModelRow = new Container({ class: 'row', hidden: true });
+        overrideModelRow.append(overrideModelLabel);
+        overrideModelRow.append(overrideModelToggle);
+        // override animation
+        const overrideAnimationLabel = new Label({ class: 'label' });
+        i18n.bindText(overrideAnimationLabel, 'popup.publish.override-animation');
+        const overrideAnimationToggle = new BooleanInput({ class: 'boolean', type: 'toggle', value: true });
+        const overrideAnimationRow = new Container({ class: 'row', hidden: true });
+        overrideAnimationRow.append(overrideAnimationLabel);
+        overrideAnimationRow.append(overrideAnimationToggle);
+        // animation
+        const animationLabel = new Label({ class: 'label' });
+        i18n.bindText(animationLabel, 'popup.export.animation');
+        const animationToggle = new BooleanInput({ class: 'boolean', type: 'toggle', value: false });
+        const animationRow = new Container({ class: 'row' });
+        animationRow.append(animationLabel);
+        animationRow.append(animationToggle);
+        // loop mode
+        const loopLabel = new Label({ class: 'label' });
+        i18n.bindText(loopLabel, 'popup.export.loop-mode');
+        const loopSelect = new SelectInput({
+            class: 'select',
+            defaultValue: 'repeat'
+        });
+        i18n.bindOptions(loopSelect, () => [
+            { v: 'none', t: i18n.t('popup.export.loop-mode.none') },
+            { v: 'repeat', t: i18n.t('popup.export.loop-mode.repeat') },
+            { v: 'pingpong', t: i18n.t('popup.export.loop-mode.pingpong') }
+        ]);
+        const loopRow = new Container({ class: 'row' });
+        loopRow.append(loopLabel);
+        loopRow.append(loopSelect);
+        // background color
+        const colorLabel = new Label({ class: 'label' });
+        i18n.bindText(colorLabel, 'popup.export.background-color');
+        const colorPicker = new ColorPicker({
+            class: 'color-picker',
+            value: [1, 1, 1, 1]
+        });
+        const colorRow = new Container({ class: 'row' });
+        colorRow.append(colorLabel);
+        colorRow.append(colorPicker);
+        // generate LODs
+        const generateLodsLabel = new Label({ class: 'label' });
+        i18n.bindText(generateLodsLabel, 'popup.publish.generate-lods');
+        const generateLodsToggle = new BooleanInput({ class: 'boolean', type: 'toggle', value: false });
+        const generateLodsRow = new Container({ class: 'row' });
+        generateLodsRow.append(generateLodsLabel);
+        generateLodsRow.append(generateLodsToggle);
+        // fov
+        const fovLabel = new Label({ class: 'label' });
+        i18n.bindText(fovLabel, 'popup.export.fov');
+        const fovSlider = new SliderInput({
+            class: 'slider',
+            min: 10,
+            max: 120,
+            precision: 0,
+            value: 60
+        });
+        const fovRow = new Container({ class: 'row' });
+        fovRow.append(fovLabel);
+        fovRow.append(fovSlider);
+        // content
+        const content = new Container({ id: 'content' });
+        content.append(overwriteRow);
+        content.append(titleRow);
+        content.append(descRow);
+        content.append(overrideModelRow);
+        content.append(overrideAnimationRow);
+        content.append(colorRow);
+        content.append(fovRow);
+        content.append(animationRow);
+        content.append(loopRow);
+        content.append(generateLodsRow);
+        // footer
+        const footer = new Container({ id: 'footer' });
+        const cancelButton = new Button({
+            class: 'button'
+        });
+        i18n.bindText(cancelButton, 'popup.publish.cancel');
+        const okButton = new Button({
+            class: 'button'
+        });
+        i18n.bindText(okButton, 'popup.publish.ok');
+        footer.append(cancelButton);
+        footer.append(okButton);
+        dialog.append(header);
+        dialog.append(content);
+        dialog.append(footer);
+        this.append(dialog);
+        // handle key bindings for enter and escape
+        let onCancel;
+        let onOK;
+        cancelButton.on('click', () => onCancel());
+        okButton.on('click', () => onOK());
+        const keydown = (e) => {
+            switch (e.key) {
+                case 'Escape':
+                    onCancel();
+                    break;
+                case 'Enter':
+                    if (!e.shiftKey && !okButton.disabled)
+                        onOK();
+                    break;
+                default:
+                    e.stopPropagation();
+                    break;
+            }
+        };
+        let hasPosesState = false;
+        const updateLayout = () => {
+            const isNew = overwriteSelect.value === '0';
+            const modelOn = overrideModelToggle.value;
+            const animOn = overrideAnimationToggle.value;
+            // new-scene vs existing-scene row visibility
+            titleRow.hidden = !isNew;
+            descRow.hidden = !isNew;
+            colorRow.hidden = !isNew;
+            fovRow.hidden = !isNew;
+            animationRow.hidden = !isNew;
+            overrideModelRow.hidden = isNew;
+            overrideAnimationRow.hidden = isNew;
+            // generateLods only matters when a model is uploaded — hide when republishing animation-only
+            generateLodsRow.hidden = !isNew && !modelOn;
+            if (isNew) {
+                animationToggle.enabled = hasPosesState;
+                loopRow.hidden = false;
+                loopSelect.enabled = hasPosesState && animationToggle.value;
+            }
+            else {
+                overrideAnimationToggle.enabled = hasPosesState;
+                loopRow.hidden = false;
+                loopSelect.enabled = animOn && hasPosesState;
+            }
+            // disable publish when existing scene with no overrides selected
+            okButton.disabled = !isNew && !modelOn && !animOn;
+        };
+        overwriteSelect.on('change', updateLayout);
+        overrideModelToggle.on('change', updateLayout);
+        overrideAnimationToggle.on('change', updateLayout);
+        animationToggle.on('change', updateLayout);
+        // reset UI and configure for current state
+        const reset = (hasPoses, overwriteList) => {
+            hasPosesState = hasPoses;
+            const splats = events.invoke('scene.splats');
+            const filename = splats[0].filename;
+            const dot = splats[0].filename.lastIndexOf('.');
+            const bgClr = events.invoke('bgClr');
+            const totalSplats = splats.reduce((sum, s) => sum + (s.numSplats ?? 0), 0);
+            // union scene bounds to decide LOD default for large scenes
+            const sceneMin = [Infinity, Infinity, Infinity];
+            const sceneMax = [-Infinity, -Infinity, -Infinity];
+            for (const s of splats) {
+                const bound = s.worldBound;
+                if (!bound)
+                    continue;
+                const { center, halfExtents } = bound;
+                const c = [center.x, center.y, center.z];
+                const h = [halfExtents.x, halfExtents.y, halfExtents.z];
+                for (let i = 0; i < 3; i++) {
+                    sceneMin[i] = Math.min(sceneMin[i], c[i] - h[i]);
+                    sceneMax[i] = Math.max(sceneMax[i], c[i] + h[i]);
+                }
+            }
+            const largeAxes = [0, 1, 2].filter(i => sceneMax[i] - sceneMin[i] > 16).length;
+            const isLargeScene = largeAxes >= 2;
+            overwriteSelect.options = [{
+                    v: '0', t: i18n.t('popup.publish.new-scene')
+                }].concat(overwriteList.map((s, i) => ({ v: (i + 1).toString(), t: s })));
+            overwriteSelect.value = '0';
+            titleInput.value = filename.slice(0, dot > 0 ? dot : undefined);
+            descInput.value = '';
+            overrideModelToggle.value = true;
+            overrideAnimationToggle.value = hasPoses;
+            animationToggle.value = hasPoses;
+            loopSelect.value = 'repeat';
+            colorPicker.value = [bgClr.r, bgClr.g, bgClr.b];
+            fovSlider.value = events.invoke('camera.fov');
+            generateLodsToggle.value = totalSplats >= 1_000_000 && isLargeScene;
+            updateLayout();
+        };
+        // function implementations
+        this.show = (userStatus) => {
+            const frames = events.invoke('timeline.frames');
+            const frameRate = events.invoke('timeline.frameRate');
+            const smoothness = events.invoke('timeline.smoothness');
+            // get poses
+            const orderedPoses = events.invoke('camera.poses')
+                .slice()
+                .filter(p => p.frame >= 0 && p.frame < frames)
+                .sort((a, b) => a.frame - b.frame);
+            // overwrite options
+            const overwriteList = userStatus.scenes.map((s) => {
+                return `${s.hash} - ${s.title}`;
+            });
+            // reset UI
+            reset(orderedPoses.length > 0, overwriteList);
+            this.hidden = false;
+            this.dom.addEventListener('keydown', keydown);
+            this.dom.focus();
+            return new Promise((resolve) => {
+                onCancel = () => {
+                    resolve(null);
+                };
+                onOK = () => {
+                    const isNew = overwriteSelect.value === '0';
+                    const selectedScene = !isNew ? userStatus.scenes[parseInt(overwriteSelect.value, 10) - 1] : null;
+                    // extract camera animation
+                    const includeAnimation = isNew ? animationToggle.value : overrideAnimationToggle.value;
+                    const animTracks = [];
+                    if (includeAnimation && orderedPoses.length > 0) {
+                        const times = [];
+                        const position = [];
+                        const target = [];
+                        const fovKeys = [];
+                        for (let i = 0; i < orderedPoses.length; ++i) {
+                            const op = orderedPoses[i];
+                            times.push(op.frame);
+                            position.push(op.position.x, op.position.y, op.position.z);
+                            target.push(op.target.x, op.target.y, op.target.z);
+                            fovKeys.push(op.fov);
+                        }
+                        animTracks.push({
+                            name: 'cameraAnim',
+                            duration: frames / frameRate,
+                            frameRate,
+                            loopMode: loopSelect.value,
+                            interpolation: 'spline',
+                            smoothness,
+                            keyframes: {
+                                times,
+                                values: { position, target, fov: fovKeys }
+                            }
+                        });
+                    }
+                    const fov = fovSlider.value;
+                    const bgColor = colorPicker.value.slice(0, 3);
+                    // use current viewport as start pose
+                    const pose = events.invoke('camera.getPose');
+                    const p = pose?.position;
+                    const t = pose?.target;
+                    const cameras = (p && t) ? [{
+                            initial: {
+                                position: [p.x, p.y, p.z],
+                                target: [t.x, t.y, t.z],
+                                fov
+                            }
+                        }] : [];
+                    const experienceSettings = {
+                        version: 2,
+                        tonemapping: 'none',
+                        highPrecisionRendering: false,
+                        background: { color: bgColor },
+                        postEffectSettings: defaultPostEffectSettings,
+                        animTracks,
+                        cameras,
+                        annotations: [],
+                        startMode: includeAnimation ? 'animTrack' : 'default'
+                    };
+                    const serializeSettings = {
+                        maxSHBands: 3,
+                        minOpacity: 1 / 255,
+                        removeInvalid: true
+                    };
+                    resolve({
+                        user: userStatus.user,
+                        title: titleInput.value,
+                        description: descInput.value,
+                        listed: false,
+                        serializeSettings,
+                        experienceSettings,
+                        overwriteHash: selectedScene?.hash,
+                        overrideModel: isNew || overrideModelToggle.value,
+                        overrideAnimation: !isNew && overrideAnimationToggle.value,
+                        generateLods: generateLodsToggle.value
+                    });
+                };
+            }).finally(() => {
+                this.dom.removeEventListener('keydown', keydown);
+                this.hide();
+            });
+        };
+        this.hide = () => {
+            this.hidden = true;
+        };
+        this.destroy = () => {
+            this.hide();
+            super.destroy();
+        };
+    }
+}
+
+var img$7 = "data:image/svg+xml,%3csvg width='38' height='38' viewBox='0 0 38 38' fill='none' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M12 14C12 12.8954 12.8954 12 14 12H24C25.1046 12 26 12.8954 26 14V24C26 25.1046 25.1046 26 24 26H14C12.8954 26 12 25.1046 12 24V14Z' stroke='currentColor' stroke-width='1.5' stroke-dasharray='4 3' fill-opacity='0'/%3e%3cpath d='M15 16C15 15.4477 15.4477 15 16 15H22C22.5523 15 23 15.4477 23 16V22C23 22.5523 22.5523 23 22 23H16C15.4477 23 15 22.5523 15 22V16Z' fill='currentColor'/%3e%3c/svg%3e";
+
+var img$6 = "data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' width='38' height='38' viewBox='0 0 38 38' fill='none'%3e%3cg transform='scale(2) translate(3.5%2c 3.25)'%3e %3cpath fill-rule='evenodd' clip-rule='evenodd' d='M6 1.5C6.27614 1.5 6.5 1.72386 6.5 2V6.22288L10.265 8.576C10.4992 8.72236 10.5704 9.03083 10.424 9.265C10.2776 9.49917 9.96917 9.57035 9.735 9.424L6 7.08962L2.265 9.424C2.03083 9.57035 1.72235 9.49917 1.576 9.265C1.42964 9.03083 1.50083 8.72236 1.735 8.576L5.5 6.22288V2C5.5 1.72386 5.72386 1.5 6 1.5Z' fill='currentColor'/%3e%3c/g%3e%3c/svg%3e";
+
+var img$5 = "data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3e %3cg transform='scale(0.5) translate(12 12)'%3e %3crect fill-rule='nonzero' x='0' y='0' width='24' height='24'%3e%3c/rect%3e %3cline x1='4' y1='7' x2='12' y2='7' stroke='currentColor' stroke-width='2' stroke-linecap='round'%3e%3c/line%3e %3cline x1='4' y1='17' x2='6' y2='17' stroke='currentColor' stroke-width='2' stroke-linecap='round'%3e%3c/line%3e %3cline x1='18' y1='7' x2='20' y2='7' stroke='currentColor' stroke-width='2' stroke-linecap='round'%3e%3c/line%3e %3cline x1='13' y1='17' x2='20' y2='17' stroke='currentColor' stroke-width='2' stroke-linecap='round'%3e%3c/line%3e %3ccircle stroke='currentColor' stroke-width='2' stroke-linecap='round' cx='15' cy='7' r='3'%3e%3c/circle%3e %3ccircle stroke='currentColor' stroke-width='2' stroke-linecap='round' cx='9' cy='17' r='3'%3e%3c/circle%3e %3c/g%3e%3c/svg%3e";
+
+var img$4 = "data:image/svg+xml,%3csvg width='38' height='38' viewBox='-8 -8 32 32' fill='none' xmlns='http://www.w3.org/2000/svg'%3e %3cpath fill-rule='evenodd' clip-rule='evenodd' d='M12 1.33337C13.4727 1.33337 14.6666 2.52728 14.6666 4.00004C14.6666 5.4728 13.4727 6.66671 12 6.66671C11.4931 6.66671 11.0194 6.52491 10.6159 6.27934L10.2721 6.62374C10.0345 6.86142 9.90102 7.18411 9.90102 7.52022V8.47986C9.90102 8.81597 10.0345 9.13866 10.2721 9.37634L10.6159 9.72009C11.0193 9.47463 11.4932 9.33337 12 9.33337C13.4727 9.33337 14.6666 10.5273 14.6666 12C14.6666 13.4728 13.4727 14.6667 12 14.6667C10.5272 14.6667 9.33331 13.4728 9.33331 12C9.33331 11.4932 9.47457 11.0194 9.72003 10.6159L9.37628 10.2722C9.1386 10.0345 8.81591 9.90108 8.4798 9.90108H7.52016C7.18405 9.90108 6.86136 10.0345 6.62368 10.2722L6.27928 10.6159C6.52485 11.0195 6.66665 11.4931 6.66665 12C6.66665 13.4728 5.47274 14.6667 3.99998 14.6667C2.52722 14.6667 1.33331 13.4728 1.33331 12C1.33331 10.5273 2.52722 9.33337 3.99998 9.33337C4.50658 9.33337 4.98008 9.47481 5.38344 9.72009L5.72784 9.37634C5.9655 9.13866 6.09894 8.81597 6.09894 8.47986V7.52022C6.09894 7.18411 5.9655 6.86142 5.72784 6.62374L5.38344 6.27934C4.98001 6.52473 4.5067 6.66671 3.99998 6.66671C2.52722 6.66671 1.33331 5.4728 1.33331 4.00004C1.33331 2.52728 2.52722 1.33337 3.99998 1.33337C5.47274 1.33337 6.66665 2.52728 6.66665 4.00004C6.66665 4.50676 6.52467 4.98008 6.27928 5.3835L6.62368 5.72791C6.86136 5.96556 7.18405 6.099 7.52016 6.099H8.4798C8.81591 6.099 9.1386 5.96556 9.37628 5.72791L9.72003 5.3835C9.47475 4.98014 9.33331 4.50664 9.33331 4.00004C9.33331 2.52728 10.5272 1.33337 12 1.33337ZM3.99998 10.3998C3.11632 10.3998 2.39972 11.1164 2.39972 12C2.39972 12.8837 3.11632 13.6003 3.99998 13.6003C4.88364 13.6003 5.60024 12.8837 5.60024 12C5.60024 11.7911 5.55917 11.5919 5.48631 11.4089L4.41469 12.4812C4.16723 12.7284 3.76625 12.7286 3.51886 12.4812C3.27147 12.2338 3.27158 11.8328 3.51886 11.5853L4.59047 10.5131C4.40769 10.4404 4.20862 10.3998 3.99998 10.3998ZM12 10.3998C11.7911 10.3998 11.5918 10.4403 11.4088 10.5131L12.4811 11.5853C12.7284 11.8328 12.7285 12.2338 12.4811 12.4812C12.2337 12.7286 11.8327 12.7284 11.5853 12.4812L10.513 11.4089C10.4402 11.5918 10.3997 11.7912 10.3997 12C10.3997 12.8837 11.1163 13.6003 12 13.6003C12.8836 13.6003 13.6002 12.8837 13.6002 12C13.6002 11.1164 12.8836 10.3998 12 10.3998ZM3.99998 2.39978C3.11632 2.39978 2.39972 3.11639 2.39972 4.00004C2.39972 4.8837 3.11632 5.6003 3.99998 5.6003C4.20871 5.6003 4.40763 5.55909 4.59047 5.48637L3.51886 4.41475C3.27158 4.16729 3.27147 3.76631 3.51886 3.51892C3.76625 3.27153 4.16723 3.27164 4.41469 3.51892L5.48631 4.59054C5.55903 4.40769 5.60024 4.20877 5.60024 4.00004C5.60024 3.11639 4.88364 2.39978 3.99998 2.39978ZM12 2.39978C11.1163 2.39978 10.3997 3.11639 10.3997 4.00004C10.3997 4.20868 10.4403 4.40775 10.513 4.59054L11.5853 3.51892C11.8327 3.27164 12.2337 3.27153 12.4811 3.51892C12.7285 3.76631 12.7284 4.16729 12.4811 4.41475L11.4088 5.48637C11.5918 5.55923 11.791 5.6003 12 5.6003C12.8836 5.6003 13.6002 4.8837 13.6002 4.00004C13.6002 3.11639 12.8836 2.39978 12 2.39978Z' fill='currentColor'/%3e%3c/svg%3e";
+
+var img$3 = "data:image/svg+xml,%3csvg width='38' height='38' viewBox='-8 -8 32 32' fill='none' xmlns='http://www.w3.org/2000/svg'%3e %3cpath fill-rule='evenodd' clip-rule='evenodd' d='M4.44728 1.7561C6.14077 0.763957 8.53159 1.57857 10.4375 3.58357C12.75 3.02099 14.4585 3.40647 14.6491 4.73071C14.7831 5.66256 14.139 6.87994 12.9942 8.09008C13.7427 10.7586 13.2413 13.2551 11.5527 14.2444C9.85867 15.2369 7.46679 14.4208 5.56056 12.4143C3.34914 12.9521 1.691 12.6254 1.38412 11.4371L1.35092 11.2698C1.21678 10.3379 1.85972 9.11931 3.00457 7.90909C2.28693 5.34963 2.72037 2.94871 4.24741 1.88435L4.44728 1.7561ZM11.9889 9.03995C11.002 9.88136 9.79998 10.6808 8.47918 11.3303L8.13673 11.4937C7.70533 11.6942 7.28148 11.8681 6.8698 12.0172C7.32387 12.4287 7.79226 12.7587 8.25326 12.9983C9.39237 13.5903 10.3231 13.574 10.946 13.2092C11.5745 12.841 12.0613 12.0184 12.1263 10.7086C12.1518 10.1934 12.1065 9.62999 11.9889 9.03995ZM3.46225 9.20206C3.15128 9.5802 2.91825 9.93412 2.76238 10.2489C2.54363 10.6909 2.51958 10.967 2.53842 11.0985C2.54902 11.1721 2.56635 11.2146 2.67058 11.2763C2.81832 11.3636 3.12484 11.4626 3.6478 11.467C3.95641 11.4696 4.3074 11.4373 4.69402 11.3707C4.45655 11.0439 4.23084 10.6971 4.02215 10.3303C3.81017 9.95774 3.62416 9.58004 3.46225 9.20206ZM10.0358 4.9423C9.42018 5.13611 8.75205 5.40184 8.05014 5.74698C6.61265 6.45384 5.33887 7.34291 4.37175 8.24373C4.55213 8.73829 4.78227 9.2401 5.06511 9.73722C5.33995 10.2202 5.64271 10.6614 5.96355 11.0575C6.5793 10.8637 7.24782 10.5987 7.94988 10.2535C9.38732 9.54667 10.6605 8.65688 11.6276 7.7561C11.4473 7.26173 11.2176 6.76019 10.9349 6.26326C10.66 5.78001 10.3568 5.33855 10.0358 4.9423ZM7.74675 3.00219C6.60759 2.41015 5.67698 2.42644 5.05405 2.79126C4.42548 3.15953 3.93866 3.98199 3.87371 5.29191C3.84822 5.80668 3.89236 6.36967 4.00978 6.95922C4.91091 6.19088 5.9923 5.45862 7.17905 4.84269L7.52084 4.67016C8.07056 4.39986 8.6096 4.17089 9.12957 3.98266C8.67568 3.57138 8.20757 3.24172 7.74675 3.00219ZM12.3522 4.53344C12.0433 4.53086 11.6918 4.56177 11.3047 4.6285C11.5425 4.95566 11.7689 5.3029 11.9779 5.67016C12.1897 6.04255 12.3753 6.41999 12.5371 6.79777C12.8481 6.41965 13.0818 6.06635 13.2376 5.75154C13.4564 5.30973 13.4804 5.03352 13.4616 4.90193C13.451 4.82831 13.4337 4.7859 13.3294 4.7242C13.1817 4.63684 12.8753 4.53787 12.3522 4.53344Z' fill='currentColor'/%3e%3c/svg%3e";
+
+const createSvg$3 = (svgString) => {
+    const decodedStr = decodeURIComponent(svgString.substring('data:image/svg+xml,'.length));
+    return new DOMParser().parseFromString(decodedStr, 'image/svg+xml').documentElement;
+};
+class RightToolbar extends Container {
+    constructor(events, tooltips, args = {}) {
+        args = {
+            ...args,
+            id: 'right-toolbar'
+        };
+        super(args);
+        this.dom.addEventListener('pointerdown', (event) => {
+            event.stopPropagation();
+        });
+        const ringsModeToggle = new Button({
+            id: 'right-toolbar-mode-toggle',
+            class: 'right-toolbar-toggle'
+        });
+        const showHideSplats = new Button({
+            id: 'right-toolbar-show-hide',
+            class: ['right-toolbar-toggle', 'active']
+        });
+        const orbitMode = new Button({
+            id: 'right-toolbar-orbit-mode',
+            class: ['right-toolbar-toggle', 'active']
+        });
+        const flyMode = new Button({
+            id: 'right-toolbar-fly-mode',
+            class: 'right-toolbar-toggle'
+        });
+        const cameraFrameSelection = new Button({
+            id: 'right-toolbar-frame-selection',
+            class: 'right-toolbar-button'
+        });
+        const cameraReset = new Button({
+            id: 'right-toolbar-camera-origin',
+            class: 'right-toolbar-button'
+        });
+        const colorPanel = new Button({
+            id: 'right-toolbar-color-panel',
+            class: 'right-toolbar-toggle'
+        });
+        const options = new Button({
+            id: 'right-toolbar-options',
+            class: 'right-toolbar-toggle',
+            icon: 'E283'
+        });
+        const centersDom = createSvg$3(img$a);
+        const ringsDom = createSvg$3(img$9);
+        ringsDom.style.display = 'none';
+        ringsModeToggle.dom.appendChild(centersDom);
+        ringsModeToggle.dom.appendChild(ringsDom);
+        showHideSplats.dom.appendChild(createSvg$3(img$s));
+        orbitMode.dom.appendChild(createSvg$3(img$3));
+        flyMode.dom.appendChild(createSvg$3(img$4));
+        cameraFrameSelection.dom.appendChild(createSvg$3(img$7));
+        cameraReset.dom.appendChild(createSvg$3(img$6));
+        colorPanel.dom.appendChild(createSvg$3(img$5));
+        this.append(ringsModeToggle);
+        this.append(showHideSplats);
+        this.append(new Element$1({ class: 'right-toolbar-separator' }));
+        this.append(orbitMode);
+        this.append(flyMode);
+        this.append(new Element$1({ class: 'right-toolbar-separator' }));
+        this.append(cameraFrameSelection);
+        this.append(cameraReset);
+        this.append(new Element$1({ class: 'right-toolbar-separator' }));
+        this.append(colorPanel);
+        this.append(options);
+        // Helper to compose localized tooltip text with shortcut
+        const shortcutManager = events.invoke('shortcutManager');
+        const tooltip = (localeKey, shortcutId) => () => {
+            const text = i18n.t(localeKey);
+            if (shortcutId) {
+                const shortcut = shortcutManager.formatShortcut(shortcutId);
+                if (shortcut) {
+                    return i18n.formatTooltipWithShortcut(text, shortcut);
+                }
+            }
+            return text;
+        };
+        tooltips.register(ringsModeToggle, tooltip('tooltip.right-toolbar.splat-mode', 'camera.toggleMode'), 'left');
+        tooltips.register(showHideSplats, tooltip('tooltip.right-toolbar.show-hide', 'camera.toggleOverlay'), 'left');
+        tooltips.register(orbitMode, tooltip('tooltip.right-toolbar.orbit-camera', 'camera.toggleControlMode'), 'left');
+        tooltips.register(flyMode, tooltip('tooltip.right-toolbar.fly-camera', 'camera.toggleControlMode'), 'left');
+        tooltips.register(cameraFrameSelection, tooltip('tooltip.right-toolbar.frame-selection', 'camera.focus'), 'left');
+        tooltips.register(cameraReset, tooltip('tooltip.right-toolbar.reset-camera', 'camera.reset'), 'left');
+        tooltips.register(colorPanel, tooltip('tooltip.right-toolbar.colors'), 'left');
+        tooltips.register(options, tooltip('tooltip.right-toolbar.view-options'), 'left');
+        // add event handlers
+        ringsModeToggle.on('click', () => {
+            events.fire('camera.toggleMode');
+            events.fire('camera.setOverlay', true);
+        });
+        showHideSplats.on('click', () => events.fire('camera.toggleOverlay'));
+        orbitMode.on('click', () => events.fire('camera.setControlMode', 'orbit'));
+        flyMode.on('click', () => events.fire('camera.setControlMode', 'fly'));
+        cameraFrameSelection.on('click', () => events.fire('camera.focus'));
+        cameraReset.on('click', () => events.fire('camera.reset'));
+        colorPanel.on('click', () => events.fire('colorPanel.toggleVisible'));
+        options.on('click', () => events.fire('viewPanel.toggleVisible'));
+        events.on('camera.mode', (mode) => {
+            ringsModeToggle.class[mode === 'rings' ? 'add' : 'remove']('active');
+            centersDom.style.display = mode === 'rings' ? 'none' : 'block';
+            ringsDom.style.display = mode === 'rings' ? 'block' : 'none';
+        });
+        events.on('camera.overlay', (value) => {
+            showHideSplats.class[value ? 'add' : 'remove']('active');
+        });
+        events.on('camera.controlMode', (mode) => {
+            orbitMode.class[mode === 'orbit' ? 'add' : 'remove']('active');
+            flyMode.class[mode === 'fly' ? 'add' : 'remove']('active');
+        });
+        events.on('colorPanel.visible', (visible) => {
+            colorPanel.class[visible ? 'add' : 'remove']('active');
+        });
+        events.on('viewPanel.visible', (visible) => {
+            options.class[visible ? 'add' : 'remove']('active');
+        });
+    }
+}
+
+var img$2 = "data:image/svg+xml,%3csvg width='16' height='16' viewBox='4 4 16 16' fill='none' xmlns='http://www.w3.org/2000/svg'%3e%3cpath fill-rule='evenodd' clip-rule='evenodd' d='M7.33313 10.6271C7.1272 10.4432 6.81112 10.461 6.62714 10.6669C6.44316 10.8728 6.4615 11.1894 6.66743 11.3734L6.66819 11.374L6.67032 11.3759L6.67705 11.3818L6.70021 11.4019C6.71991 11.4188 6.74808 11.4426 6.7843 11.4724C6.85671 11.5318 6.96148 11.6151 7.09523 11.7142C7.1782 11.7757 7.27253 11.8434 7.37741 11.9155L6.64645 12.6465C6.45118 12.8417 6.45118 13.1583 6.64645 13.3536C6.84171 13.5488 7.15829 13.5488 7.35355 13.3536L8.25285 12.4543C8.73378 12.7179 9.31351 12.9846 9.96266 13.1827L9.6318 15.1678C9.58641 15.4402 9.77042 15.6978 10.0428 15.7432C10.3152 15.7886 10.5728 15.6046 10.6182 15.3322L10.9382 13.4119C11.2804 13.468 11.6354 13.5 12 13.5C12.3646 13.5 12.7196 13.468 13.0618 13.4119L13.3818 15.3322C13.4272 15.6046 13.6848 15.7886 13.9572 15.7432C14.2296 15.6978 14.4136 15.4402 14.3682 15.1678L14.0373 13.1827C14.6865 12.9846 15.2662 12.7179 15.7472 12.4543L16.6464 13.3536C16.8417 13.5488 17.1583 13.5488 17.3536 13.3536C17.5488 13.1583 17.5488 12.8417 17.3536 12.6465L16.6226 11.9155C16.7275 11.8434 16.8218 11.7757 16.9048 11.7142C17.0385 11.6151 17.1433 11.5318 17.2157 11.4724C17.2519 11.4426 17.2801 11.4188 17.2998 11.4019L17.323 11.3818L17.3297 11.3759L17.3318 11.374L17.3331 11.3729C17.3333 11.3728 17.3331 11.3729 17 11L17.3331 11.3729C17.5391 11.1889 17.5568 10.8728 17.3729 10.6669C17.1889 10.461 16.8728 10.4433 16.6669 10.6271L16.664 10.6296L16.6486 10.643C16.6341 10.6554 16.6115 10.6746 16.5811 10.6995C16.5203 10.7494 16.4286 10.8224 16.3094 10.9108C16.0705 11.0878 15.7231 11.3251 15.2937 11.5624C14.4289 12.0403 13.2643 12.5 12 12.5C10.7357 12.5 9.57108 12.0403 8.7063 11.5624C8.27693 11.3251 7.92953 11.0878 7.69063 10.9108C7.57136 10.8224 7.47967 10.7494 7.41888 10.6995C7.38849 10.6746 7.36587 10.6554 7.35143 10.643L7.33598 10.6296L7.33313 10.6271ZM7.00028 10.9997C7.33313 10.6271 7.33323 10.6272 7.33313 10.6271L7.00028 10.9997ZM7 11L6.66743 11.3734C6.6673 11.3732 6.66688 11.3729 7 11Z' fill='currentColor'/%3e%3c/svg%3e";
+
+var img$1 = "data:image/svg+xml,%3csvg width='16' height='16' viewBox='4 4 16 16' fill='none' xmlns='http://www.w3.org/2000/svg'%3e%3cpath fill-rule='evenodd' clip-rule='evenodd' d='M12 11C11.4477 11 11 11.4477 11 12C11 12.5523 11.4477 13 12 13C12.5523 13 13 12.5523 13 12C13 11.4477 12.5523 11 12 11ZM10 12C10 10.8954 10.8954 10 12 10C13.1046 10 14 10.8954 14 12C14 13.1046 13.1046 14 12 14C10.8954 14 10 13.1046 10 12Z' fill='currentColor'/%3e%3cpath fill-rule='evenodd' clip-rule='evenodd' d='M11.9999 9.5C9.64477 9.5 8.00887 10.9874 7.28843 11.8087C7.18771 11.9235 7.18771 12.0765 7.28843 12.1913C8.00887 13.0126 9.64477 14.5 11.9999 14.5C14.3551 14.5 15.991 13.0126 16.7114 12.1913C16.8121 12.0765 16.8121 11.9235 16.7114 11.8087C15.991 10.9874 14.3551 9.5 11.9999 9.5ZM6.53667 11.1492C7.32348 10.2523 9.21141 8.5 11.9999 8.5C14.7884 8.5 16.6764 10.2523 17.4632 11.1492C17.8949 11.6414 17.8949 12.3586 17.4632 12.8508C16.6764 13.7477 14.7884 15.5 11.9999 15.5C9.21141 15.5 7.32348 13.7477 6.53667 12.8508C6.10496 12.3586 6.10496 11.6414 6.53667 11.1492Z' fill='currentColor'/%3e%3c/svg%3e";
+
+const createSvg$2 = (svgString) => {
+    const decodedStr = decodeURIComponent(svgString.substring('data:image/svg+xml,'.length));
+    return new DOMParser().parseFromString(decodedStr, 'image/svg+xml').documentElement;
+};
+class SplatItem extends Container {
+    getName;
+    setName;
+    getSelected;
+    setSelected;
+    getVisible;
+    setVisible;
+    destroy;
+    constructor(name, edit, args = {}) {
+        args = {
+            ...args,
+            class: ['splat-item', 'visible']
+        };
+        super(args);
+        const text = new Label({
+            class: 'splat-item-text',
+            text: name
+        });
+        const visible = new Element$1({
+            dom: createSvg$2(img$1),
+            class: 'splat-item-visible'
+        });
+        const invisible = new Element$1({
+            dom: createSvg$2(img$2),
+            class: 'splat-item-visible',
+            hidden: true
+        });
+        const remove = new Element$1({
+            dom: createSvg$2(img$n),
+            class: 'splat-item-delete'
+        });
+        this.append(text);
+        this.append(visible);
+        this.append(invisible);
+        this.append(remove);
+        this.getName = () => {
+            return text.value;
+        };
+        this.setName = (value) => {
+            text.value = value;
+        };
+        this.getSelected = () => {
+            return this.class.contains('selected');
+        };
+        this.setSelected = (value) => {
+            if (value !== this.selected) {
+                if (value) {
+                    this.class.add('selected');
+                    this.emit('select', this);
+                }
+                else {
+                    this.class.remove('selected');
+                    this.emit('unselect', this);
+                }
+            }
+        };
+        this.getVisible = () => {
+            return this.class.contains('visible');
+        };
+        this.setVisible = (value) => {
+            if (value !== this.visible) {
+                visible.hidden = !value;
+                invisible.hidden = value;
+                if (value) {
+                    this.class.add('visible');
+                    this.emit('visible', this);
+                }
+                else {
+                    this.class.remove('visible');
+                    this.emit('invisible', this);
+                }
+            }
+        };
+        const toggleVisible = (event) => {
+            event.stopPropagation();
+            this.visible = !this.visible;
+        };
+        const handleRemove = (event) => {
+            event.stopPropagation();
+            this.emit('removeClicked', this);
+        };
+        // rename on double click
+        text.dom.addEventListener('dblclick', (event) => {
+            event.stopPropagation();
+            const onblur = () => {
+                this.remove(edit);
+                this.emit('rename', edit.value);
+                edit.input.removeEventListener('blur', onblur);
+                text.hidden = false;
+            };
+            text.hidden = true;
+            this.appendAfter(edit, text);
+            edit.value = text.value;
+            edit.input.addEventListener('blur', onblur);
+            edit.focus();
+        });
+        // handle clicks
+        visible.dom.addEventListener('click', toggleVisible);
+        invisible.dom.addEventListener('click', toggleVisible);
+        remove.dom.addEventListener('click', handleRemove);
+        this.destroy = () => {
+            visible.dom.removeEventListener('click', toggleVisible);
+            invisible.dom.removeEventListener('click', toggleVisible);
+            remove.dom.removeEventListener('click', handleRemove);
+        };
+    }
+    set name(value) {
+        this.setName(value);
+    }
+    get name() {
+        return this.getName();
+    }
+    set selected(value) {
+        this.setSelected(value);
+    }
+    get selected() {
+        return this.getSelected();
+    }
+    set visible(value) {
+        this.setVisible(value);
+    }
+    get visible() {
+        return this.getVisible();
+    }
+}
+class SplatList extends Container {
+    constructor(events, args = {}) {
+        args = {
+            ...args,
+            class: 'splat-list'
+        };
+        super(args);
+        const items = new Map();
+        let soloMode = false;
+        const savedVisibility = new Map();
+        // edit input used during renames
+        const edit = new TextInput({
+            id: 'splat-edit'
+        });
+        events.on('scene.elementAdded', (element) => {
+            if (element.type === ElementType.splat) {
+                const splat = element;
+                const item = new SplatItem(splat.name, edit);
+                this.append(item);
+                items.set(splat, item);
+                if (soloMode) {
+                    savedVisibility.set(splat, splat.visible);
+                    splat.visible = false;
+                }
+                item.on('visible', () => {
+                    splat.visible = true;
+                    // also select it if there is no other selection
+                    if (!events.invoke('selection')) {
+                        events.fire('selection', splat);
+                    }
+                });
+                item.on('invisible', () => {
+                    splat.visible = false;
+                });
+                item.on('rename', (value) => {
+                    events.fire('edit.add', new SplatRenameOp(splat, value));
+                });
+            }
+        });
+        events.on('scene.elementRemoved', (element) => {
+            if (element.type === ElementType.splat) {
+                const splat = element;
+                const item = items.get(splat);
+                if (item) {
+                    this.remove(item);
+                    items.delete(splat);
+                }
+                savedVisibility.delete(splat);
+            }
+        });
+        events.on('selection.changed', (selection, prev) => {
+            items.forEach((value, key) => {
+                value.selected = key === selection;
+            });
+            if (soloMode) {
+                if (prev) {
+                    prev.visible = false;
+                }
+                if (selection) {
+                    selection.visible = true;
+                }
+            }
+        });
+        events.on('scene.solo', (value) => {
+            soloMode = value;
+            const selection = events.invoke('selection');
+            if (soloMode) {
+                items.forEach((item, splat) => {
+                    savedVisibility.set(splat, splat.visible);
+                    splat.visible = splat === selection;
+                });
+            }
+            else {
+                items.forEach((item, splat) => {
+                    const wasVisible = savedVisibility.get(splat);
+                    splat.visible = wasVisible !== undefined ? wasVisible : true;
+                });
+                savedVisibility.clear();
+            }
+        });
+        events.on('splat.name', (splat) => {
+            const item = items.get(splat);
+            if (item) {
+                item.name = splat.name;
+            }
+        });
+        events.on('splat.visibility', (splat) => {
+            const item = items.get(splat);
+            if (item) {
+                item.visible = splat.visible;
+            }
+        });
+        this.on('click', (item) => {
+            for (const [key, value] of items) {
+                if (item === value) {
+                    if (soloMode && !key.visible) {
+                        key.visible = true;
+                    }
+                    events.fire('selection', key);
+                    break;
+                }
+            }
+        });
+        this.on('removeClicked', async (item) => {
+            let splat;
+            for (const [key, value] of items) {
+                if (item === value) {
+                    splat = key;
+                    break;
+                }
+            }
+            if (!splat) {
+                return;
+            }
+            const result = await events.invoke('showPopup', {
+                type: 'yesno',
+                header: 'Remove Splat',
+                message: `Are you sure you want to remove '${splat.name}' from the scene? This operation can not be undone.`
+            });
+            if (result?.action === 'yes') {
+                splat.destroy();
+            }
+        });
+    }
+    _onAppendChild(element) {
+        super._onAppendChild(element);
+        if (element instanceof SplatItem) {
+            element.on('click', () => {
+                this.emit('click', element);
+            });
+            element.on('removeClicked', () => {
+                this.emit('removeClicked', element);
+            });
+        }
+    }
+    _onRemoveChild(element) {
+        if (element instanceof SplatItem) {
+            element.unbind('click');
+            element.unbind('removeClicked');
+        }
+        super._onRemoveChild(element);
+    }
+}
+
+var img = "data:image/svg+xml,%3csvg width='16' height='16' viewBox='0 0 12 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M4.5 4.5C4.5 3.39543 5.39543 2.5 6.5 2.5H7C7.27614 2.5 7.5 2.72386 7.5 3C7.5 3.27614 7.27614 3.5 7 3.5H6.5C5.94772 3.5 5.5 3.94772 5.5 4.5C5.5 5.05228 5.94772 5.5 6.5 5.5C7.60457 5.5 8.5 6.39543 8.5 7.5C8.5 8.60457 7.60457 9.5 6.5 9.5H5.5C5.22386 9.5 5 9.27614 5 9C5 8.72386 5.22386 8.5 5.5 8.5H6.5C7.05228 8.5 7.5 8.05228 7.5 7.5C7.5 6.94772 7.05228 6.5 6.5 6.5C5.39543 6.5 4.5 5.60457 4.5 4.5Z' fill='currentColor'/%3e%3c/svg%3e";
+
+const v = new Vec3();
+class Transform extends Container {
+    constructor(events, args = {}) {
+        args = {
+            ...args,
+            id: 'transform'
+        };
+        super(args);
+        // position
+        const position = new Container({
+            class: 'transform-row'
+        });
+        const positionLabel = new Label({
+            class: 'transform-label'
+        });
+        i18n.bindText(positionLabel, 'panel.scene-manager.transform.position');
+        const positionVector = new VectorInput({
+            class: 'transform-expand',
+            precision: 3,
+            dimensions: 3,
+            placeholder: ['X', 'Y', 'Z'],
+            value: [0, 0, 0],
+            enabled: false
+        });
+        position.append(positionLabel);
+        position.append(positionVector);
+        // rotation
+        const rotation = new Container({
+            class: 'transform-row'
+        });
+        const rotationLabel = new Label({
+            class: 'transform-label'
+        });
+        i18n.bindText(rotationLabel, 'panel.scene-manager.transform.rotation');
+        const rotationVector = new VectorInput({
+            class: 'transform-expand',
+            precision: 2,
+            dimensions: 3,
+            placeholder: ['X', 'Y', 'Z'],
+            value: [0, 0, 0],
+            enabled: false
+        });
+        rotation.append(rotationLabel);
+        rotation.append(rotationVector);
+        // scale
+        const scale = new Container({
+            class: 'transform-row'
+        });
+        const scaleLabel = new Label({
+            class: 'transform-label'
+        });
+        i18n.bindText(scaleLabel, 'panel.scene-manager.transform.scale');
+        const scaleInput = new NumericInput({
+            class: 'transform-expand',
+            precision: 3,
+            value: 1,
+            min: 0.001,
+            max: 10000,
+            enabled: false
+        });
+        scale.append(scaleLabel);
+        scale.append(scaleInput);
+        this.append(position);
+        this.append(rotation);
+        this.append(scale);
+        const toArray = (v) => {
+            return [v.x, v.y, v.z];
+        };
+        let uiUpdating = false;
+        let mouseUpdating = false;
+        // update UI with pivot
+        const updateUI = (pivot) => {
+            uiUpdating = true;
+            const transform = pivot.transform;
+            transform.rotation.getEulerAngles(v);
+            positionVector.value = toArray(transform.position);
+            rotationVector.value = toArray(v);
+            scaleInput.value = transform.scale.x;
+            uiUpdating = false;
+        };
+        // update pivot with UI
+        const updatePivot = (pivot) => {
+            const p = positionVector.value;
+            const r = rotationVector.value;
+            const q = new Quat().setFromEulerAngles(r[0], r[1], r[2]);
+            const s = scaleInput.value;
+            if (q.w < 0) {
+                q.mulScalar(-1);
+            }
+            pivot.moveTRS(new Vec3(p[0], p[1], p[2]), q, new Vec3(s, s, s));
+        };
+        // handle a change in the UI state
+        const change = () => {
+            if (!uiUpdating) {
+                const pivot = events.invoke('pivot');
+                if (mouseUpdating) {
+                    updatePivot(pivot);
+                }
+                else {
+                    pivot.start();
+                    updatePivot(pivot);
+                    pivot.end();
+                }
+            }
+        };
+        const mousedown = () => {
+            mouseUpdating = true;
+            const pivot = events.invoke('pivot');
+            pivot.start();
+        };
+        const mouseup = () => {
+            const pivot = events.invoke('pivot');
+            updatePivot(pivot);
+            mouseUpdating = false;
+            pivot.end();
+        };
+        [positionVector.inputs, rotationVector.inputs, scaleInput].flat().forEach((input) => {
+            input.on('change', change);
+            input.on('slider:mousedown', mousedown);
+            input.on('slider:mouseup', mouseup);
+        });
+        // toggle ui availability based on selection
+        events.on('selection.changed', (selection) => {
+            positionVector.enabled = rotationVector.enabled = scaleInput.enabled = !!selection;
+        });
+        events.on('pivot.placed', (pivot) => {
+            updateUI(pivot);
+        });
+        events.on('pivot.moved', (pivot) => {
+            if (!mouseUpdating) {
+                updateUI(pivot);
+            }
+        });
+        events.on('pivot.ended', (pivot) => {
+            updateUI(pivot);
+        });
+    }
+}
+
+const createSvg$1 = (svgString) => {
+    const decodedStr = decodeURIComponent(svgString.substring('data:image/svg+xml,'.length));
+    return new DOMParser().parseFromString(decodedStr, 'image/svg+xml').documentElement;
+};
+class ScenePanel extends Container {
+    constructor(events, tooltips, args = {}) {
+        args = {
+            ...args,
+            id: 'scene-panel',
+            class: 'panel'
+        };
+        super(args);
+        // stop pointer events bubbling
+        ['pointerdown', 'pointerup', 'pointermove', 'wheel', 'dblclick'].forEach((eventName) => {
+            this.dom.addEventListener(eventName, (event) => event.stopPropagation());
+        });
+        const sceneHeader = new Container({
+            class: 'panel-header'
+        });
+        const sceneIcon = new Label({
+            text: '\uE344',
+            class: 'panel-header-icon'
+        });
+        const sceneLabel = new Label({
+            class: 'panel-header-label'
+        });
+        i18n.bindText(sceneLabel, 'panel.scene-manager');
+        let soloActive = false;
+        const soloToggle = new Container({
+            class: 'panel-header-button'
+        });
+        soloToggle.dom.appendChild(createSvg$1(img));
+        soloToggle.on('click', () => {
+            soloActive = !soloActive;
+            if (soloActive) {
+                soloToggle.class.add('active');
+            }
+            else {
+                soloToggle.class.remove('active');
+            }
+            events.fire('scene.solo', soloActive);
+        });
+        const sceneImport = new Container({
+            class: 'panel-header-button'
+        });
+        sceneImport.dom.appendChild(createSvg$1(img$m));
+        const sceneNew = new Container({
+            class: 'panel-header-button'
+        });
+        sceneNew.dom.appendChild(createSvg$1(img$l));
+        sceneHeader.append(sceneIcon);
+        sceneHeader.append(sceneLabel);
+        sceneHeader.append(soloToggle);
+        sceneHeader.append(sceneImport);
+        sceneHeader.append(sceneNew);
+        sceneImport.on('click', async () => {
+            await events.invoke('scene.import');
+        });
+        sceneNew.on('click', () => {
+            events.invoke('doc.new');
+        });
+        tooltips.register(soloToggle, () => i18n.t('tooltip.scene.solo'), 'top');
+        tooltips.register(sceneImport, 'Import Scene', 'top');
+        tooltips.register(sceneNew, 'New Scene', 'top');
+        const splatList = new SplatList(events);
+        const splatListContainer = new Container({
+            class: 'splat-list-container'
+        });
+        splatListContainer.append(splatList);
+        const transformHeader = new Container({
+            class: 'panel-header'
+        });
+        const transformIcon = new Label({
+            text: '\uE111',
+            class: 'panel-header-icon'
+        });
+        const transformLabel = new Label({
+            class: 'panel-header-label'
+        });
+        i18n.bindText(transformLabel, 'panel.scene-manager.transform');
+        transformHeader.append(transformIcon);
+        transformHeader.append(transformLabel);
+        this.append(sceneHeader);
+        this.append(splatListContainer);
+        this.append(transformHeader);
+        this.append(new Transform(events));
+        this.append(new Element$1({
+            class: 'panel-header',
+            height: 20
+        }));
+    }
+}
+
+// Display configuration for the shortcuts popup
+const popupConfig = {
+    navigation: {
+        localeKey: 'popup.shortcuts.navigation',
+        shortcuts: [
+            { id: 'camera.reset', localeKey: 'popup.shortcuts.reset-camera' },
+            { id: 'camera.focus', localeKey: 'popup.shortcuts.focus-camera' },
+            { id: 'camera.toggleControlMode', localeKey: 'popup.shortcuts.toggle-control-mode' }
+        ]
+    },
+    camera: {
+        localeKey: 'popup.shortcuts.camera',
+        shortcuts: [],
+        hints: [
+            { displayKey: 'W / A / S / D', localeKey: 'popup.shortcuts.fly-movement' },
+            { displayKey: 'Q / E', localeKey: 'popup.shortcuts.fly-vertical' },
+            { displayKey: 'Shift', localeKey: 'popup.shortcuts.fly-speed-fast' },
+            { displayKey: 'Alt', localeKey: 'popup.shortcuts.fly-speed-slow' }
+        ]
+    },
+    show: {
+        localeKey: 'popup.shortcuts.show',
+        shortcuts: [
+            { id: 'camera.toggleOverlay', localeKey: 'popup.shortcuts.toggle-splat-overlay' },
+            { id: 'camera.toggleMode', localeKey: 'popup.shortcuts.toggle-overlay-mode' },
+            { id: 'grid.toggleVisible', localeKey: 'popup.shortcuts.toggle-grid' },
+            { id: 'select.hide', localeKey: 'popup.shortcuts.lock-selected-splats' },
+            { id: 'select.unhide', localeKey: 'popup.shortcuts.unlock-all-splats' }
+        ]
+    },
+    selection: {
+        localeKey: 'popup.shortcuts.selection',
+        shortcuts: [
+            { id: 'select.all', localeKey: 'popup.shortcuts.select-all' },
+            { id: 'select.none', localeKey: 'popup.shortcuts.deselect-all' },
+            { id: 'select.invert', localeKey: 'popup.shortcuts.invert-selection' },
+            { id: 'select.delete', localeKey: 'popup.shortcuts.delete-selected-splats' }
+        ],
+        hints: [
+            { displayKey: 'Shift', localeKey: 'popup.shortcuts.add-to-selection' },
+            { displayKey: 'Ctrl', localeKey: 'popup.shortcuts.remove-from-selection' }
+        ]
+    },
+    tools: {
+        localeKey: 'popup.shortcuts.tools',
+        shortcuts: [
+            { id: 'tool.move', localeKey: 'popup.shortcuts.move' },
+            { id: 'tool.rotate', localeKey: 'popup.shortcuts.rotate' },
+            { id: 'tool.scale', localeKey: 'popup.shortcuts.scale' },
+            { id: 'tool.rectSelection', localeKey: 'popup.shortcuts.rect-selection' },
+            { id: 'tool.lassoSelection', localeKey: 'popup.shortcuts.lasso-selection' },
+            { id: 'tool.polygonSelection', localeKey: 'popup.shortcuts.polygon-selection' },
+            { id: 'tool.brushSelection', localeKey: 'popup.shortcuts.brush-selection' },
+            { id: 'tool.floodSelection', localeKey: 'popup.shortcuts.flood-selection' },
+            { id: 'tool.eyedropperSelection', localeKey: 'popup.shortcuts.eyedropper-selection' },
+            { id: 'tool.deactivate', localeKey: 'popup.shortcuts.deactivate-tool' },
+            { id: 'tool.toggleCoordSpace', localeKey: 'popup.shortcuts.toggle-gizmo-coordinate-space' }
+        ],
+        hints: [
+            { displayKey: '[ ]', localeKey: 'popup.shortcuts.brush-size' }
+        ]
+    },
+    playback: {
+        localeKey: 'popup.shortcuts.playback',
+        shortcuts: [
+            { id: 'timeline.togglePlay', localeKey: 'popup.shortcuts.play-pause' },
+            { id: 'timeline.prevFrame', localeKey: 'popup.shortcuts.prev-frame' },
+            { id: 'timeline.nextFrame', localeKey: 'popup.shortcuts.next-frame' },
+            { id: 'timeline.prevKey', localeKey: 'popup.shortcuts.prev-key' },
+            { id: 'timeline.nextKey', localeKey: 'popup.shortcuts.next-key' },
+            { id: 'track.addKey', localeKey: 'popup.shortcuts.add-key' },
+            { id: 'track.removeKey', localeKey: 'popup.shortcuts.remove-key' }
+        ]
+    },
+    other: {
+        localeKey: 'popup.shortcuts.other',
+        shortcuts: [
+            { id: 'edit.undo', localeKey: 'popup.shortcuts.undo' },
+            { id: 'edit.redo', localeKey: 'popup.shortcuts.redo' },
+            { id: 'dataPanel.toggle', localeKey: 'popup.shortcuts.toggle-data-panel' },
+            { id: 'timelinePanel.toggle', localeKey: 'popup.shortcuts.toggle-timeline-panel' }
+        ]
+    }
+};
+// Category display order
+const categoryOrder = ['navigation', 'camera', 'show', 'selection', 'tools', 'playback', 'other'];
+class ShortcutsPopup extends Container {
+    constructor(events, args = {}) {
+        args = {
+            ...args,
+            id: 'shortcuts-popup',
+            hidden: true,
+            tabIndex: -1
+        };
+        super(args);
+        // Handle keyboard events to prevent global shortcuts from firing
+        this.dom.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                this.hidden = true;
+            }
+            e.stopPropagation();
+        });
+        // Close when clicking outside dialog
+        this.on('click', () => {
+            this.hidden = true;
+        });
+        const dialog = new Container({
+            id: 'dialog'
+        });
+        // Prevent clicks inside dialog from closing
+        dialog.on('click', (event) => {
+            event.stopPropagation();
+        });
+        // Header
+        const header = new Label({
+            id: 'header'
+        });
+        i18n.bindText(header, () => i18n.t('popup.shortcuts.title').toUpperCase());
+        // Content
+        const content = new Container({
+            id: 'content'
+        });
+        // Get the shortcut manager from events
+        const shortcutManager = events.invoke('shortcutManager');
+        // Build the shortcut list from the popup display configuration
+        for (const categoryId of categoryOrder) {
+            const config = popupConfig[categoryId];
+            if (!config)
+                continue;
+            // Add category header
+            const headerLabel = new Label({
+                class: 'shortcut-header-label'
+            });
+            i18n.bindText(headerLabel, config.localeKey);
+            const headerEntry = new Container({
+                class: 'shortcut-header'
+            });
+            headerEntry.append(headerLabel);
+            content.append(headerEntry);
+            // Add shortcuts for this category
+            for (const item of config.shortcuts) {
+                const keyText = shortcutManager.formatShortcut(item.id);
+                if (!keyText)
+                    continue; // Skip if shortcut not found
+                const key = new Label({
+                    class: 'shortcut-key',
+                    text: keyText
+                });
+                const action = new Label({
+                    class: 'shortcut-action'
+                });
+                i18n.bindText(action, item.localeKey);
+                const entry = new Container({
+                    class: 'shortcut-entry'
+                });
+                entry.append(key);
+                entry.append(action);
+                content.append(entry);
+            }
+            // Add hints for this category (non-shortcut display items)
+            if (config.hints) {
+                for (const hint of config.hints) {
+                    const key = new Label({
+                        class: 'shortcut-key',
+                        text: hint.displayKey
+                    });
+                    const action = new Label({
+                        class: 'shortcut-action'
+                    });
+                    i18n.bindText(action, hint.localeKey);
+                    const entry = new Container({
+                        class: 'shortcut-entry'
+                    });
+                    entry.append(key);
+                    entry.append(action);
+                    content.append(entry);
+                }
+            }
+        }
+        dialog.append(header);
+        dialog.append(content);
+        this.append(dialog);
+    }
+    set hidden(value) {
+        super.hidden = value;
+        if (!value) {
+            // Take keyboard focus so shortcuts stop working
+            this.dom.focus();
+        }
+    }
+    get hidden() {
+        return super.hidden;
+    }
+}
+
+class Spinner extends Container {
+    constructor(args = {}) {
+        args = {
+            ...args,
+            id: 'spinner-container',
+            hidden: true
+        };
+        super(args);
+        this.dom.tabIndex = 0;
+        const spinner = new Element$1({
+            dom: 'div',
+            class: 'spinner'
+        });
+        this.append(spinner);
+        this.dom.addEventListener('keydown', (event) => {
+            if (this.hidden)
+                return;
+            event.stopPropagation();
+            event.preventDefault();
+        });
+    }
+}
+
+class StatusBar extends Container {
+    constructor(events, tooltips, args = {}) {
+        args = {
+            ...args,
+            id: 'status-bar'
+        };
+        super(args);
+        // Track the currently active panel
+        let activePanel = '';
+        // Toggle buttons for panels
+        const timelineButton = new Button({
+            class: 'status-bar-toggle'
+        });
+        i18n.bindText(timelineButton, () => i18n.t('status-bar.timeline').toUpperCase());
+        const splatDataButton = new Button({
+            class: 'status-bar-toggle'
+        });
+        i18n.bindText(splatDataButton, () => i18n.t('status-bar.splat-data').toUpperCase());
+        // Panel toggle logic
+        const setActivePanel = (panel) => {
+            activePanel = panel;
+            timelineButton.dom.classList[panel === 'timeline' ? 'add' : 'remove']('active');
+            splatDataButton.dom.classList[panel === 'splatData' ? 'add' : 'remove']('active');
+            events.fire('statusBar.panelChanged', panel || null);
+        };
+        timelineButton.on('click', () => {
+            setActivePanel(activePanel === 'timeline' ? '' : 'timeline');
+        });
+        splatDataButton.on('click', () => {
+            setActivePanel(activePanel === 'splatData' ? '' : 'splatData');
+        });
+        // Right section: stats
+        const statsContainer = new Container({
+            class: 'status-bar-stats'
+        });
+        const createStat = (labelKey) => {
+            const container = new Container({
+                class: 'status-bar-stat'
+            });
+            const label = new Label({
+                class: 'status-bar-stat-label'
+            });
+            i18n.bindText(label, labelKey);
+            const value = new Label({
+                class: 'status-bar-stat-value',
+                text: '0'
+            });
+            container.append(label);
+            container.append(value);
+            statsContainer.append(container);
+            return value;
+        };
+        const splatsValue = createStat('status-bar.splats');
+        const selectedValue = createStat('status-bar.selected');
+        const lockedValue = createStat('status-bar.locked');
+        const deletedValue = createStat('status-bar.deleted');
+        this.append(timelineButton);
+        this.append(splatDataButton);
+        this.append(statsContainer);
+        // register tooltips
+        const shortcutManager = events.invoke('shortcutManager');
+        const tooltip = (localeKey, shortcutId) => () => {
+            const text = i18n.t(localeKey);
+            if (shortcutId) {
+                const shortcut = shortcutManager.formatShortcut(shortcutId);
+                if (shortcut) {
+                    return i18n.formatTooltipWithShortcut(text, shortcut);
+                }
+            }
+            return text;
+        };
+        tooltips.register(timelineButton, tooltip('tooltip.status-bar.timeline', 'timelinePanel.toggle'), 'top');
+        tooltips.register(splatDataButton, tooltip('tooltip.status-bar.splat-data', 'dataPanel.toggle'), 'top');
+        // Handle keyboard shortcuts for panel toggles
+        events.on('dataPanel.toggle', () => {
+            setActivePanel(activePanel === 'splatData' ? '' : 'splatData');
+        });
+        events.on('timelinePanel.toggle', () => {
+            setActivePanel(activePanel === 'timeline' ? '' : 'timeline');
+        });
+        // Update stats from splat state
+        let splat;
+        const updateStats = () => {
+            if (!splat)
+                return;
+            const state = splat.splatData.getProp('state');
+            if (state) {
+                splatsValue.text = i18n.formatInteger(state.length - splat.numDeleted);
+                selectedValue.text = i18n.formatInteger(splat.numSelected);
+                lockedValue.text = i18n.formatInteger(splat.numLocked);
+                deletedValue.text = i18n.formatInteger(splat.numDeleted);
+            }
+        };
+        events.on('splat.stateChanged', (splat_) => {
+            splat = splat_;
+            updateStats();
+        });
+        events.on('selection.changed', (selection) => {
+            if (selection instanceof Splat) {
+                splat = selection;
+                updateStats();
+            }
+        });
+    }
+}
+
+class Ticks extends Container {
+    constructor(events, tooltips, args = {}) {
+        args = {
+            ...args,
+            id: 'ticks'
+        };
+        super(args);
+        const workArea = new Container({
+            id: 'ticks-area'
+        });
+        this.append(workArea);
+        let frameFromOffset;
+        let moveCursor;
+        // rebuild the timeline
+        const rebuild = () => {
+            // clear existing labels
+            workArea.dom.innerHTML = '';
+            const numFrames = events.invoke('timeline.frames');
+            const currentFrame = events.invoke('timeline.frame');
+            const padding = 20;
+            const width = this.dom.getBoundingClientRect().width - padding * 2;
+            const labelStep = Math.max(1, Math.floor(numFrames / Math.max(1, Math.floor(width / 50))));
+            const numLabels = Math.max(1, Math.ceil(numFrames / labelStep));
+            const offsetFromFrame = (frame) => {
+                return padding + Math.floor(frame / (numFrames - 1) * width);
+            };
+            frameFromOffset = (offset) => {
+                return Math.max(0, Math.min(numFrames - 1, Math.floor((offset - padding) / width * (numFrames - 1))));
+            };
+            // timeline labels
+            for (let i = 0; i < numLabels; i++) {
+                const thisFrame = Math.floor(i * labelStep);
+                const label = document.createElement('div');
+                label.classList.add('time-label');
+                label.style.left = `${offsetFromFrame(thisFrame)}px`;
+                label.textContent = thisFrame.toString();
+                workArea.dom.appendChild(label);
+            }
+            // keys - get from active track
+            const keys = events.invoke('track.keys') ?? [];
+            const createKey = (keyFrame) => {
+                const label = document.createElement('div');
+                label.classList.add('time-label', 'key');
+                label.style.left = `${offsetFromFrame(keyFrame)}px`;
+                label.dataset.frame = keyFrame.toString();
+                let dragging = false;
+                let copying = false;
+                let clone = null;
+                let toFrame = -1;
+                label.addEventListener('pointerdown', (event) => {
+                    if (!dragging && event.isPrimary) {
+                        dragging = true;
+                        copying = event.shiftKey;
+                        label.setPointerCapture(event.pointerId);
+                        event.stopPropagation();
+                        if (copying) {
+                            // create a visual clone to drag; original stays in place
+                            clone = document.createElement('div');
+                            clone.classList.add('time-label', 'key', 'dragging');
+                            clone.style.left = label.style.left;
+                            workArea.dom.appendChild(clone);
+                            label.classList.add('copying');
+                        }
+                        else {
+                            label.classList.add('dragging');
+                        }
+                    }
+                });
+                label.addEventListener('pointermove', (event) => {
+                    if (dragging) {
+                        toFrame = frameFromOffset(parseInt(label.style.left, 10) + event.offsetX);
+                        if (copying) {
+                            clone.style.left = `${offsetFromFrame(toFrame)}px`;
+                        }
+                        else {
+                            label.style.left = `${offsetFromFrame(toFrame)}px`;
+                        }
+                    }
+                });
+                label.addEventListener('pointerup', (event) => {
+                    if (dragging && event.isPrimary) {
+                        const fromFrame = parseInt(label.dataset.frame, 10);
+                        // Clean up DOM state before firing events, since event
+                        // handlers may call rebuild() which clears workArea.
+                        if (copying) {
+                            workArea.dom.removeChild(clone);
+                            clone = null;
+                            label.classList.remove('copying');
+                        }
+                        else {
+                            label.classList.remove('dragging');
+                        }
+                        label.releasePointerCapture(event.pointerId);
+                        if (fromFrame !== toFrame && toFrame >= 0) {
+                            if (copying) {
+                                events.fire('track.copyKey', fromFrame, toFrame);
+                            }
+                            else {
+                                events.fire('track.moveKey', fromFrame, toFrame);
+                            }
+                        }
+                        copying = false;
+                        dragging = false;
+                    }
+                });
+                workArea.dom.appendChild(label);
+            };
+            keys.forEach((keyFrame) => {
+                createKey(keyFrame);
+            });
+            // cursor
+            const cursor = document.createElement('div');
+            cursor.classList.add('time-label', 'cursor');
+            cursor.style.left = `${offsetFromFrame(currentFrame)}px`;
+            cursor.textContent = currentFrame.toString();
+            workArea.dom.appendChild(cursor);
+            moveCursor = (frame) => {
+                cursor.style.left = `${offsetFromFrame(frame)}px`;
+                cursor.textContent = frame.toString();
+            };
+        };
+        // handle scrubbing
+        let scrubbing = false;
+        workArea.dom.addEventListener('pointerdown', (event) => {
+            if (!scrubbing && event.isPrimary) {
+                scrubbing = true;
+                workArea.dom.setPointerCapture(event.pointerId);
+                events.fire('timeline.setFrame', frameFromOffset(event.offsetX));
+            }
+        });
+        workArea.dom.addEventListener('pointermove', (event) => {
+            if (scrubbing) {
+                events.fire('timeline.setFrame', frameFromOffset(event.offsetX));
+            }
+        });
+        workArea.dom.addEventListener('pointerup', (event) => {
+            if (scrubbing && event.isPrimary) {
+                workArea.dom.releasePointerCapture(event.pointerId);
+                scrubbing = false;
+            }
+        });
+        // rebuild the timeline on dom resize
+        new ResizeObserver(() => rebuild()).observe(workArea.dom);
+        // rebuild when timeline frames change
+        events.on('timeline.frames', () => {
+            rebuild();
+        });
+        events.on('timeline.frame', (frame) => {
+            moveCursor(frame);
+        });
+        // rebuild when track keys change
+        events.on('track.keyAdded', () => {
+            rebuild();
+        });
+        events.on('track.keyRemoved', () => {
+            rebuild();
+        });
+        events.on('track.keyMoved', () => {
+            rebuild();
+        });
+        events.on('track.keyUpdated', () => {
+            rebuild();
+        });
+        events.on('track.keysLoaded', () => {
+            rebuild();
+        });
+        events.on('track.keysCleared', () => {
+            rebuild();
+        });
+    }
+}
+class TimelinePanel extends Container {
+    constructor(events, tooltips, args = {}) {
+        args = {
+            ...args,
+            id: 'timeline-panel'
+        };
+        super(args);
+        // play controls
+        const prev = new Button({
+            class: 'button',
+            text: '\uE162'
+        });
+        const play = new Button({
+            class: 'button',
+            text: '\uE131'
+        });
+        const next = new Button({
+            class: 'button',
+            text: '\uE164'
+        });
+        // key controls
+        const addKey = new Button({
+            class: 'button',
+            text: '\uE120'
+        });
+        const removeKey = new Button({
+            class: 'button',
+            text: '\uE121',
+            enabled: false
+        });
+        const buttonControls = new Container({
+            id: 'button-controls'
+        });
+        buttonControls.append(prev);
+        buttonControls.append(play);
+        buttonControls.append(next);
+        buttonControls.append(addKey);
+        buttonControls.append(removeKey);
+        // settings
+        const speed = new SelectInput({
+            id: 'speed',
+            defaultValue: 30,
+            options: [
+                { v: 1, t: '1 fps' },
+                { v: 6, t: '6 fps' },
+                { v: 12, t: '12 fps' },
+                { v: 24, t: '24 fps' },
+                { v: 30, t: '30 fps' },
+                { v: 60, t: '60 fps' }
+            ]
+        });
+        speed.on('change', (value) => {
+            events.fire('timeline.setFrameRate', parseInt(value, 10));
+        });
+        events.on('timeline.frameRate', (frameRate) => {
+            speed.value = frameRate.toString();
+        });
+        const frames = new NumericInput({
+            id: 'totalFrames',
+            value: 180,
+            min: 1,
+            max: 10000,
+            precision: 0
+        });
+        frames.on('change', (value) => {
+            events.fire('timeline.setFrames', value);
+        });
+        events.on('timeline.frames', (framesIn) => {
+            frames.value = framesIn;
+        });
+        // smoothness
+        const smoothness = new NumericInput({
+            id: 'smoothness',
+            min: 0,
+            max: 1,
+            step: 0.05,
+            value: 1
+        });
+        smoothness.on('change', (value) => {
+            events.fire('timeline.setSmoothness', value);
+        });
+        events.on('timeline.smoothness', (smoothnessIn) => {
+            smoothness.value = smoothnessIn;
+        });
+        const settingsControls = new Container({
+            id: 'settings-controls'
+        });
+        settingsControls.append(speed);
+        settingsControls.append(frames);
+        settingsControls.append(smoothness);
+        // append control groups
+        const controlsWrap = new Container({
+            id: 'controls-wrap'
+        });
+        const spacerL = new Container({
+            class: 'spacer'
+        });
+        const spacerR = new Container({
+            class: 'spacer'
+        });
+        spacerR.append(settingsControls);
+        controlsWrap.append(spacerL);
+        controlsWrap.append(buttonControls);
+        controlsWrap.append(spacerR);
+        const ticks = new Ticks(events, tooltips);
+        this.append(controlsWrap);
+        this.append(ticks);
+        // ui handlers
+        prev.on('click', (evt) => {
+            if (evt.shiftKey) {
+                events.fire('timeline.prevKey');
+            }
+            else {
+                events.fire('timeline.prevFrame');
+            }
+        });
+        next.on('click', (evt) => {
+            if (evt.shiftKey) {
+                events.fire('timeline.nextKey');
+            }
+            else {
+                events.fire('timeline.nextFrame');
+            }
+        });
+        play.on('click', () => {
+            if (events.invoke('timeline.playing')) {
+                events.fire('timeline.setPlaying', false);
+            }
+            else {
+                events.fire('timeline.setPlaying', true);
+            }
+        });
+        // Sync play button icon when playing state changes (e.g. via keyboard shortcut)
+        events.on('timeline.playing', (isPlaying) => {
+            play.text = isPlaying ? '\uE135' : '\uE131';
+        });
+        addKey.on('click', () => {
+            events.fire('track.addKey');
+        });
+        removeKey.on('click', () => {
+            const frame = events.invoke('timeline.frame');
+            events.fire('track.removeKey', frame);
+        });
+        // Helper to check if the current frame has a key
+        const canDeleteKey = () => {
+            const keys = events.invoke('track.keys') ?? [];
+            const frame = events.invoke('timeline.frame');
+            return keys.includes(frame);
+        };
+        // Update key button states
+        const updateKeyButtonStates = () => {
+            removeKey.enabled = canDeleteKey();
+        };
+        // Update button states when frame changes
+        events.on('timeline.frame', () => {
+            updateKeyButtonStates();
+        });
+        // Update button states when track keys change
+        events.on('track.keyAdded', () => {
+            updateKeyButtonStates();
+        });
+        events.on('track.keyRemoved', () => {
+            updateKeyButtonStates();
+        });
+        events.on('track.keyMoved', () => {
+            updateKeyButtonStates();
+        });
+        events.on('track.keyUpdated', () => {
+            updateKeyButtonStates();
+        });
+        events.on('track.keysLoaded', () => {
+            updateKeyButtonStates();
+        });
+        events.on('track.keysCleared', () => {
+            updateKeyButtonStates();
+        });
+        // cancel animation playback if user interacts with camera
+        events.on('camera.controller', (type) => {
+            if (events.invoke('timeline.playing')) ;
+        });
+        // tooltips
+        const shortcutManager = events.invoke('shortcutManager');
+        const tooltip = (localeKey, shortcutId) => () => {
+            const text = i18n.t(localeKey);
+            if (shortcutId) {
+                const shortcut = shortcutManager.formatShortcut(shortcutId);
+                if (shortcut) {
+                    return i18n.formatTooltipWithShortcut(text, shortcut);
+                }
+            }
+            return text;
+        };
+        tooltips.register(prev, tooltip('tooltip.timeline.prev-frame', 'timeline.prevFrame'), 'top');
+        tooltips.register(play, tooltip('tooltip.timeline.play', 'timeline.togglePlay'), 'top');
+        tooltips.register(next, tooltip('tooltip.timeline.next-frame', 'timeline.nextFrame'), 'top');
+        tooltips.register(addKey, tooltip('tooltip.timeline.add-key', 'track.addKey'), 'top');
+        tooltips.register(removeKey, tooltip('tooltip.timeline.remove-key', 'track.removeKey'), 'top');
+        tooltips.register(speed, () => i18n.t('tooltip.timeline.frame-rate'), 'top');
+        tooltips.register(frames, () => i18n.t('tooltip.timeline.total-frames'), 'top');
+        tooltips.register(smoothness, () => i18n.t('tooltip.timeline.smoothness'), 'top');
+    }
+}
+
+class Tooltips extends Container {
+    register;
+    unregister;
+    destroy;
+    constructor(args = {}) {
+        args = {
+            ...args,
+            class: 'tooltips',
+            hidden: true
+        };
+        super(args);
+        const text = new Label({
+            class: 'tooltips-content'
+        });
+        this.append(text);
+        const targets = new Map();
+        const style = this.dom.style;
+        let timer = 0;
+        this.register = (target, textString, direction = 'bottom') => {
+            const activate = () => {
+                const rect = target.dom.getBoundingClientRect();
+                const midx = Math.floor((rect.left + rect.right) * 0.5);
+                const midy = Math.floor((rect.top + rect.bottom) * 0.5);
+                switch (direction) {
+                    case 'left':
+                        style.left = `${rect.left}px`;
+                        style.top = `${midy}px`;
+                        style.transform = 'translate(calc(-100% - 10px), -50%)';
+                        break;
+                    case 'right':
+                        style.left = `${rect.right}px`;
+                        style.top = `${midy}px`;
+                        style.transform = 'translate(10px, -50%)';
+                        break;
+                    case 'top':
+                        style.left = `${midx}px`;
+                        style.top = `${rect.top}px`;
+                        style.transform = 'translate(-50%, calc(-100% - 10px))';
+                        break;
+                    case 'bottom':
+                        style.left = `${midx}px`;
+                        style.top = `${rect.bottom}px`;
+                        style.transform = 'translate(-50%, 10px)';
+                        break;
+                }
+                text.text = typeof textString === 'function' ? textString() : textString;
+                // inline-block so max-width / wrapping in SCSS apply (inline
+                // would stay one long line).
+                style.display = 'inline-block';
+                // clamp to viewport so tooltip doesn't go off-screen
+                const tooltipRect = this.dom.getBoundingClientRect();
+                if (tooltipRect.left < 0) {
+                    style.left = `${parseFloat(style.left) - tooltipRect.left}px`;
+                }
+                else if (tooltipRect.right > window.innerWidth) {
+                    style.left = `${parseFloat(style.left) - (tooltipRect.right - window.innerWidth)}px`;
+                }
+            };
+            const startTimer = (fn) => {
+                timer = window.setTimeout(() => {
+                    fn();
+                    timer = -1;
+                }, 250);
+            };
+            const cancelTimer = () => {
+                if (timer >= 0) {
+                    clearTimeout(timer);
+                    timer = -1;
+                }
+            };
+            const enter = () => {
+                cancelTimer();
+                if (style.display === 'inline-block') {
+                    activate();
+                }
+                else {
+                    startTimer(() => activate());
+                }
+            };
+            const leave = () => {
+                cancelTimer();
+                if (style.display === 'inline-block') {
+                    startTimer(() => {
+                        style.display = 'none';
+                    });
+                }
+            };
+            target.dom.addEventListener('pointerenter', enter);
+            target.dom.addEventListener('pointerleave', leave);
+            target.on('destroy', () => {
+                this.unregister(target);
+            });
+            targets.set(target, { enter, leave });
+        };
+        this.unregister = (target) => {
+            const value = targets.get(target);
+            if (value) {
+                target.dom.removeEventListener('pointerenter', value.enter);
+                target.dom.removeEventListener('pointerleave', value.leave);
+                targets.delete(target);
+            }
+        };
+        this.destroy = () => {
+            for (const target of targets.keys()) {
+                this.unregister(target);
+            }
+        };
+    }
+}
+
+const createSvg = (svgString, args = {}) => {
+    const decodedStr = decodeURIComponent(svgString.substring('data:image/svg+xml,'.length));
+    return new Element$1({
+        dom: new DOMParser().parseFromString(decodedStr, 'image/svg+xml').documentElement,
+        ...args
+    });
+};
+class VideoSettingsDialog extends Container {
+    show;
+    hide;
+    destroy;
+    constructor(events, args = {}) {
+        args = {
+            ...args,
+            id: 'video-settings-dialog',
+            class: 'settings-dialog',
+            hidden: true,
+            tabIndex: -1
+        };
+        super(args);
+        const dialog = new Container({
+            id: 'dialog'
+        });
+        // header
+        const headerIcon = createSvg(img$q, { id: 'icon' });
+        const headerText = new Label({ id: 'text' });
+        i18n.bindText(headerText, () => i18n.t('popup.render-video.header').toUpperCase());
+        const header = new Container({ id: 'header' });
+        header.append(headerIcon);
+        header.append(headerText);
+        // projection
+        const projectionLabel = new Label({ class: 'label' });
+        i18n.bindText(projectionLabel, 'popup.render-video.projection');
+        const projectionSelect = new SelectInput({
+            class: 'select',
+            defaultValue: 'standard',
+            options: [
+                { v: 'standard', t: 'Standard' },
+                { v: 'equirect', t: '360° Equirectangular' }
+            ]
+        });
+        i18n.bindOptions(projectionSelect, () => [
+            { v: 'standard', t: i18n.t('popup.render-video.projection-standard') },
+            { v: 'equirect', t: i18n.t('popup.render-video.projection-360') }
+        ]);
+        const projectionRow = new Container({ class: 'row' });
+        projectionRow.append(projectionLabel);
+        projectionRow.append(projectionSelect);
+        // resolution
+        const standardResolutions = [
+            { v: '540', t: '960x540' },
+            { v: '720', t: '1280x720' },
+            { v: '1080', t: '1920x1080' },
+            { v: '1440', t: '2560x1440' },
+            { v: '4k', t: '3840x2160' }
+        ];
+        // 360 output is 2:1 equirectangular, capped at 4096 wide to stay
+        // within common encoder dimension limits
+        const equirectResolutions = [
+            { v: '360-2k', t: '2048x1024' },
+            { v: '360-4k', t: '3840x1920' },
+            { v: '360-4096', t: '4096x2048' }
+        ];
+        const resolutionLabel = new Label({ class: 'label' });
+        i18n.bindText(resolutionLabel, 'popup.render-video.resolution');
+        const resolutionSelect = new SelectInput({
+            class: 'select',
+            defaultValue: '1080',
+            options: standardResolutions
+        });
+        const resolutionRow = new Container({ class: 'row' });
+        resolutionRow.append(resolutionLabel);
+        resolutionRow.append(resolutionSelect);
+        // format
+        const formatLabel = new Label({ class: 'label' });
+        i18n.bindText(formatLabel, 'popup.render-video.format');
+        const formatSelect = new SelectInput({
+            class: 'select',
+            defaultValue: 'mp4',
+            options: [
+                { v: 'mp4', t: 'MP4' },
+                { v: 'webm', t: 'WebM' },
+                { v: 'mov', t: 'MOV' },
+                { v: 'mkv', t: 'MKV' }
+            ]
+        });
+        const formatRow = new Container({ class: 'row' });
+        formatRow.append(formatLabel);
+        formatRow.append(formatSelect);
+        // codec
+        const codecLabel = new Label({ class: 'label' });
+        i18n.bindText(codecLabel, 'popup.render-video.codec');
+        const codecSelect = new SelectInput({
+            class: 'select',
+            defaultValue: 'h264',
+            options: [
+                { v: 'h264', t: 'H.264' },
+                { v: 'h265', t: 'H.265/HEVC' }
+            ]
+        });
+        const codecRow = new Container({ class: 'row' });
+        codecRow.append(codecLabel);
+        codecRow.append(codecSelect);
+        // Codec compatibility mapping
+        const codecOptions = {
+            'mp4': [
+                { v: 'h264', t: 'H.264' },
+                { v: 'h265', t: 'H.265/HEVC' }
+            ],
+            'webm': [
+                { v: 'vp9', t: 'VP9' },
+                { v: 'av1', t: 'AV1' }
+            ],
+            'mov': [
+                { v: 'h264', t: 'H.264' },
+                { v: 'h265', t: 'H.265/HEVC' }
+            ],
+            'mkv': [
+                { v: 'h264', t: 'H.264' },
+                { v: 'h265', t: 'H.265/HEVC' },
+                { v: 'vp9', t: 'VP9' },
+                { v: 'av1', t: 'AV1' }
+            ]
+        };
+        // Update codec options when format changes
+        formatSelect.on('change', () => {
+            const format = formatSelect.value;
+            const options = codecOptions[format] || codecOptions.mp4;
+            codecSelect.options = options;
+            // Set default codec based on format
+            if (format === 'webm') {
+                codecSelect.value = 'vp9';
+            }
+            else {
+                codecSelect.value = 'h264';
+            }
+        });
+        // framerate
+        const frameRateLabel = new Label({ class: 'label' });
+        i18n.bindText(frameRateLabel, 'popup.render-video.frame-rate');
+        const frameRateSelect = new SelectInput({
+            class: 'select',
+            defaultValue: '30',
+            options: [
+                { v: '12', t: '12 fps' },
+                { v: '15', t: '15 fps' },
+                { v: '24', t: '24 fps' },
+                { v: '25', t: '25 fps' },
+                { v: '30', t: '30 fps' },
+                { v: '48', t: '48 fps' },
+                { v: '60', t: '60 fps' },
+                { v: '120', t: '120 fps' }
+            ]
+        });
+        const frameRateRow = new Container({ class: 'row' });
+        frameRateRow.append(frameRateLabel);
+        frameRateRow.append(frameRateSelect);
+        // bitrate
+        const bitrateLabel = new Label({ class: 'label' });
+        i18n.bindText(bitrateLabel, 'popup.render-video.bitrate');
+        const bitrateSelect = new SelectInput({
+            class: 'select',
+            defaultValue: 'high',
+            options: [
+                { v: 'low', t: 'Low' },
+                { v: 'medium', t: 'Medium' },
+                { v: 'high', t: 'High' },
+                { v: 'ultra', t: 'Ultra' }
+            ]
+        });
+        const bitrateRow = new Container({ class: 'row' });
+        bitrateRow.append(bitrateLabel);
+        bitrateRow.append(bitrateSelect);
+        // frame range
+        const totalFrames = events.invoke('timeline.frames');
+        const frameRangeLabel = new Label({ class: 'label' });
+        i18n.bindText(frameRangeLabel, 'popup.render-video.frame-range');
+        const frameRangeInput = new VectorInput({
+            class: 'vector-input',
+            dimensions: 2,
+            min: 0,
+            max: totalFrames - 1,
+            precision: 0,
+            value: [0, totalFrames - 1]
+        });
+        i18n.onChange(() => {
+            frameRangeInput.placeholder = [i18n.t('popup.render-video.frame-range-first'), i18n.t('popup.render-video.frame-range-last')];
+        }, frameRangeInput);
+        const frameRangeRow = new Container({ class: 'row' });
+        frameRangeRow.append(frameRangeLabel);
+        frameRangeRow.append(frameRangeInput);
+        // Validate frame range
+        frameRangeInput.on('change', (value) => {
+            if (value[0] > value[1]) {
+                frameRangeInput.value = [value[1], value[0]];
+            }
+        });
+        // portrait mode
+        const portraitLabel = new Label({ class: 'label' });
+        i18n.bindText(portraitLabel, 'popup.render-video.portrait');
+        const portraitBoolean = new BooleanInput({ class: 'boolean', value: false });
+        const portraitRow = new Container({ class: 'row' });
+        portraitRow.append(portraitLabel);
+        portraitRow.append(portraitBoolean);
+        // level horizon (360 only)
+        const levelHorizonLabel = new Label({ class: 'label' });
+        i18n.bindText(levelHorizonLabel, 'popup.render-video.level-horizon');
+        const levelHorizonBoolean = new BooleanInput({ class: 'boolean', value: true });
+        const levelHorizonRow = new Container({ class: 'row' });
+        levelHorizonRow.append(levelHorizonLabel);
+        levelHorizonRow.append(levelHorizonBoolean);
+        // transparent background
+        const transparentBgLabel = new Label({ class: 'label' });
+        i18n.bindText(transparentBgLabel, 'popup.render-video.transparent-bg');
+        const transparentBgBoolean = new BooleanInput({ class: 'boolean', value: false });
+        const transparentBgRow = new Container({ class: 'row' });
+        transparentBgRow.append(transparentBgLabel);
+        transparentBgRow.append(transparentBgBoolean);
+        // hide transparent background till we add support for webm
+        // video container
+        transparentBgRow.hidden = true;
+        // show debug overlays
+        const showDebugLabel = new Label({ class: 'label' });
+        i18n.bindText(showDebugLabel, 'popup.render-video.show-debug');
+        const showDebugBoolean = new BooleanInput({ class: 'boolean', value: false });
+        const showDebugRow = new Container({ class: 'row' });
+        showDebugRow.append(showDebugLabel);
+        showDebugRow.append(showDebugBoolean);
+        // sync the ui to the selected projection: 360 renders are 2:1
+        // equirectangular without portrait mode or debug overlays
+        const syncProjection = () => {
+            const is360 = projectionSelect.value === 'equirect';
+            resolutionSelect.options = is360 ? equirectResolutions : standardResolutions;
+            resolutionSelect.value = is360 ? '360-4k' : '1080';
+            portraitRow.hidden = is360;
+            showDebugRow.hidden = is360;
+            levelHorizonRow.hidden = !is360;
+        };
+        projectionSelect.on('change', syncProjection);
+        syncProjection();
+        // content
+        const content = new Container({ id: 'content' });
+        content.append(projectionRow);
+        content.append(resolutionRow);
+        content.append(formatRow);
+        content.append(codecRow);
+        content.append(frameRateRow);
+        content.append(bitrateRow);
+        content.append(frameRangeRow);
+        content.append(portraitRow);
+        content.append(levelHorizonRow);
+        content.append(transparentBgRow);
+        content.append(showDebugRow);
+        // footer
+        const footer = new Container({ id: 'footer' });
+        const cancelButton = new Button({
+            class: 'button'
+        });
+        i18n.bindText(cancelButton, 'panel.render.cancel');
+        const okButton = new Button({
+            class: 'button'
+        });
+        i18n.bindText(okButton, 'panel.render.ok');
+        footer.append(cancelButton);
+        footer.append(okButton);
+        dialog.append(header);
+        dialog.append(content);
+        dialog.append(footer);
+        this.append(dialog);
+        // handle key bindings for enter and escape
+        let onCancel;
+        let onOK;
+        cancelButton.on('click', () => onCancel());
+        okButton.on('click', () => onOK());
+        const keydown = (e) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopPropagation();
+                onCancel();
+            }
+        };
+        // reset UI and configure for current state
+        const reset = () => {
+            const totalFrames = events.invoke('timeline.frames');
+            frameRangeInput.max = totalFrames - 1;
+            frameRangeInput.value = [0, totalFrames - 1];
+        };
+        // function implementations
+        this.show = () => {
+            reset();
+            this.hidden = false;
+            document.addEventListener('keydown', keydown);
+            this.dom.focus();
+            return new Promise((resolve) => {
+                onCancel = () => {
+                    resolve(null);
+                };
+                onOK = () => {
+                    const widths = {
+                        '540': 960,
+                        '720': 1280,
+                        '1080': 1920,
+                        '1440': 2560,
+                        '4k': 3840,
+                        '360-2k': 2048,
+                        '360-4k': 3840,
+                        '360-4096': 4096
+                    };
+                    const heights = {
+                        '540': 540,
+                        '720': 720,
+                        '1080': 1080,
+                        '1440': 1440,
+                        '4k': 2160,
+                        '360-2k': 1024,
+                        '360-4k': 1920,
+                        '360-4096': 2048
+                    };
+                    const frameRates = {
+                        '12': 12,
+                        '15': 15,
+                        '24': 24,
+                        '25': 25,
+                        '30': 30,
+                        '48': 48,
+                        '60': 60,
+                        '120': 120
+                    };
+                    // bits per pixel per frame for different quality settings
+                    const bppfs = {
+                        'low': 0.001,
+                        'medium': 0.01,
+                        'high': 0.1,
+                        'ultra': 1
+                    };
+                    // scale down higher resolutions (matched by pixel count)
+                    const bbpfFactors = {
+                        '540': 1,
+                        '720': 1 / 2,
+                        '1080': 1 / 3,
+                        '1440': 1 / 4,
+                        '4k': 1 / 5,
+                        '360-2k': 1 / 3,
+                        '360-4k': 1 / 5,
+                        '360-4096': 1 / 5
+                    };
+                    const is360 = projectionSelect.value === 'equirect';
+                    const portrait = !is360 && portraitBoolean.value;
+                    const width = (portrait ? heights : widths)[resolutionSelect.value];
+                    const height = (portrait ? widths : heights)[resolutionSelect.value];
+                    const frameRate = frameRates[frameRateSelect.value];
+                    const bppf = bppfs[bitrateSelect.value] * bbpfFactors[resolutionSelect.value];
+                    // bitrate (bps) = 100m * (width × height × frame rate × bppf) / 1m
+                    const bitrate = Math.floor(10 * width * height * frameRate * bppf);
+                    const frameRange = frameRangeInput.value;
+                    const videoSettings = {
+                        startFrame: frameRange[0],
+                        endFrame: frameRange[1],
+                        frameRate,
+                        width,
+                        height,
+                        bitrate,
+                        transparentBg: transparentBgBoolean.value,
+                        showDebug: !is360 && showDebugBoolean.value,
+                        format: formatSelect.value,
+                        codec: codecSelect.value,
+                        projection: (is360 ? 'equirect' : 'standard'),
+                        levelHorizon: is360 && levelHorizonBoolean.value
+                    };
+                    resolve(videoSettings);
+                };
+            }).finally(() => {
+                document.removeEventListener('keydown', keydown);
+                this.hide();
+            });
+        };
+        this.hide = () => {
+            this.hidden = true;
+        };
+        this.destroy = () => {
+            this.hide();
+            super.destroy();
+        };
+    }
+}
+
+const vecx = new Vec3();
+const vecy = new Vec3();
+const vecz = new Vec3();
+const mat4 = new Mat4();
+class ViewCube extends Container {
+    update;
+    constructor(events, args = {}) {
+        args = {
+            ...args,
+            id: 'view-cube-container'
+        };
+        super(args);
+        // construct svg elements
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.id = 'view-cube-svg';
+        const group = document.createElementNS(svg.namespaceURI, 'g');
+        svg.appendChild(group);
+        const circle = (color, fill, text) => {
+            const result = document.createElementNS(svg.namespaceURI, 'g');
+            const circle = document.createElementNS(svg.namespaceURI, 'circle');
+            circle.setAttribute('fill', fill ? color : '#222');
+            circle.setAttribute('stroke', color);
+            circle.setAttribute('stroke-width', '2');
+            circle.setAttribute('r', '10');
+            circle.setAttribute('cx', '0');
+            circle.setAttribute('cy', '0');
+            circle.setAttribute('pointer-events', 'all');
+            result.appendChild(circle);
+            if (text) {
+                const t = document.createElementNS(svg.namespaceURI, 'text');
+                t.setAttribute('font-size', '10');
+                t.setAttribute('font-family', 'Arial');
+                t.setAttribute('font-weight', 'bold');
+                t.setAttribute('text-anchor', 'middle');
+                t.setAttribute('alignment-baseline', 'central');
+                t.textContent = text;
+                result.appendChild(t);
+            }
+            result.setAttribute('cursor', 'pointer');
+            group.appendChild(result);
+            return result;
+        };
+        const line = (color) => {
+            const result = document.createElementNS(svg.namespaceURI, 'line');
+            result.setAttribute('stroke', color);
+            result.setAttribute('stroke-width', '2');
+            group.appendChild(result);
+            return result;
+        };
+        const r = '#f44';
+        const g = '#4f4';
+        const b = '#77f';
+        const shapes = {
+            nx: circle(r, false),
+            ny: circle(g, false),
+            nz: circle(b, false),
+            xaxis: line(r),
+            yaxis: line(g),
+            zaxis: line(b),
+            px: circle(r, true, 'X'),
+            py: circle(g, true, 'Y'),
+            pz: circle(b, true, 'Z')
+        };
+        shapes.px.children[0].addEventListener('pointerdown', (e) => {
+            events.fire('camera.align', 'px');
+            e.stopPropagation();
+        });
+        shapes.py.children[0].addEventListener('pointerdown', (e) => {
+            events.fire('camera.align', 'py');
+            e.stopPropagation();
+        });
+        shapes.pz.children[0].addEventListener('pointerdown', (e) => {
+            events.fire('camera.align', 'pz');
+            e.stopPropagation();
+        });
+        shapes.nx.children[0].addEventListener('pointerdown', (e) => {
+            events.fire('camera.align', 'nx');
+            e.stopPropagation();
+        });
+        shapes.ny.children[0].addEventListener('pointerdown', (e) => {
+            events.fire('camera.align', 'ny');
+            e.stopPropagation();
+        });
+        shapes.nz.children[0].addEventListener('pointerdown', (e) => {
+            events.fire('camera.align', 'nz');
+            e.stopPropagation();
+        });
+        this.dom.appendChild(svg);
+        let cw = 0;
+        let ch = 0;
+        this.update = (cameraMatrix) => {
+            const w = this.dom.clientWidth;
+            const h = this.dom.clientHeight;
+            if (w && h) {
+                if (w !== cw || h !== ch) {
+                    // resize elements
+                    svg.setAttribute('width', w.toString());
+                    svg.setAttribute('height', h.toString());
+                    group.setAttribute('transform', `translate(${w * 0.5}, ${h * 0.5})`);
+                    cw = w;
+                    ch = h;
+                }
+                mat4.invert(cameraMatrix);
+                mat4.getX(vecx);
+                mat4.getY(vecy);
+                mat4.getZ(vecz);
+                const transform = (group, x, y) => {
+                    group.setAttribute('transform', `translate(${x * 40}, ${y * 40})`);
+                };
+                const x2y2 = (line, x, y) => {
+                    line.setAttribute('x2', (x * 40).toString());
+                    line.setAttribute('y2', (y * 40).toString());
+                };
+                transform(shapes.px, vecx.x, -vecx.y);
+                transform(shapes.nx, -vecx.x, vecx.y);
+                transform(shapes.py, vecy.x, -vecy.y);
+                transform(shapes.ny, -vecy.x, vecy.y);
+                transform(shapes.pz, vecz.x, -vecz.y);
+                transform(shapes.nz, -vecz.x, vecz.y);
+                x2y2(shapes.xaxis, vecx.x, -vecx.y);
+                x2y2(shapes.yaxis, vecy.x, -vecy.y);
+                x2y2(shapes.zaxis, vecz.x, -vecz.y);
+                // reorder dom for the mighty svg painter's algorithm
+                const order = [
+                    { n: ['xaxis', 'px'], value: vecx.z },
+                    { n: ['yaxis', 'py'], value: vecy.z },
+                    { n: ['zaxis', 'pz'], value: vecz.z },
+                    { n: ['nx'], value: -vecx.z },
+                    { n: ['ny'], value: -vecy.z },
+                    { n: ['nz'], value: -vecz.z }
+                ].sort((a, b) => a.value - b.value);
+                const fragment = document.createDocumentFragment();
+                order.forEach((o) => {
+                    o.n.forEach((n) => {
+                        // @ts-ignore
+                        fragment.appendChild(shapes[n]);
+                    });
+                });
+                group.appendChild(fragment);
+            }
+        };
+    }
+}
+
+class ViewPanel extends Container {
+    constructor(events, tooltips, args = {}) {
+        args = {
+            ...args,
+            id: 'view-panel',
+            class: 'panel',
+            hidden: true
+        };
+        super(args);
+        // stop pointer events bubbling
+        ['pointerdown', 'pointerup', 'pointermove', 'wheel', 'dblclick'].forEach((eventName) => {
+            this.dom.addEventListener(eventName, (event) => event.stopPropagation());
+        });
+        // header
+        const header = new Container({
+            class: 'panel-header'
+        });
+        const icon = new Label({
+            text: '\uE403',
+            class: 'panel-header-icon'
+        });
+        const label = new Label({
+            class: 'panel-header-label'
+        });
+        i18n.bindText(label, 'panel.view-options');
+        header.append(icon);
+        header.append(label);
+        // language
+        const languageRow = new Container({
+            class: 'view-panel-row'
+        });
+        const languageLabel = new Label({
+            class: 'view-panel-row-label'
+        });
+        i18n.bindText(languageLabel, 'panel.view-options.language');
+        const languageSelection = new SelectInput({
+            class: 'view-panel-row-select',
+            // 'auto' unless the user has explicitly pinned a language
+            defaultValue: i18n.storedLanguage ?? 'auto'
+        });
+        // 'auto' label follows the language; the per-language names are shown in
+        // their native form so they're recognisable regardless of current UI lang
+        i18n.bindOptions(languageSelection, () => [
+            { v: 'auto', t: i18n.t('panel.view-options.language.auto') },
+            ...i18n.languages.map(l => ({ v: l.code, t: l.name }))
+        ]);
+        // switch language live (no reload). a stored choice persists across
+        // sessions; 'auto' clears it and reverts to the browser locale.
+        languageSelection.on('change', (value) => {
+            i18n.setLanguage(value === 'auto' ? null : value);
+        });
+        languageRow.append(languageLabel);
+        languageRow.append(languageSelection);
+        // colors
+        const clrRow = new Container({
+            class: 'view-panel-row'
+        });
+        const clrLabel = new Label({
+            class: 'view-panel-row-label'
+        });
+        i18n.bindText(clrLabel, 'panel.view-options.colors');
+        const clrPickers = new Container({
+            class: 'view-panel-row-pickers'
+        });
+        const bgClrPicker = new ColorPicker({
+            class: 'view-panel-row-picker',
+            channels: 3,
+            value: [0, 0, 0]
+        });
+        const selectedClrPicker = new ColorPicker({
+            class: 'view-panel-row-picker',
+            channels: 4,
+            value: [0, 0, 0, 1]
+        });
+        const unselectedClrPicker = new ColorPicker({
+            class: 'view-panel-row-picker',
+            channels: 4,
+            value: [0, 0, 0, 1]
+        });
+        const lockedClrPicker = new ColorPicker({
+            class: 'view-panel-row-picker',
+            channels: 4,
+            value: [0, 0, 0, 1]
+        });
+        const toArray = (clr) => {
+            return [clr.r, clr.g, clr.b, clr.a];
+        };
+        events.on('bgClr', (clr) => {
+            bgClrPicker.value = toArray(clr);
+        });
+        events.on('selectedClr', (clr) => {
+            selectedClrPicker.value = toArray(clr);
+        });
+        events.on('unselectedClr', (clr) => {
+            unselectedClrPicker.value = toArray(clr);
+        });
+        events.on('lockedClr', (clr) => {
+            lockedClrPicker.value = toArray(clr);
+        });
+        clrPickers.append(bgClrPicker);
+        clrPickers.append(selectedClrPicker);
+        clrPickers.append(unselectedClrPicker);
+        clrPickers.append(lockedClrPicker);
+        clrRow.append(clrLabel);
+        clrRow.append(clrPickers);
+        // tonemapping
+        const tonemappingRow = new Container({
+            class: 'view-panel-row'
+        });
+        const tonemappingLabel = new Label({
+            class: 'view-panel-row-label'
+        });
+        i18n.bindText(tonemappingLabel, 'panel.view-options.tonemapping');
+        const tonemappingSelection = new SelectInput({
+            class: 'view-panel-row-select',
+            defaultValue: 'linear'
+        });
+        i18n.bindOptions(tonemappingSelection, () => [
+            { v: 'linear', t: i18n.t('panel.view-options.tonemapping.linear') },
+            { v: 'neutral', t: i18n.t('panel.view-options.tonemapping.neutral') },
+            { v: 'aces', t: i18n.t('panel.view-options.tonemapping.aces') },
+            { v: 'aces2', t: i18n.t('panel.view-options.tonemapping.aces2') },
+            { v: 'filmic', t: i18n.t('panel.view-options.tonemapping.filmic') },
+            { v: 'hejl', t: i18n.t('panel.view-options.tonemapping.hejl') }
+        ]);
+        tonemappingRow.append(tonemappingLabel);
+        tonemappingRow.append(tonemappingSelection);
+        // camera fov
+        const fovRow = new Container({
+            class: 'view-panel-row'
+        });
+        const fovLabel = new Label({
+            class: 'view-panel-row-label'
+        });
+        i18n.bindText(fovLabel, 'panel.view-options.fov');
+        const fovSlider = new SliderInput({
+            class: 'view-panel-row-slider',
+            min: 10,
+            max: 120,
+            precision: 1,
+            value: 60
+        });
+        fovRow.append(fovLabel);
+        fovRow.append(fovSlider);
+        // sh bands
+        const shBandsRow = new Container({
+            class: 'view-panel-row'
+        });
+        const shBandsLabel = new Label({
+            class: 'view-panel-row-label'
+        });
+        i18n.bindText(shBandsLabel, 'panel.view-options.sh-bands');
+        const shBandsSlider = new SliderInput({
+            class: 'view-panel-row-slider',
+            min: 0,
+            max: 3,
+            precision: 0,
+            value: 3
+        });
+        shBandsRow.append(shBandsLabel);
+        shBandsRow.append(shBandsSlider);
+        // camera fly speed
+        const cameraFlySpeedRow = new Container({
+            class: 'view-panel-row'
+        });
+        const cameraFlySpeedLabel = new Label({
+            class: 'view-panel-row-label'
+        });
+        i18n.bindText(cameraFlySpeedLabel, 'panel.view-options.fly-speed');
+        const cameraFlySpeedSlider = new SliderInput({
+            class: 'view-panel-row-slider',
+            min: 0.1,
+            max: 30,
+            precision: 1,
+            value: 1
+        });
+        cameraFlySpeedRow.append(cameraFlySpeedLabel);
+        cameraFlySpeedRow.append(cameraFlySpeedSlider);
+        // centers size
+        const centersSizeRow = new Container({
+            class: 'view-panel-row'
+        });
+        const centersSizeLabel = new Label({
+            class: 'view-panel-row-label'
+        });
+        i18n.bindText(centersSizeLabel, 'panel.view-options.centers-size');
+        const centersSizeSlider = new SliderInput({
+            class: 'view-panel-row-slider',
+            min: 0,
+            max: 10,
+            precision: 1,
+            value: 2
+        });
+        centersSizeRow.append(centersSizeLabel);
+        centersSizeRow.append(centersSizeSlider);
+        // centers gaussian color
+        const centersColorRow = new Container({
+            class: 'view-panel-row'
+        });
+        const centersColorLabel = new Label({
+            class: 'view-panel-row-label'
+        });
+        i18n.bindText(centersColorLabel, 'panel.view-options.centers-gaussian-color');
+        const centersColorToggle = new BooleanInput({
+            type: 'toggle',
+            class: 'view-panel-row-toggle',
+            value: false
+        });
+        centersColorRow.append(centersColorLabel);
+        centersColorRow.append(centersColorToggle);
+        // outline selection
+        const outlineSelectionRow = new Container({
+            class: 'view-panel-row'
+        });
+        const outlineSelectionLabel = new Label({
+            class: 'view-panel-row-label'
+        });
+        i18n.bindText(outlineSelectionLabel, 'panel.view-options.outline-selection');
+        const outlineSelectionToggle = new BooleanInput({
+            type: 'toggle',
+            class: 'view-panel-row-toggle',
+            value: false
+        });
+        outlineSelectionRow.append(outlineSelectionLabel);
+        outlineSelectionRow.append(outlineSelectionToggle);
+        // show grid
+        const showGridRow = new Container({
+            class: 'view-panel-row'
+        });
+        const showGridLabel = new Label({
+            class: 'view-panel-row-label'
+        });
+        i18n.bindText(showGridLabel, 'panel.view-options.show-grid');
+        const showGridToggle = new BooleanInput({
+            type: 'toggle',
+            class: 'view-panel-row-toggle',
+            value: true
+        });
+        showGridRow.append(showGridLabel);
+        showGridRow.append(showGridToggle);
+        // show bound
+        const showBoundRow = new Container({
+            class: 'view-panel-row'
+        });
+        const showBoundLabel = new Label({
+            class: 'view-panel-row-label'
+        });
+        i18n.bindText(showBoundLabel, 'panel.view-options.show-bound');
+        const showBoundToggle = new BooleanInput({
+            type: 'toggle',
+            class: 'view-panel-row-toggle',
+            value: true
+        });
+        showBoundRow.append(showBoundLabel);
+        showBoundRow.append(showBoundToggle);
+        // show dimensions
+        const showBoundDimensionsRow = new Container({
+            class: 'view-panel-row'
+        });
+        const showBoundDimensionsLabel = new Label({
+            class: 'view-panel-row-label'
+        });
+        i18n.bindText(showBoundDimensionsLabel, 'panel.view-options.show-bound-dimensions');
+        const showBoundDimensionsToggle = new BooleanInput({
+            type: 'toggle',
+            class: 'view-panel-row-toggle',
+            value: false
+        });
+        showBoundDimensionsRow.append(showBoundDimensionsLabel);
+        showBoundDimensionsRow.append(showBoundDimensionsToggle);
+        // show camera poses
+        const showCameraPosesRow = new Container({
+            class: 'view-panel-row'
+        });
+        const showCameraPosesLabel = new Label({
+            class: 'view-panel-row-label'
+        });
+        i18n.bindText(showCameraPosesLabel, 'panel.view-options.show-camera-poses');
+        const showCameraPosesToggle = new BooleanInput({
+            type: 'toggle',
+            class: 'view-panel-row-toggle',
+            value: false
+        });
+        showCameraPosesRow.append(showCameraPosesLabel);
+        showCameraPosesRow.append(showCameraPosesToggle);
+        this.append(header);
+        this.append(languageRow);
+        this.append(clrRow);
+        this.append(tonemappingRow);
+        this.append(fovRow);
+        this.append(shBandsRow);
+        this.append(cameraFlySpeedRow);
+        this.append(centersSizeRow);
+        this.append(centersColorRow);
+        this.append(outlineSelectionRow);
+        this.append(showGridRow);
+        this.append(showBoundRow);
+        this.append(showBoundDimensionsRow);
+        this.append(showCameraPosesRow);
+        // handle panel visibility
+        const setVisible = (visible) => {
+            if (visible === this.hidden) {
+                this.hidden = !visible;
+                events.fire('viewPanel.visible', visible);
+            }
+        };
+        events.function('viewPanel.visible', () => {
+            return !this.hidden;
+        });
+        events.on('viewPanel.setVisible', (visible) => {
+            setVisible(visible);
+        });
+        events.on('viewPanel.toggleVisible', () => {
+            setVisible(this.hidden);
+        });
+        events.on('colorPanel.visible', (visible) => {
+            if (visible) {
+                setVisible(false);
+            }
+        });
+        // sh bands
+        events.on('view.bands', (bands) => {
+            shBandsSlider.value = bands;
+        });
+        shBandsSlider.on('change', (value) => {
+            events.fire('view.setBands', value);
+        });
+        // splat size
+        events.on('camera.splatSize', (value) => {
+            centersSizeSlider.value = value;
+        });
+        centersSizeSlider.on('change', (value) => {
+            events.fire('camera.setSplatSize', value);
+            events.fire('camera.setOverlay', true);
+            events.fire('camera.setMode', 'centers');
+        });
+        // centers gaussian color
+        events.on('view.centersUseGaussianColor', (value) => {
+            centersColorToggle.value = value;
+        });
+        centersColorToggle.on('change', (value) => {
+            events.fire('view.setCentersUseGaussianColor', value);
+        });
+        // camera speed
+        events.on('camera.flySpeed', (value) => {
+            cameraFlySpeedSlider.value = value;
+        });
+        cameraFlySpeedSlider.on('change', (value) => {
+            events.fire('camera.setFlySpeed', value);
+        });
+        // outline selection
+        events.on('view.outlineSelection', (value) => {
+            outlineSelectionToggle.value = value;
+        });
+        outlineSelectionToggle.on('change', (value) => {
+            events.fire('view.setOutlineSelection', value);
+        });
+        // show grid
+        events.on('grid.visible', (visible) => {
+            showGridToggle.value = visible;
+        });
+        showGridToggle.on('change', () => {
+            events.fire('grid.setVisible', showGridToggle.value);
+        });
+        // show bound
+        events.on('camera.bound', (visible) => {
+            showBoundToggle.value = visible;
+        });
+        showBoundToggle.on('change', () => {
+            events.fire('camera.setBound', showBoundToggle.value);
+        });
+        // show dimensions
+        events.on('camera.boundDimensions', (visible) => {
+            showBoundDimensionsToggle.value = visible;
+        });
+        showBoundDimensionsToggle.on('change', () => {
+            events.fire('camera.setBoundDimensions', showBoundDimensionsToggle.value);
+        });
+        // show camera poses
+        events.on('camera.showPoses', (visible) => {
+            showCameraPosesToggle.value = visible;
+        });
+        showCameraPosesToggle.on('change', () => {
+            events.fire('camera.setShowPoses', showCameraPosesToggle.value);
+        });
+        // background color
+        bgClrPicker.on('change', (value) => {
+            events.fire('setBgClr', new Color(value[0], value[1], value[2]));
+        });
+        selectedClrPicker.on('change', (value) => {
+            events.fire('setSelectedClr', new Color(value[0], value[1], value[2], value[3]));
+        });
+        unselectedClrPicker.on('change', (value) => {
+            events.fire('setUnselectedClr', new Color(value[0], value[1], value[2], value[3]));
+        });
+        lockedClrPicker.on('change', (value) => {
+            events.fire('setLockedClr', new Color(value[0], value[1], value[2], value[3]));
+        });
+        // camera fov
+        events.on('camera.fov', (fov) => {
+            fovSlider.value = fov;
+        });
+        fovSlider.on('change', (value) => {
+            events.fire('camera.setFov', value);
+        });
+        // tonemapping
+        events.on('camera.tonemapping', (tonemapping) => {
+            tonemappingSelection.value = tonemapping;
+        });
+        tonemappingSelection.on('change', (value) => {
+            events.fire('camera.setTonemapping', value);
+        });
+        // tooltips
+        const shortcutManager = events.invoke('shortcutManager');
+        const shortcut = shortcutManager.formatShortcut('grid.toggleVisible');
+        tooltips.register(showGridLabel, () => i18n.formatTooltipWithShortcut(i18n.t('panel.view-options.show-grid'), shortcut), 'left');
+        tooltips.register(bgClrPicker, () => i18n.t('panel.view-options.background-color'), 'left');
+        tooltips.register(selectedClrPicker, () => i18n.t('panel.view-options.selected-color'), 'top');
+        tooltips.register(unselectedClrPicker, () => i18n.t('panel.view-options.unselected-color'), 'top');
+        tooltips.register(lockedClrPicker, () => i18n.t('panel.view-options.locked-color'), 'top');
+    }
+}
+
+const removeExtension = (filename) => {
+    return filename.substring(0, filename.length - path$1.getExtension(filename).length);
+};
+class EditorUI {
+    appContainer;
+    topContainer;
+    canvasContainer;
+    toolsContainer;
+    canvas;
+    popup;
+    constructor(events) {
+        // favicon
+        const link = document.createElement('link');
+        link.rel = 'icon';
+        link.href = img$8;
+        document.head.appendChild(link);
+        // app
+        const appContainer = new Container({
+            id: 'app-container'
+        });
+        // editor
+        const editorContainer = new Container({
+            id: 'editor-container'
+        });
+        // tooltips container
+        const tooltipsContainer = new Container({
+            id: 'tooltips-container'
+        });
+        // top container
+        const topContainer = new Container({
+            id: 'top-container'
+        });
+        // canvas
+        const canvas = document.createElement('canvas');
+        canvas.id = 'canvas';
+        // app label
+        const appLabel = new Label({
+            id: 'app-label',
+            text: `SUPERSPLAT v${version}`
+        });
+        // cursor label
+        const cursorLabel = new Label({
+            id: 'cursor-label'
+        });
+        let fullprecision = '';
+        events.on('camera.focalPointPicked', (details) => {
+            cursorLabel.text = `${details.position.x.toFixed(2)}, ${details.position.y.toFixed(2)}, ${details.position.z.toFixed(2)}`;
+            fullprecision = `${details.position.x}, ${details.position.y}, ${details.position.z}`;
+        });
+        ['pointerdown', 'pointerup', 'pointermove', 'wheel', 'dblclick'].forEach((eventName) => {
+            cursorLabel.dom.addEventListener(eventName, (event) => event.stopPropagation());
+        });
+        cursorLabel.dom.addEventListener('pointerdown', () => {
+            navigator.clipboard.writeText(fullprecision);
+            const orig = cursorLabel.text;
+            cursorLabel.text = i18n.t('cursor.copied');
+            setTimeout(() => {
+                cursorLabel.text = orig;
+            }, 1000);
+        });
+        // canvas container
+        const canvasContainer = new Container({
+            id: 'canvas-container'
+        });
+        // tools container
+        const toolsContainer = new Container({
+            id: 'tools-container'
+        });
+        // tooltips
+        const tooltips = new Tooltips();
+        tooltipsContainer.append(tooltips);
+        // bottom toolbar
+        const scenePanel = new ScenePanel(events, tooltips);
+        const viewPanel = new ViewPanel(events, tooltips);
+        const colorPanel = new ColorPanel(events, tooltips);
+        const bottomToolbar = new BottomToolbar(events, tooltips);
+        const rightToolbar = new RightToolbar(events, tooltips);
+        const modeToggle = new ModeToggle(events, tooltips);
+        const menu = new Menu(events);
+        canvasContainer.dom.appendChild(canvas);
+        canvasContainer.append(appLabel);
+        canvasContainer.append(cursorLabel);
+        canvasContainer.append(toolsContainer);
+        canvasContainer.append(scenePanel);
+        canvasContainer.append(viewPanel);
+        canvasContainer.append(colorPanel);
+        canvasContainer.append(bottomToolbar);
+        canvasContainer.append(rightToolbar);
+        canvasContainer.append(modeToggle);
+        canvasContainer.append(menu);
+        // view axes container
+        const viewCube = new ViewCube(events);
+        canvasContainer.append(viewCube);
+        events.on('prerender', (cameraMatrix) => {
+            viewCube.update(cameraMatrix);
+        });
+        // main container
+        const mainContainer = new Container({
+            id: 'main-container'
+        });
+        const timelinePanel = new TimelinePanel(events, tooltips);
+        const dataPanel = new DataPanel(events, tooltips);
+        const statusBar = new StatusBar(events, tooltips);
+        timelinePanel.hidden = true;
+        mainContainer.append(canvasContainer);
+        mainContainer.append(timelinePanel);
+        mainContainer.append(dataPanel);
+        mainContainer.append(statusBar);
+        // Wire up status bar panel toggles
+        events.on('statusBar.panelChanged', (panel) => {
+            timelinePanel.hidden = panel !== 'timeline';
+            dataPanel.hidden = panel !== 'splatData';
+        });
+        editorContainer.append(mainContainer);
+        tooltips.register(cursorLabel, () => i18n.t('cursor.click-to-copy'), 'top');
+        // message popup
+        const popup = new Popup(tooltips);
+        // shortcuts popup
+        const shortcutsPopup = new ShortcutsPopup(events);
+        // export popup
+        const exportPopup = new ExportPopup(events);
+        // publish settings
+        const publishSettingsDialog = new PublishSettingsDialog(events);
+        // image settings
+        const imageSettingsDialog = new ImageSettingsDialog(events);
+        // video settings
+        const videoSettingsDialog = new VideoSettingsDialog(events);
+        // about popup
+        const aboutPopup = new AboutPopup();
+        topContainer.append(popup);
+        topContainer.append(exportPopup);
+        topContainer.append(publishSettingsDialog);
+        topContainer.append(imageSettingsDialog);
+        topContainer.append(videoSettingsDialog);
+        topContainer.append(shortcutsPopup);
+        topContainer.append(aboutPopup);
+        appContainer.append(editorContainer);
+        appContainer.append(topContainer);
+        appContainer.append(tooltipsContainer);
+        this.appContainer = appContainer;
+        this.topContainer = topContainer;
+        this.canvasContainer = canvasContainer;
+        this.toolsContainer = toolsContainer;
+        this.canvas = canvas;
+        this.popup = popup;
+        document.body.appendChild(appContainer.dom);
+        document.body.setAttribute('tabIndex', '-1');
+        events.on('show.shortcuts', () => {
+            shortcutsPopup.hidden = false;
+        });
+        events.function('show.exportPopup', (exportType, splatNames, showFilenameEdit) => {
+            return exportPopup.show(exportType, splatNames, showFilenameEdit);
+        });
+        events.function('show.publishSettingsDialog', async () => {
+            // show popup if user isn't logged in
+            const userStatus = await events.invoke('publish.userStatus');
+            if (!userStatus) {
+                await events.invoke('showPopup', {
+                    type: 'error',
+                    header: i18n.t('popup.error'),
+                    message: i18n.t('popup.publish.please-log-in')
+                });
+                return false;
+            }
+            // get user publish settings
+            const publishSettings = await publishSettingsDialog.show(userStatus);
+            // do publish
+            if (publishSettings) {
+                await events.invoke('scene.publish', publishSettings);
+            }
+        });
+        events.function('show.imageSettingsDialog', async () => {
+            const imageSettings = await imageSettingsDialog.show();
+            if (imageSettings) {
+                await events.invoke('render.image', imageSettings);
+            }
+        });
+        events.function('show.videoSettingsDialog', async () => {
+            const videoSettings = await videoSettingsDialog.show();
+            if (videoSettings) {
+                try {
+                    const docName = events.invoke('doc.name');
+                    // Determine file extension and mime type based on format
+                    let fileExtension;
+                    let filePickerTypes;
+                    // Codec name mapping for display
+                    const codecNames = {
+                        'h264': 'H.264',
+                        'h265': 'H.265',
+                        'vp9': 'VP9',
+                        'av1': 'AV1'
+                    };
+                    const codecName = codecNames[videoSettings.codec] || videoSettings.codec.toUpperCase();
+                    if (videoSettings.format === 'webm') {
+                        fileExtension = '.webm';
+                        filePickerTypes = [{
+                                description: `WebM Video (${codecName})`,
+                                accept: { 'video/webm': ['.webm'] }
+                            }];
+                    }
+                    else if (videoSettings.format === 'mov') {
+                        fileExtension = '.mov';
+                        filePickerTypes = [{
+                                description: `MOV Video (${codecName})`,
+                                accept: { 'video/quicktime': ['.mov'] }
+                            }];
+                    }
+                    else if (videoSettings.format === 'mkv') {
+                        fileExtension = '.mkv';
+                        filePickerTypes = [{
+                                description: `MKV Video (${codecName})`,
+                                accept: { 'video/x-matroska': ['.mkv'] }
+                            }];
+                    }
+                    else {
+                        fileExtension = '.mp4';
+                        filePickerTypes = [{
+                                description: `MP4 Video (${codecName})`,
+                                accept: { 'video/mp4': ['.mp4'] }
+                            }];
+                    }
+                    const suggested = `${removeExtension(docName ?? 'supersplat')}${fileExtension}`;
+                    let writable;
+                    let fileHandle;
+                    if (window.showSaveFilePicker) {
+                        fileHandle = await window.showSaveFilePicker({
+                            id: 'SuperSplatVideoFileExport',
+                            types: filePickerTypes,
+                            suggestedName: suggested
+                        });
+                        writable = await fileHandle.createWritable();
+                    }
+                    const result = await events.invoke('render.video', videoSettings, writable);
+                    // if the render was cancelled, remove the empty file left on disk
+                    if (result === false && fileHandle?.remove) {
+                        await fileHandle.remove();
+                    }
+                }
+                catch (error) {
+                    if (error instanceof DOMException && error.name === 'AbortError') {
+                        // user cancelled save dialog
+                        return;
+                    }
+                    await events.invoke('showPopup', {
+                        type: 'error',
+                        header: 'Failed to render video',
+                        message: `'${error.message ?? error}'`
+                    });
+                }
+            }
+        });
+        events.on('show.about', () => {
+            aboutPopup.hidden = false;
+        });
+        events.function('showPopup', (options) => {
+            return this.popup.show(options);
+        });
+        // spinner with reference counting to handle nested operations
+        const spinner = new Spinner();
+        topContainer.append(spinner);
+        let spinnerCount = 0;
+        events.on('startSpinner', () => {
+            spinnerCount++;
+            if (spinnerCount === 1) {
+                spinner.hidden = false;
+            }
+        });
+        events.on('stopSpinner', () => {
+            spinnerCount = Math.max(0, spinnerCount - 1);
+            if (spinnerCount === 0) {
+                spinner.hidden = true;
+            }
+        });
+        // progress
+        const progress = new Progress();
+        topContainer.append(progress);
+        events.on('progressStart', (header, cancellable) => {
+            progress.hidden = false;
+            progress.setHeader(header);
+            progress.setText('');
+            progress.setProgress(0);
+            progress.showCancelButton(!!cancellable);
+            progress.onCancel = cancellable ? () => events.fire('progressCancel') : null;
+        });
+        events.on('progressUpdate', (options) => {
+            if (options.text !== undefined) {
+                progress.setText(options.text);
+            }
+            if (options.progress !== undefined) {
+                progress.setProgress(options.progress);
+            }
+        });
+        events.on('progressEnd', () => {
+            progress.hidden = true;
+            progress.showCancelButton(false);
+            progress.onCancel = null;
+        });
+        // initialize canvas to correct size before creating graphics device etc
+        const pixelRatio = window.devicePixelRatio;
+        canvas.width = Math.ceil(canvasContainer.dom.offsetWidth * pixelRatio);
+        canvas.height = Math.ceil(canvasContainer.dom.offsetHeight * pixelRatio);
+        ['contextmenu', 'gesturestart', 'gesturechange', 'gestureend'].forEach((event) => {
+            document.addEventListener(event, (e) => {
+                e.preventDefault();
+            }, true);
+        });
+        // whenever the canvas container is clicked, set keyboard focus on the body
+        canvasContainer.dom.addEventListener('pointerdown', (event) => {
+            // set focus on the body if user is busy pressing on the canvas or a child of the tools
+            // element
+            if (event.target === canvas || toolsContainer.dom.contains(event.target)) {
+                document.body.focus();
+            }
+        }, true);
+    }
+}
+
+const getURLArgs = () => {
+    // extract settings from command line in non-prod builds only
+    const config = {};
+    const apply = (key, value) => {
+        let obj = config;
+        key.split('.').forEach((k, i, a) => {
+            if (i === a.length - 1) {
+                obj[k] = value;
+            }
+            else {
+                if (!obj.hasOwnProperty(k)) {
+                    obj[k] = {};
+                }
+                obj = obj[k];
+            }
+        });
+    };
+    const params = new URLSearchParams(window.location.search.slice(1));
+    params.forEach((value, key) => {
+        apply(key, value);
+    });
+    return config;
+};
+const main = async () => {
+    // root events object
+    const events = new Events();
+    // url
+    const url = new URL(window.location.href);
+    // shared command queue for all async splat work (GPU readbacks + history mutations).
+    // every consumer that needs ordering relative to other commands enqueues here.
+    const commandQueue = new CommandQueue();
+    // edit history (uses the shared queue internally)
+    const editHistory = new EditHistory(events, commandQueue);
+    // expose the queue as an event for any module that needs to serialise async work
+    // alongside history mutations.
+    events.function('queue', (fn) => commandQueue.enqueue(fn));
+    // init localization
+    await i18n.init();
+    // Configure WebP WASM for SOG format (used for both reading and writing)
+    WebPCodec.wasmUrl = new URL('static/lib/webp/webp.wasm', document.baseURI).toString();
+    // Run SOG writing inline rather than in worker threads. We don't ship
+    // splat-transform's worker.mjs, so leaving the pool enabled makes it try to
+    // spawn a worker that 404s; under SOG's parallel task load it then hangs
+    // instead of falling back, producing an empty export.
+    WorkerQueue.maxWorkers = 0;
+    // register events that only need the events object (before UI is created)
+    registerTimelineEvents(events);
+    registerCameraPosesEvents(events);
+    registerTrackManagerEvents(events);
+    registerTransformHandlerEvents(events);
+    registerPublishEvents(events);
+    registerIframeApi(events);
+    // initialize shortcuts
+    const shortcutManager = new ShortcutManager(events);
+    events.function('shortcutManager', () => shortcutManager);
+    // editor ui
+    const editorUI = new EditorUI(events);
+    // create the graphics device
+    const graphicsDevice = await createGraphicsDevice(editorUI.canvas, {
+        deviceTypes: ['webgl2'],
+        antialias: false,
+        depth: false,
+        stencil: false,
+        xrCompatible: false,
+        powerPreference: 'high-performance'
+    });
+    const overrides = [
+        getURLArgs()
+    ];
+    // resolve scene config
+    const sceneConfig = getSceneConfig(overrides);
+    // construct the manager
+    const scene = new Scene(events, sceneConfig, editorUI.canvas, graphicsDevice, commandQueue);
+    // colors
+    const bgClr = new Color();
+    const selectedClr = new Color();
+    const unselectedClr = new Color();
+    const lockedClr = new Color();
+    const setClr = (target, value, event) => {
+        if (!target.equals(value)) {
+            target.copy(value);
+            events.fire(event, target);
+        }
+    };
+    const setBgClr = (clr) => {
+        setClr(bgClr, clr, 'bgClr');
+    };
+    const setSelectedClr = (clr) => {
+        setClr(selectedClr, clr, 'selectedClr');
+    };
+    const setUnselectedClr = (clr) => {
+        setClr(unselectedClr, clr, 'unselectedClr');
+    };
+    const setLockedClr = (clr) => {
+        setClr(lockedClr, clr, 'lockedClr');
+    };
+    events.on('setBgClr', (clr) => {
+        setBgClr(clr);
+    });
+    events.on('setSelectedClr', (clr) => {
+        setSelectedClr(clr);
+    });
+    events.on('setUnselectedClr', (clr) => {
+        setUnselectedClr(clr);
+    });
+    events.on('setLockedClr', (clr) => {
+        setLockedClr(clr);
+    });
+    events.function('bgClr', () => {
+        return bgClr;
+    });
+    events.function('selectedClr', () => {
+        return selectedClr;
+    });
+    events.function('unselectedClr', () => {
+        return unselectedClr;
+    });
+    events.function('lockedClr', () => {
+        return lockedClr;
+    });
+    events.on('bgClr', (clr) => {
+        const cnv = (v) => `${Math.max(0, Math.min(255, (v * 255))).toFixed(0)}`;
+        document.body.style.backgroundColor = `rgba(${cnv(clr.r)},${cnv(clr.g)},${cnv(clr.b)},1)`;
+    });
+    events.on('selectedClr', (clr) => {
+        scene.forceRender = true;
+    });
+    events.on('unselectedClr', (clr) => {
+        scene.forceRender = true;
+    });
+    events.on('lockedClr', (clr) => {
+        scene.forceRender = true;
+    });
+    // initialize colors from application config
+    const toColor = (value) => {
+        return new Color(value.r, value.g, value.b, value.a);
+    };
+    setBgClr(toColor(sceneConfig.bgClr));
+    setSelectedClr(toColor(sceneConfig.selectedClr));
+    setUnselectedClr(toColor(sceneConfig.unselectedClr));
+    setLockedClr(toColor(sceneConfig.lockedClr));
+    // create the mask selection canvas
+    const maskCanvas = document.createElement('canvas');
+    const maskContext = maskCanvas.getContext('2d');
+    maskCanvas.setAttribute('id', 'mask-canvas');
+    maskContext.globalCompositeOperation = 'copy';
+    const mask = {
+        canvas: maskCanvas,
+        context: maskContext
+    };
+    // tool manager
+    const toolManager = new ToolManager(events);
+    toolManager.register('rectSelection', new RectSelection(events, editorUI.toolsContainer.dom));
+    toolManager.register('brushSelection', new BrushSelection(events, editorUI.toolsContainer.dom, mask));
+    toolManager.register('floodSelection', new FloodSelection(events, editorUI.toolsContainer.dom, mask, editorUI.canvasContainer));
+    toolManager.register('polygonSelection', new PolygonSelection(events, editorUI.toolsContainer.dom, mask));
+    toolManager.register('lassoSelection', new LassoSelection(events, editorUI.toolsContainer.dom, mask));
+    toolManager.register('sphereSelection', new SphereSelection(events, scene, editorUI.canvasContainer));
+    toolManager.register('boxSelection', new BoxSelection(events, scene, editorUI.canvasContainer));
+    toolManager.register('eyedropperSelection', new EyedropperSelection(events, editorUI.toolsContainer.dom, editorUI.canvasContainer));
+    toolManager.register('move', new MoveTool(events, scene));
+    toolManager.register('rotate', new RotateTool(events, scene));
+    toolManager.register('scale', new ScaleTool(events, scene));
+    toolManager.register('measure', new MeasureTool(events, scene, editorUI.toolsContainer.dom, editorUI.canvasContainer));
+    new BoundDimensionsOverlay(events, scene, editorUI.canvasContainer);
+    editorUI.toolsContainer.dom.appendChild(maskCanvas);
+    window.scene = scene;
+    // register events that need scene or other dependencies
+    registerEditorEvents(events, editHistory, scene);
+    registerSelectionEvents(events, scene);
+    registerSequenceEvents(events, scene);
+    registerDocEvents(scene, events);
+    registerRenderEvents(scene, events);
+    initFileHandler(scene, events, editorUI.appContainer.dom);
+    // load async models
+    scene.start();
+    // handle load params
+    const loadList = url.searchParams.getAll('load');
+    const filenameList = url.searchParams.getAll('filename');
+    for (const [i, value] of loadList.entries()) {
+        const decoded = decodeURIComponent(value);
+        const filename = i < filenameList.length ?
+            decodeURIComponent(filenameList[i]) :
+            decoded.split('/').pop();
+        await events.invoke('import', [{
+                filename,
+                url: decoded
+            }]);
+    }
+    // handle OS-based file association in PWA mode
+    if ('launchQueue' in window) {
+        window.launchQueue.setConsumer(async (launchParams) => {
+            for (const file of launchParams.files) {
+                await events.invoke('import', [{
+                        filename: file.name,
+                        contents: await file.getFile()
+                    }]);
+            }
+        });
+    }
+};
+
+// print out versions of dependent packages
+// NOTE: add dummy style reference to prevent tree shaking
+console.log(`SuperSplat v${version} | SplatTransform v${version$1} (${revision}) | Engine v${version$2} (${revision$1}) | PCUI v${version$3} (${revision$2})`);
+main();
+//# sourceMappingURL=index.js.map
