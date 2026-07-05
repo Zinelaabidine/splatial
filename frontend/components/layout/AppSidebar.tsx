@@ -245,7 +245,7 @@ export default function AppSidebar({
     <aside
       aria-label="Main navigation"
       className={cn(
-        "sw-glass sw-glass-border relative z-10 my-3 ml-3 flex h-[calc(100%-1.5rem)] shrink-0 flex-col overflow-y-auto overflow-x-hidden rounded-2xl py-4 transition-[width] duration-200 ease-out",
+        "sw-sidebar-panel relative z-10 flex h-full shrink-0 flex-col overflow-y-auto overflow-x-hidden py-4 transition-[width] duration-200 ease-out",
         collapsed ? "w-[68px] px-2" : "w-[240px] pl-3",
       )}
     >

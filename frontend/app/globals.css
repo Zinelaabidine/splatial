@@ -936,6 +936,14 @@ body {
   position: relative;
 }
 
+/* Sidebar drawer — Gmail-style: flush against the top bar and the left
+   screen edge, not a floating card. Fill only, with a single hairline
+   on the right to separate it from the content area. */
+.sw-sidebar-panel {
+  background: #131316;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+
 /* "New scene" — the primary CTA, pinned to the top of the sidebar.
    Solid high-contrast fill with a lifted shadow so it reads as a
    floating "Compose" button, not just another row in the list. */
