@@ -1,16 +1,18 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { Menu, Search, X } from "lucide-react";
 
 import { useAppShell } from "@/components/layout/AppShellContext";
 import { useAppAccount } from "@/hooks/layout/useAppAccount";
 import { UserAvatar } from "@/components/splatworks/SplatworksLogo";
 import NotificationBell from "@/components/layout/NotificationBell";
+import SettingsPanel from "@/components/layout/panels/SettingsPanel";
+import { cn } from "@/lib/utils";
 
 type AppTopBarProps = {
   onMenuClick?: () => void;
-  onAccountClick?: () => void;
 };
 
 const SECTION_LABELS: { match: (p: string) => boolean; label: string }[] = [
@@ -24,11 +26,32 @@ const SECTION_LABELS: { match: (p: string) => boolean; label: string }[] = [
   { match: (p) => p.startsWith("/settings"), label: "Settings" },
 ];
 
-export default function AppTopBar({ onMenuClick, onAccountClick }: AppTopBarProps) {
+export default function AppTopBar({ onMenuClick }: AppTopBarProps) {
   const { search, setSearch, searchPlaceholder, showSearch } = useAppShell();
   const pathname = usePathname();
   const account = useAppAccount();
   const section = SECTION_LABELS.find((s) => s.match(pathname))?.label;
+
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const accountMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!accountMenuOpen) return;
+    const handlePointerDown = (e: MouseEvent) => {
+      if (accountMenuRef.current && !accountMenuRef.current.contains(e.target as Node)) {
+        setAccountMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setAccountMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [accountMenuOpen]);
 
   return (
     <header className="sw-glass-bar sticky top-0 z-50 flex h-14 shrink-0 items-center gap-3 px-4">
@@ -79,14 +102,25 @@ export default function AppTopBar({ onMenuClick, onAccountClick }: AppTopBarProp
 
       <NotificationBell />
 
-      <button
-        type="button"
-        aria-label="Account settings"
-        onClick={onAccountClick}
-        className="shrink-0 rounded-full transition-opacity hover:opacity-80"
-      >
-        <UserAvatar initials={account.initials} size={30} />
-      </button>
+      <div ref={accountMenuRef} className="relative shrink-0">
+        <button
+          type="button"
+          aria-label="Account menu"
+          aria-expanded={accountMenuOpen}
+          onClick={() => setAccountMenuOpen((open) => !open)}
+          className={cn(
+            "flex shrink-0 items-center justify-center rounded-full transition-opacity hover:opacity-80",
+            accountMenuOpen && "ring-2 ring-white/30",
+          )}
+        >
+          <UserAvatar initials={account.initials} size={30} />
+        </button>
+
+        <SettingsPanel
+          open={accountMenuOpen}
+          onClose={() => setAccountMenuOpen(false)}
+        />
+      </div>
     </header>
   );
 }

@@ -944,6 +944,17 @@ body {
   border-right: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+/* Anchored popovers that float over busy content (account menu off the
+   top-bar avatar) — the one deliberate use of a lifted shadow in this
+   theme, so the card visibly separates from what's behind it. */
+.sw-popover {
+  background: #131316;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 20px 40px rgba(0, 0, 0, 0.45),
+    0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
 /* "New scene" — the primary CTA, pinned to the top of the sidebar.
    Solid high-contrast fill with a lifted shadow so it reads as a
    floating "Compose" button, not just another row in the list. */

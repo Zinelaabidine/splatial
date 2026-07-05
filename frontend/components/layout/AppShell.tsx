@@ -4,7 +4,6 @@ import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
 
 import ActivityPanel from "@/components/layout/panels/ActivityPanel";
-import SettingsPanel from "@/components/layout/panels/SettingsPanel";
 import TrainingPanel from "@/components/layout/panels/TrainingPanel";
 import AppSidebar from "@/components/layout/AppSidebar";
 import { AppShellProvider } from "@/components/layout/AppShellContext";
@@ -27,7 +26,6 @@ function AppShellInner({ children, fullBleed: fullBleedProp }: AppShellProps) {
   const [openPanel, setOpenPanel] = useState<"training" | "activity" | null>(
     null,
   );
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const trainingCount = useTrainingCount();
 
   const handleMenuClick = () => {
@@ -44,10 +42,7 @@ function AppShellInner({ children, fullBleed: fullBleedProp }: AppShellProps) {
       <div className="sw-field-glow pointer-events-none fixed inset-0 -z-20" />
       <div className="sw-field-stars pointer-events-none fixed inset-0 -z-10" />
 
-      <AppTopBar
-        onMenuClick={handleMenuClick}
-        onAccountClick={() => setSettingsOpen(true)}
-      />
+      <AppTopBar onMenuClick={handleMenuClick} />
 
       <div className="flex min-h-0 flex-1">
         {mobileNavOpen && (
@@ -104,10 +99,6 @@ function AppShellInner({ children, fullBleed: fullBleedProp }: AppShellProps) {
       <ActivityPanel
         open={openPanel === "activity"}
         onClose={() => setOpenPanel(null)}
-      />
-      <SettingsPanel
-        open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
       />
     </div>
   );
