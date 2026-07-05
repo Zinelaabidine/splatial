@@ -20,6 +20,10 @@ const attemptPatch     = require("./handlers/attempt-patch");
 const attemptHeartbeat = require("./handlers/attempt-heartbeat");
 const adminAttemptsList = require("./handlers/admin-attempts-list");
 const adminAttemptsLogs = require("./handlers/admin-attempts-logs");
+const adminWorkerAmisList = require("./handlers/admin-worker-amis-list");
+const adminWorkerAmiRegister = require("./handlers/admin-worker-ami-register");
+const adminWorkerAmiBoot = require("./handlers/admin-worker-ami-boot");
+const adminWorkerAmiActivate = require("./handlers/admin-worker-ami-activate");
 const profileGetMe = require("./handlers/profile-get-me");
 const profileUpdateMe = require("./handlers/profile-update-me");
 const profileGetByUsername = require("./handlers/profile-get-by-username");
@@ -175,6 +179,14 @@ exports.handler = async (event) => {
         return await adminAttemptsList.handler(event);
       case "GET /admin/attempts/{attemptId}/logs":
         return await adminAttemptsLogs.handler(event);
+      case "GET /admin/worker-amis":
+        return await adminWorkerAmisList.handler(event);
+      case "POST /admin/worker-amis":
+        return await adminWorkerAmiRegister.handler(event);
+      case "POST /admin/worker-amis/{amiId}/boot":
+        return await adminWorkerAmiBoot.handler(event);
+      case "POST /admin/worker-amis/{amiId}/activate":
+        return await adminWorkerAmiActivate.handler(event);
 
       default:
         return response(404, { error: "Not found" });
