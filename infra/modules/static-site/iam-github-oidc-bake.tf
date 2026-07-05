@@ -200,11 +200,21 @@ data "aws_iam_policy_document" "github_ami_bake_policy" {
   # too large for an inline SSM command parameter). Scoped to one prefix in
   # the existing raw-scenes bucket — never the uploads/${userId}/ prefix used
   # for real user scenes.
+  #
+  # GetObject is required here even though the bake role never calls
+  # GetObject directly: the workflow generates a presigned URL for the
+  # builder instance to curl the tarball (the AMI has no guaranteed aws CLI
+  # on PATH — confirmed by "aws: not found" in a real run). S3 validates a
+  # presigned URL against the signing principal's permissions at the time
+  # the URL is actually used, not just at signing time, so GetObject must be
+  # granted to whoever calls `aws s3 presign` (this role) even though the
+  # actual fetch happens from the builder instance, not from this role.
   statement {
-    sid    = "S3BakeStagingWrite"
+    sid    = "S3BakeStagingReadWrite"
     effect = "Allow"
     actions = [
       "s3:PutObject",
+      "s3:GetObject",
       "s3:DeleteObject",
     ]
     resources = [

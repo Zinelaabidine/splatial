@@ -147,6 +147,16 @@ jobs:
           aws s3 cp worker-bake.tar.gz "s3://${{ env.RAW_SCENES_BUCKET }}/${KEY}"
           echo "s3_key=${KEY}" >> "$GITHUB_OUTPUT"
 
+          # The builder AMI has no guarantee the aws CLI is on PATH for the
+          # non-interactive shell SSM executes commands in (confirmed: it
+          # isn't — "aws: not found", exit 127). A presigned URL lets the
+          # instance fetch the tarball with plain curl instead, which every
+          # Ubuntu image has. 15-minute expiry comfortably covers the time
+          # between staging and the SSM command actually running.
+          PRESIGN_URL=$(aws s3 presign "s3://${{ env.RAW_SCENES_BUCKET }}/${KEY}" --expires-in 900)
+          echo "::add-mask::${PRESIGN_URL}"
+          echo "presign_url=${PRESIGN_URL}" >> "$GITHUB_OUTPUT"
+
       - name: Launch builder instance
         id: launch
         run: |
@@ -197,7 +207,7 @@ jobs:
           set -eu
           mkdir -p /tmp/ami-bake
           cd /tmp/ami-bake
-          aws s3 cp s3://${{ env.RAW_SCENES_BUCKET }}/${{ steps.stage.outputs.s3_key }} worker-bake.tar.gz
+          curl -fsSL "${{ steps.stage.outputs.presign_url }}" -o worker-bake.tar.gz
           tar xzf worker-bake.tar.gz
           sudo mkdir -p /home/ubuntu/gaussian-splatting
           sudo cp worker.py convert.py imds_extract.py aws_config.py log_envelope.py /home/ubuntu/gaussian-splatting/
