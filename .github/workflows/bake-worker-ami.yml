@@ -212,10 +212,11 @@ jobs:
           EOF
           )
 
+          PARAMS=$(jq -cn --arg script "$SCRIPT" '{commands: [$script]}')
           CMD_ID=$(aws ssm send-command \
             --instance-ids "${{ steps.launch.outputs.instance_id }}" \
             --document-name "AWS-RunShellScript" \
-            --parameters "commands=[$(jq -Rs . <<< "$SCRIPT")]" \
+            --parameters "$PARAMS" \
             --query 'Command.CommandId' --output text)
 
           echo "SSM command: ${CMD_ID}"

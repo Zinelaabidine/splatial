@@ -161,6 +161,23 @@ data "aws_iam_policy_document" "github_ami_bake_policy" {
     }
   }
 
+  # Stop before CreateImage — same Purpose=ami-bake tag scope as terminate.
+  statement {
+    sid    = "EC2StopBakeBuilder"
+    effect = "Allow"
+    actions = [
+      "ec2:StopInstances",
+    ]
+    resources = [
+      "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:instance/*",
+    ]
+    condition {
+      test     = "StringEquals"
+      variable = "ec2:ResourceTag/Purpose"
+      values   = ["ami-bake"]
+    }
+  }
+
   # Cleanup is restricted to instances this pipeline itself launched and
   # tagged — never an arbitrary instance in the account.
   statement {
@@ -205,27 +222,41 @@ data "aws_iam_policy_document" "github_ami_bake_policy" {
       "ec2:DescribeInstances",
       "ec2:DescribeInstanceStatus",
       "ec2:DescribeInstanceTypes",
+      "ec2:DescribeSubnets",
+      "ec2:DescribeSecurityGroups",
     ]
     resources = ["*"]
   }
 
-  # SendCommand is scoped to instances this pipeline tagged, plus the
-  # AWS-owned SSM document used to run shell commands.
+  # SendCommand on builder instances — scoped to instances this pipeline tagged.
   statement {
-    sid    = "SSMSendCommandBakeBuilder"
+    sid    = "SSMSendCommandBakeBuilderInstances"
     effect = "Allow"
     actions = [
       "ssm:SendCommand",
     ]
     resources = [
       "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:instance/*",
-      "arn:aws:ssm:${var.aws_region}::document/AWS-RunShellScript",
     ]
     condition {
       test     = "StringEquals"
       variable = "ssm:resourceTag/Purpose"
       values   = ["ami-bake"]
     }
+  }
+
+  # SendCommand on the AWS-owned shell document — tag conditions do not apply
+  # to document ARNs, so this must be a separate statement from the instance
+  # resource above (same pattern as admin deploy policies elsewhere).
+  statement {
+    sid    = "SSMSendCommandBakeBuilderDocument"
+    effect = "Allow"
+    actions = [
+      "ssm:SendCommand",
+    ]
+    resources = [
+      "arn:aws:ssm:${var.aws_region}::document/AWS-RunShellScript",
+    ]
   }
 
   # Reading command status/output is a list/describe-style API — no
