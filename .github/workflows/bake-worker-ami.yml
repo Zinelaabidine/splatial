@@ -266,7 +266,7 @@ jobs:
           IMAGE_ID=$(aws ec2 create-image \
             --instance-id "${{ steps.launch.outputs.instance_id }}" \
             --name "${{ steps.ctx.outputs.image_name }}" \
-            --description "Splatial worker AMI — ${{ inputs.label }} (base ${{ inputs.base_ami_id }}, ${{ github.sha }})" \
+            --description "Splatial worker AMI - ${{ inputs.label }} (base ${{ inputs.base_ami_id }}, ${{ github.sha }})" \
             --tag-specifications "$IMAGE_TAGS" "$SNAP_TAGS" \
             --query 'ImageId' --output text)
 
