@@ -7,7 +7,7 @@
 #      same "SSM only, zero inbound" posture as the production workers).
 #   3. Runs a smoke test: NVIDIA driver present, updated Python files compile
 #      cleanly inside the gaussian_splatting conda env.
-#   4. Stops the instance and bakes it into a new AMI.
+#   4. Bakes the still-running builder instance into a new AMI (--no-reboot).
 #   5. Always terminates the builder instance, success or failure.
 #   6. Prints the new AMI ID to the job summary — nothing more.
 #
@@ -252,11 +252,10 @@ jobs:
             exit 1
           fi
 
-      - name: Stop builder instance
-        run: |
-          aws ec2 stop-instances --instance-ids "${{ steps.launch.outputs.instance_id }}"
-          aws ec2 wait instance-stopped --instance-ids "${{ steps.launch.outputs.instance_id }}"
-
+      # --no-reboot is safe because the smoke test above never starts
+      # gaussian-worker.service and leaves no in-flight writes — only static
+      # .py copies + systemctl daemon-reload. If the smoke test ever starts
+      # the service for real, drop --no-reboot and restore an explicit stop first.
       - name: Create image
         id: image
         run: |
@@ -268,6 +267,7 @@ jobs:
             --name "${{ steps.ctx.outputs.image_name }}" \
             --description "Splatial worker AMI - ${{ inputs.label }} (base ${{ inputs.base_ami_id }}, ${{ github.sha }})" \
             --tag-specifications "$IMAGE_TAGS" "$SNAP_TAGS" \
+            --no-reboot \
             --query 'ImageId' --output text)
 
           echo "image_id=${IMAGE_ID}" >> "$GITHUB_OUTPUT"
