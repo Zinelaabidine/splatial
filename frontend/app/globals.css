@@ -936,39 +936,53 @@ body {
   position: relative;
 }
 
-/* "New scene" — solid high-contrast button, no animated gradient sweep. */
+/* "New scene" — the primary CTA, pinned to the top of the sidebar.
+   Solid high-contrast fill with a lifted shadow so it reads as a
+   floating "Compose" button, not just another row in the list. */
 .sw-new-scene {
   position: relative;
   background: #f4f4f5;
   border: 1px solid transparent;
-  box-shadow: none;
+  box-shadow:
+    0 4px 10px rgba(0, 0, 0, 0.35),
+    0 1px 2px rgba(0, 0, 0, 0.3);
   color: #0a0a0b;
-  transition: background-color 150ms ease;
+  transition: background-color 150ms ease, box-shadow 150ms ease;
 }
 
 .sw-new-scene:hover {
   background: #e4e4e7;
   filter: none;
-  box-shadow: none;
+  box-shadow:
+    0 6px 14px rgba(0, 0, 0, 0.4),
+    0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
-/* Active nav item — flat fill + slim neutral indicator, no color glow. */
+/* Active nav item — Gmail-style flush pill: a solid fill that runs the
+   full row and meets the sidebar's inner edge, rounded only on that
+   trailing edge (see rounded-l-none/rounded-r-full in AppSidebar). */
 .sw-nav-active {
   position: relative;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.1);
   box-shadow: none;
 }
 
-.sw-nav-active::after {
-  content: "";
-  position: absolute;
-  left: 4px;
-  top: 50%;
-  width: 2.5px;
-  height: 16px;
+/* Generic numeric badge (unread/pending counts) for nav rows that have
+   real backing data — distinct from the amber "live job" indicator
+   below, which specifically means "running right now". */
+.sw-nav-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.125rem;
+  height: 1.125rem;
+  padding: 0 0.3125rem;
   border-radius: 999px;
-  transform: translateY(-50%);
-  background: #f4f4f5;
+  background: #3b82f6;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
 }
 
 /* Active nav icon — plain white, no drop-shadow glow. */
