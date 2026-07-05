@@ -30,9 +30,10 @@ export type AdminAttemptsResponse = {
 /** Mirrors GET /admin/asg-config in the backend. */
 
 /**
- * Workers have no inbound security group rules or SSH key pair by design —
- * access is exclusively via SSM Session Manager. ssmCommand/consoleUrl are
- * the only connection info the backend ever returns (no SSH host/key).
+ * Workers are SSM-managed by default, so ssmCommand/consoleUrl are always
+ * populated. sshCommand is only non-null in environments that opt into direct
+ * SSH (worker_ssh_key_name + worker_ssh_allowed_cidr both set — dev only as
+ * of this writing); everywhere else it's null.
  */
 export type AdminAsgInstance = {
   instanceId: string;
@@ -44,6 +45,7 @@ export type AdminAsgInstance = {
   publicIp: string | null;
   launchTime: string | null;
   ssmCommand: string;
+  sshCommand: string | null;
   consoleUrl: string;
 };
 

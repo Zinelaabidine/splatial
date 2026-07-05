@@ -39,8 +39,9 @@ resource "aws_iam_role_policy" "admin_asg_config" {
           "ec2:DescribeLaunchTemplates",
           "ec2:DescribeLaunchTemplateVersions",
           # Used to enrich the admin page with per-instance IPs/state so an
-          # admin can copy an `aws ssm start-session` command — workers have
-          # no inbound SG rules or SSH key pair by design (SSM-only access).
+          # admin can copy an `aws ssm start-session` command (and, where the
+          # environment opts in via worker_ssh_key_name/worker_ssh_allowed_cidr,
+          # a ready-to-copy SSH command too — see admin-asg-config-get.js).
           "ec2:DescribeInstances",
           # Live Spot price lookup shown before an admin applies an instance
           # type change.

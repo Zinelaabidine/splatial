@@ -4,7 +4,7 @@ resource "aws_security_group" "worker" {
   provider = aws.this
 
   name        = "${local.name_prefix}-splat-worker-sg"
-  description = "Outbound-only SG for 3DGS GPU workers. No inbound needed - management via SSM."
+  description = var.worker_ssh_allowed_cidr != "" ? "3DGS GPU workers. SSM-managed; SSH also open to worker_ssh_allowed_cidr in this environment." : "Outbound-only SG for 3DGS GPU workers. No inbound needed - management via SSM."
   vpc_id      = aws_vpc.static_site.id
 
   egress {
@@ -13,6 +13,22 @@ resource "aws_security_group" "worker" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
     description = "Allow all outbound (S3, SQS, DynamoDB, SSM)"
+  }
+
+  # Opt-in, per environment (see variables.tf worker_ssh_allowed_cidr). Empty
+  # in staging/prod, so those stay SSM-only with zero inbound rules. Dev sets
+  # this so an admin can SSH in directly with the GaussianWorker key pair
+  # (see worker_ssh_key_name on aws_launch_template.worker below) instead of
+  # going through Session Manager.
+  dynamic "ingress" {
+    for_each = var.worker_ssh_allowed_cidr != "" ? [var.worker_ssh_allowed_cidr] : []
+    content {
+      from_port   = 22
+      to_port     = 22
+      protocol    = "tcp"
+      cidr_blocks = [ingress.value]
+      description = "SSH (opt-in, see worker_ssh_allowed_cidr)"
+    }
   }
 
   tags = {
@@ -34,6 +50,12 @@ resource "aws_launch_template" "worker" {
 
   instance_type = var.worker_instance_type
 
+  # Empty string -> null -> launch template omits key_name entirely (AWS
+  # rejects "" as an invalid key pair name). Opt-in per environment; see
+  # variables.tf worker_ssh_key_name. Only meaningful together with the SG's
+  # SSH ingress rule above.
+  key_name = var.worker_ssh_key_name != "" ? var.worker_ssh_key_name : null
+
   # OS shutdown (shutdown -h now) terminates the instance instead of stopping it.
   instance_initiated_shutdown_behavior = "terminate"
 
@@ -53,9 +75,11 @@ resource "aws_launch_template" "worker" {
   }
 
   # Worker subnet is public (see network-worker.tf) — direct IGW route instead
-  # of a NAT Gateway. The SG has zero inbound rules, so a public IP here adds
-  # no reachable attack surface; it only makes the public-IPv4 charge
-  # usage-based instead of paying for an always-on NAT Gateway + EIP.
+  # of a NAT Gateway. The SG has zero inbound rules by default (staging/prod),
+  # so a public IP there adds no reachable attack surface; it only makes the
+  # public-IPv4 charge usage-based instead of paying for an always-on NAT
+  # Gateway + EIP. In dev, the SG's opt-in SSH ingress rule (see above) does
+  # make this public IP reachable on port 22 — an accepted tradeoff there.
   network_interfaces {
     associate_public_ip_address = true
     security_groups             = [aws_security_group.worker.id]

@@ -24,6 +24,11 @@ const MAX_SIZE_CAP = Number(process.env.WORKER_ASG_MAX_SIZE_CAP || 5);
 const QUEUE_URL = process.env.SQS_QUEUE_URL;
 // Lambda always sets this reserved env var; used to build ssm/console links.
 const REGION = process.env.AWS_REGION || "us-east-1";
+// Opt-in per environment (see infra/modules/static-site/variables.tf
+// worker_ssh_key_name / worker_ssh_allowed_cidr) — true in dev only as of
+// this writing. Staging/prod stay SSM-only, so ssh commands are omitted there.
+const SSH_ENABLED = process.env.WORKER_SSH_ENABLED === "true";
+const SSH_USER = process.env.WORKER_SSH_USER || "ubuntu";
 
 const HISTORY_LIMIT = 10;
 
@@ -45,10 +50,12 @@ const HISTORY_LIMIT = 10;
  *   queue: { visible, inFlight }
  * }
  *
- * Workers have no inbound security group rules or SSH key pair by design —
- * access is exclusively via SSM Session Manager (see iam-worker.tf). The
- * `instances` list carries a ready-to-copy `aws ssm start-session` command
- * per instance instead of any SSH connection info.
+ * Workers are SSM-managed by default (see iam-worker.tf) — the `instances`
+ * list always carries a ready-to-copy `aws ssm start-session` command. In
+ * environments that opt into direct SSH (worker_ssh_key_name +
+ * worker_ssh_allowed_cidr both set — dev only as of this writing), each
+ * instance also gets an `sshCommand` using its public IP and the
+ * GaussianWorker key pair; it's null everywhere else.
  */
 exports.handler = async (event) => {
   if (!isAdmin(event)) {
@@ -168,10 +175,15 @@ exports.handler = async (event) => {
       privateIp: inst?.PrivateIpAddress ?? null,
       publicIp: inst?.PublicIpAddress ?? null,
       launchTime: inst?.LaunchTime ? new Date(inst.LaunchTime).toISOString() : null,
-      // No SSH — workers have zero inbound SG rules and no key pair.
-      // AmazonSSMManagedInstanceCore is attached, so Session Manager works
+      // AmazonSSMManagedInstanceCore is attached, so this always works
       // without opening any ports.
       ssmCommand: `aws ssm start-session --target ${i.InstanceId} --region ${REGION}`,
+      // Only populated when this environment opted into SSH (dev, via the
+      // GaussianWorker key pair) AND the instance has a public IP yet.
+      sshCommand:
+        SSH_ENABLED && inst?.PublicIpAddress
+          ? `ssh -i GaussianWorker.pem ${SSH_USER}@${inst.PublicIpAddress}`
+          : null,
       consoleUrl: `https://${REGION}.console.aws.amazon.com/ec2/home?region=${REGION}#InstanceDetails:instanceId=${i.InstanceId}`,
     };
   });

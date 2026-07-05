@@ -110,6 +110,23 @@ variable "worker_asg_max_size" {
   default     = 1
 }
 
+variable "worker_ssh_key_name" {
+  description = "EC2 key pair name attached to the worker launch template for direct SSH access (e.g. \"GaussianWorker\"). Empty string (default) disables SSH entirely — workers stay SSM-only. Must be paired with worker_ssh_allowed_cidr; setting only one of the two has no effect. Only enable this in environments where opening port 22 is an accepted tradeoff (see the worker security group in compute.tf)."
+  type        = string
+  default     = ""
+}
+
+variable "worker_ssh_allowed_cidr" {
+  description = "CIDR allowed to reach port 22 on GPU workers, e.g. \"0.0.0.0/0\" or a specific /32. Empty string (default) means no ingress rule is created. Only takes effect when worker_ssh_key_name is also set."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.worker_ssh_allowed_cidr == "" || can(cidrhost(var.worker_ssh_allowed_cidr, 0))
+    error_message = "worker_ssh_allowed_cidr must be empty or a valid CIDR block (e.g. 0.0.0.0/0)."
+  }
+}
+
 variable "worker_asg_max_size_cap" {
   description = "Hard ceiling the admin ASG-config page cannot exceed when setting max_size at runtime (cost safety net for expensive GPU Spot capacity)."
   type        = number

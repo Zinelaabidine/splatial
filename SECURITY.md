@@ -42,7 +42,9 @@ steps and impact. You'll receive an acknowledgement and a remediation timeline.
   **OIDC**, scoped to the exact `repo:…:environment:<env>`.
 - **No standing credentials on compute.** Worker instances use an instance profile;
   **IMDSv2 is required** (`http_tokens = "required"`); security groups are
-  outbound-only; management is via SSM (no inbound SSH).
+  outbound-only by default; management is via SSM. Dev only opts into direct SSH
+  (`worker_ssh_key_name` / `worker_ssh_allowed_cidr` in `variables.tf`, GaussianWorker
+  key pair) for local debugging — staging/prod stay SSM-only with zero inbound rules.
 - **Secrets are never committed.** `.env*` and `*.pem` are git-ignored; tokens and
   raw JWT claims are never logged.
 

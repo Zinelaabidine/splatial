@@ -25,6 +25,11 @@ const MAX_SIZE_CAP = Number(process.env.WORKER_ASG_MAX_SIZE_CAP || 5);
 const AMI_ID_RE = /^ami-[a-f0-9]{8,17}$/;
 const INSTANCE_TYPE_RE = /^[a-z0-9]+\.[a-z0-9]+$/;
 
+// GPU worker fleet is deliberately limited to these two ARM Spot types —
+// xlarge for routine jobs, 16xlarge for heavier/faster processing. Keep in
+// sync with ALLOWED_INSTANCE_TYPES in AdminAsgConfigView.tsx.
+const ALLOWED_INSTANCE_TYPES = ["g5g.xlarge", "g5g.16xlarge"];
+
 /**
  * POST /admin/asg-config
  *
@@ -39,7 +44,7 @@ const INSTANCE_TYPE_RE = /^[a-z0-9]+\.[a-z0-9]+$/;
  *     lifecycle.ignore_changes on max_size keeps Terraform from reverting it.
  *
  * Body (at least one field required):
- *   { amiId?: string, instanceType?: string, maxSize?: number, reason?: string }
+ *   { amiId?: string, instanceType?: "g5g.xlarge" | "g5g.16xlarge", maxSize?: number, reason?: string }
  *
  * Success (200): the fields that were actually changed + the new launch
  * template version number (if a template change was made).
@@ -86,6 +91,11 @@ exports.handler = async (event) => {
     (instanceType === "" || !INSTANCE_TYPE_RE.test(instanceType))
   ) {
     return response(400, { error: "instanceType must look like g5g.xlarge" });
+  }
+  if (instanceType !== undefined && !ALLOWED_INSTANCE_TYPES.includes(instanceType)) {
+    return response(400, {
+      error: `instanceType must be one of: ${ALLOWED_INSTANCE_TYPES.join(", ")}`,
+    });
   }
 
   let maxSize;

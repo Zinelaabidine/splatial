@@ -188,6 +188,13 @@ resource "aws_lambda_function" "upload_lambda" {
       WORKER_QUEUE_NAME            = aws_sqs_queue.processing_queue.name
       WORKER_DLQ_NAME              = aws_sqs_queue.processing_dlq.name
       SPLATIAL_ENV                 = var.environment
+
+      # Lets admin-asg-config-get.js know whether to surface an SSH command
+      # alongside the SSM one (only true when worker_ssh_key_name AND
+      # worker_ssh_allowed_cidr are both set — see variables.tf).
+      WORKER_SSH_ENABLED  = tostring(var.worker_ssh_key_name != "" && var.worker_ssh_allowed_cidr != "")
+      WORKER_SSH_USER     = "ubuntu"
+      WORKER_SSH_KEY_NAME = var.worker_ssh_key_name
     }
   }
 

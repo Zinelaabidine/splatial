@@ -58,6 +58,13 @@ function formatElapsed(sinceIso: string | null): string | null {
 
 const INSTANCE_TYPE_RE = /^[a-z0-9]+\.[a-z0-9]+$/;
 
+// GPU worker fleet is deliberately limited to these two ARM Spot types — keep
+// in sync with ALLOWED_INSTANCE_TYPES in admin-asg-config-update.js.
+const INSTANCE_TYPE_OPTIONS = [
+  { value: "g5g.xlarge", label: "g5g.xlarge — routine jobs" },
+  { value: "g5g.16xlarge", label: "g5g.16xlarge — heavier/faster processing" },
+] as const;
+
 function StatCard({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-4 py-3">
@@ -88,9 +95,10 @@ function InstancesPanel({ instances }: { instances: AdminAsgInstance[] }) {
           <h2 className="text-sm font-semibold text-[#f1f1f1]">Connect to a worker</h2>
         </div>
         <p className="mt-1 text-xs text-[#808080]">
-          Workers have no inbound security group rules or SSH key pair — SSH isn&apos;t
-          possible. Access is via SSM Session Manager instead (AWS CLI with the Session
-          Manager plugin, or the EC2 console&apos;s &quot;Connect&quot; tab).
+          Access via SSM Session Manager always works (AWS CLI with the Session Manager
+          plugin, or the EC2 console&apos;s &quot;Connect&quot; tab). In this environment,
+          direct SSH with the GaussianWorker key pair is also available where an instance
+          has a public IP.
         </p>
       </div>
 
@@ -126,7 +134,7 @@ function InstancesPanel({ instances }: { instances: AdminAsgInstance[] }) {
                   {inst.privateIp ?? "—"}
                 </td>
                 <td className="px-4 py-2 align-middle">
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex flex-wrap items-center gap-1.5">
                     <button
                       type="button"
                       onClick={() => copyCommand(inst.instanceId, inst.ssmCommand)}
@@ -140,6 +148,23 @@ function InstancesPanel({ instances }: { instances: AdminAsgInstance[] }) {
                       )}
                       {copiedId === inst.instanceId ? "Copied" : "Copy SSM command"}
                     </button>
+                    {inst.sshCommand && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          copyCommand(`${inst.instanceId}-ssh`, inst.sshCommand as string)
+                        }
+                        title={inst.sshCommand}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#2a2a2a] px-2 py-1 text-xs text-[#e8e8e8] hover:bg-[#1a1a1a]"
+                      >
+                        {copiedId === `${inst.instanceId}-ssh` ? (
+                          <Check className="h-3.5 w-3.5 text-[#8fd6a3]" />
+                        ) : (
+                          <Copy className="h-3.5 w-3.5" />
+                        )}
+                        {copiedId === `${inst.instanceId}-ssh` ? "Copied" : "Copy SSH command"}
+                      </button>
+                    )}
                     <a
                       href={inst.consoleUrl}
                       target="_blank"
@@ -383,11 +408,12 @@ function AmiPicker({
 }
 
 /**
- * Admin page for the GPU worker ASG: live AMI/instance-type/max-size config,
- * a manual boot/release control for smoke-testing without waiting on a real
- * SQS job, an SSM-only connect panel (workers have no SSH path), queue-depth
- * and Spot-price context, and Slack/email alerts on changes or a manual
- * session left active too long.
+ * Admin page for the GPU worker ASG: live AMI/instance-type/max-size config
+ * (instance type limited to g5g.xlarge / g5g.16xlarge), a manual boot/release
+ * control for smoke-testing without waiting on a real SQS job, a connect
+ * panel (SSM always, plus direct SSH where the environment opts in), queue-
+ * depth and Spot-price context, and Slack/email alerts on changes or a
+ * manual session left active too long.
  */
 export default function AdminAsgConfigView() {
   const isAdmin = useIsAdmin();
@@ -769,14 +795,29 @@ export default function AdminAsgConfigView() {
                 <label className="mb-1 block text-xs uppercase tracking-wide text-[#808080]">
                   Instance type
                 </label>
-                <input
-                  value={instanceType}
+                <select
+                  value={
+                    INSTANCE_TYPE_OPTIONS.some((o) => o.value === instanceType)
+                      ? instanceType
+                      : ""
+                  }
                   onChange={(e) => setInstanceType(e.target.value)}
-                  placeholder="g5g.xlarge"
                   className="w-full rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-2 font-mono text-sm text-[#e8e8e8] outline-none focus:border-[#3b82f6]"
-                />
+                >
+                  <option value="" disabled>
+                    {instanceType && !INSTANCE_TYPE_OPTIONS.some((o) => o.value === instanceType)
+                      ? `${instanceType} (not one of the allowed types)`
+                      : "Select an instance type"}
+                  </option>
+                  {INSTANCE_TYPE_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
                 <p className="mt-1 text-xs text-[#707070]">
-                  Must match the AMI&apos;s CPU architecture (validated on submit).
+                  Limited to these two GPU Spot types. Must match the AMI&apos;s CPU
+                  architecture (validated on submit).
                 </p>
                 {spotPriceLoading ? (
                   <p className="mt-1 text-xs text-[#707070]">

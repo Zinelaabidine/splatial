@@ -28,6 +28,15 @@ module "static_site" {
 
   worker_spot_subnet_cidr = "10.0.21.0/24"
 
+  # Dev-only: lets an admin SSH directly into a GPU worker instead of going
+  # through SSM Session Manager. The GaussianWorker key pair already exists
+  # in this account's EC2 key pairs. Open to 0.0.0.0/0 by request — the
+  # private key is still required to authenticate, but this does widen the
+  # worker SG's attack surface versus the SSM-only default, so it's
+  # deliberately not set in staging/prod.
+  worker_ssh_key_name     = "GaussianWorker"
+  worker_ssh_allowed_cidr = "0.0.0.0/0"
+
   cors_extra_origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
