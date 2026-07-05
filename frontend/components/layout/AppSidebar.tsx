@@ -91,8 +91,8 @@ const NAV: {
 const navItemClassName = (isActive: boolean) =>
   cn(
     "relative flex items-center gap-3 rounded-xl py-2.5 pr-3 text-sm transition-colors",
-    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/45 focus-visible:ring-offset-0",
-    isActive ? "sw-nav-active pl-5 font-medium text-white" : "pl-3 font-normal text-[#d2d8e6] hover:bg-white/10",
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 focus-visible:ring-offset-0",
+    isActive ? "sw-nav-active pl-5 font-medium text-white" : "pl-3 font-normal text-[#a1a1aa] hover:bg-white/[0.06]",
   );
 
 export default function AppSidebar({
@@ -139,8 +139,8 @@ export default function AppSidebar({
                 className={cn(
                   "h-5 w-5 shrink-0 transition-all duration-200",
                   isActive
-                    ? "sw-icon-glow text-indigo-300"
-                    : "text-[#aab4c8] group-hover:text-[#c5cde0]",
+                    ? "text-white"
+                    : "text-[#84848c] group-hover:text-[#c5c5cb]",
                 )}
                 strokeWidth={isActive ? 2 : 1.5}
               />
@@ -214,7 +214,7 @@ export default function AppSidebar({
         <button
           type="button"
           aria-label="Settings"
-          className="shrink-0 rounded-lg p-1.5 text-[#9aa6bd] transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/45"
+          className="shrink-0 rounded-lg p-1.5 text-[#9aa6bd] transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
           onClick={() => onSettingsClick?.()}
         >
           <Settings className="h-4 w-4" strokeWidth={1.5} aria-hidden />

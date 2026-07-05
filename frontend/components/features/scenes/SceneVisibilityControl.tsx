@@ -17,10 +17,8 @@ export function SceneVisibilityBadge({ visibility, className }: SceneVisibilityB
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide backdrop-blur-sm",
-        isPublic
-          ? "bg-sky-400/15 text-sky-200 ring-1 ring-sky-300/40"
-          : "bg-white/10 text-[#b9c2d4] ring-1 ring-white/15",
+        "inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#9a9aa2] ring-1 ring-white/10",
+        isPublic ? "bg-white/[0.06]" : "bg-white/[0.03]",
         className,
       )}
     >
@@ -65,10 +63,10 @@ export function SceneVisibilityToggle({
         aria-pressed={!isPublic}
         onClick={() => onToggle("PRIVATE")}
         className={cn(
-          "h-7 flex-1 rounded-full px-3 text-xs font-medium",
+          "h-6 flex-1 rounded-full px-3 text-[11px] font-medium",
           !isPublic
-            ? "bg-white/15 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] hover:bg-white/15"
-            : "text-[#9aa6bd] hover:bg-transparent hover:text-white",
+            ? "bg-white text-[#0a0a0b] hover:bg-white"
+            : "text-[#84848c] hover:bg-transparent hover:text-white",
         )}
       >
         Private
@@ -81,10 +79,10 @@ export function SceneVisibilityToggle({
         aria-pressed={isPublic}
         onClick={() => onToggle("PUBLIC")}
         className={cn(
-          "h-7 flex-1 rounded-full px-3 text-xs font-medium",
+          "h-6 flex-1 rounded-full px-3 text-[11px] font-medium",
           isPublic
-            ? "bg-gradient-to-r from-sky-500/70 to-indigo-500/70 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.25)] hover:from-sky-500/70 hover:to-indigo-500/70"
-            : "text-[#9aa6bd] hover:bg-transparent hover:text-white",
+            ? "bg-white text-[#0a0a0b] hover:bg-white"
+            : "text-[#84848c] hover:bg-transparent hover:text-white",
         )}
       >
         Public

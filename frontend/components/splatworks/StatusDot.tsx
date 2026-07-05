@@ -8,12 +8,12 @@ type StatusDotProps = {
 };
 
 const DOT_COLORS: Record<StatusDotProps["status"], string> = {
-  draft: "#a3a39b",
-  queued: "#f59e0b",
-  training: "#2563eb",
-  completed: "#34d399",
-  failed: "#dc2626",
-  "completed-badge": "#34d399",
+  draft: "#8a8a92",
+  queued: "#d4a24c",
+  training: "#9a9aa2",
+  completed: "#8fd6ab",
+  failed: "#e0918f",
+  "completed-badge": "#8fd6ab",
 };
 
 export default function StatusDot({ status, pulse = false, className }: StatusDotProps) {

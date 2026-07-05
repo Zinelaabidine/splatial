@@ -25,7 +25,7 @@ export default function AppTopBar({ onMenuClick }: AppTopBarProps) {
 
       {showSearch ? (
         <div className="mx-auto flex min-w-0 max-w-[640px] flex-1">
-          <label className="sw-control flex h-10 w-full items-center gap-2 rounded-full px-4 transition-colors focus-within:border-sky-400/50 focus-within:bg-white/10">
+          <label className="sw-control flex h-10 w-full items-center gap-2 rounded-full px-4 transition-colors focus-within:border-white/30 focus-within:bg-white/10">
             <input
               type="search"
               value={search}

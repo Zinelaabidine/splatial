@@ -30,12 +30,12 @@ export default function SceneTaxonomyDisplay({
           <Link
             href={`/explore?category=${encodeURIComponent(category)}`}
             onClick={(e) => e.stopPropagation()}
-            className="inline-flex rounded-full bg-violet-950/50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-300 ring-1 ring-violet-800/50 transition-colors hover:bg-violet-900/50 hover:text-violet-200"
+            className="inline-flex rounded-md bg-white/[0.05] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#a1a1aa] ring-1 ring-white/10 transition-colors hover:bg-white/10 hover:text-white"
           >
             {category}
           </Link>
         ) : (
-          <span className="inline-flex rounded-full bg-violet-950/50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-300 ring-1 ring-violet-800/50">
+          <span className="inline-flex rounded-md bg-white/[0.05] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#a1a1aa] ring-1 ring-white/10">
             {category}
           </span>
         )
@@ -47,14 +47,14 @@ export default function SceneTaxonomyDisplay({
             key={tag}
             href={`/explore?tag=${encodeURIComponent(tag)}`}
             onClick={(e) => e.stopPropagation()}
-            className="inline-flex rounded-md bg-[#303030] px-2 py-0.5 text-[11px] text-[#d4d4d4] ring-1 ring-[#404040] transition-colors hover:bg-[#363636] hover:text-white"
+            className="inline-flex rounded-md bg-white/[0.03] px-1.5 py-0.5 text-[10.5px] text-[#84848c] ring-1 ring-white/8 transition-colors hover:bg-white/10 hover:text-white"
           >
             #{tag}
           </Link>
         ) : (
           <span
             key={tag}
-            className="inline-flex rounded-md bg-[#303030] px-2 py-0.5 text-[11px] text-[#d4d4d4] ring-1 ring-[#404040]"
+            className="inline-flex rounded-md bg-white/[0.03] px-1.5 py-0.5 text-[10.5px] text-[#84848c] ring-1 ring-white/8"
           >
             #{tag}
           </span>

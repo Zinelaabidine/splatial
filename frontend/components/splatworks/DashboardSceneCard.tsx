@@ -19,35 +19,32 @@ import type { SubmitJobOptions } from "@/services/jobsService";
 import type { ColmapConfig, SceneVisibility, TrainConfig } from "@/types/api";
 import type { DashboardScene, SceneStatus } from "@/types/splatworks";
 
+// One flat graphite tile for every non-viewable status — the small status
+// dot and label carry the meaning, not a colored background wash.
 const DARK_STATUS: Record<
   SceneStatus,
   { tile: string; text: string; pulse?: boolean }
 > = {
   draft: {
-    tile:
-      "linear-gradient(150deg, rgba(148,163,184,0.16), rgba(15,20,38,0.5))",
-    text: "#c3ccdb",
+    tile: "#141416",
+    text: "#a1a1aa",
   },
   queued: {
-    tile:
-      "linear-gradient(150deg, rgba(251,191,36,0.2), rgba(30,22,12,0.55))",
-    text: "#fcd34d",
+    tile: "#141416",
+    text: "#d4a24c",
   },
   training: {
-    tile:
-      "linear-gradient(150deg, rgba(56,189,248,0.22), rgba(12,22,44,0.6))",
-    text: "#7dd3fc",
+    tile: "#141416",
+    text: "#e4e4e7",
     pulse: true,
   },
   completed: {
-    tile:
-      "linear-gradient(150deg, rgba(52,211,153,0.18), rgba(8,16,24,0.6))",
-    text: "#6ee7b7",
+    tile: "#141416",
+    text: "#8fd6ab",
   },
   failed: {
-    tile:
-      "linear-gradient(150deg, rgba(248,113,113,0.22), rgba(40,16,16,0.6))",
-    text: "#fca5a5",
+    tile: "#141416",
+    text: "#e0918f",
   },
 };
 
@@ -146,13 +143,13 @@ export default function DashboardSceneCard({
           <img
           src={scene.thumbnailUrl}
           alt=""
-          className="h-[180px] w-full rounded-t-2xl object-cover"
+          className="h-[200px] w-full rounded-t-2xl object-cover"
         />
         </>
       ) : scene.status === "completed" && scene.preview ? (
         <PointCloudThumbnail
           preview={scene.preview}
-          height={180}
+          height={200}
           variant="dark-card"
           className="rounded-t-2xl"
         />
@@ -165,16 +162,12 @@ export default function DashboardSceneCard({
         />
       )}
 
-      <div className="rounded-b-2xl p-3">
-        <div className="flex items-start gap-2">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <h3 className="min-w-0 flex-1 truncate text-[15px] font-semibold text-white">
-                {scene.title}
-              </h3>
-              <SceneVisibilityBadge visibility={visibility} />
-            </div>
-          </div>
+      <div className="rounded-b-2xl px-3 py-2.5">
+        <div className="flex items-center gap-2">
+          <h3 className="min-w-0 flex-1 truncate text-[13.5px] font-medium text-white">
+            {scene.title}
+          </h3>
+          <SceneVisibilityBadge visibility={visibility} />
           <div
             ref={menuRef}
             className="relative shrink-0"
@@ -189,16 +182,16 @@ export default function DashboardSceneCard({
                 setMenuOpen((open) => !open);
               }}
               className={cn(
-                "rounded-full p-1.5 text-[#c3ccdb] transition-colors hover:bg-white/15 hover:text-white",
-                menuOpen ? "bg-white/15 text-white opacity-100" : "opacity-70 group-hover:opacity-100",
+                "rounded-md p-1 text-[#9a9aa2] transition-colors hover:bg-white/10 hover:text-white",
+                menuOpen ? "bg-white/10 text-white opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
               )}
             >
-              <MoreVertical className="h-4 w-4" />
+              <MoreVertical className="h-3.5 w-3.5" />
             </button>
             {menuOpen && (
               <div
                 role="menu"
-                className="sw-glass absolute bottom-full right-0 z-50 mb-2 min-w-[140px] overflow-hidden rounded-xl py-1.5"
+                className="sw-glass absolute bottom-full right-0 z-50 mb-2 min-w-[140px] overflow-hidden rounded-lg py-1"
                 onClick={(e) => e.stopPropagation()}
               >
                 {scene.status === "completed" && (
@@ -210,7 +203,7 @@ export default function DashboardSceneCard({
                       setMenuOpen(false);
                       onEditScene?.(scene);
                     }}
-                    className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm font-medium text-[#eef1f7] transition-colors hover:bg-white/10"
+                    className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] font-medium text-[#e4e4e7] transition-colors hover:bg-white/10"
                   >
                     <Pencil className="h-3.5 w-3.5" strokeWidth={1.5} />
                     Edit
@@ -224,7 +217,7 @@ export default function DashboardSceneCard({
                     setMenuOpen(false);
                     onDeleteScene?.(scene);
                   }}
-                  className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm font-medium text-[#f87171] transition-colors hover:bg-red-950/40"
+                  className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] font-medium text-[#e0918f] transition-colors hover:bg-white/10"
                 >
                   <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
                   Delete
@@ -233,26 +226,29 @@ export default function DashboardSceneCard({
             )}
           </div>
         </div>
+        <div className="mt-1 flex items-center gap-2 text-[11px] text-[#84848c]">
+          <span>{scene.caption}</span>
+          {(scene.forksCount != null && scene.forksCount > 0) ||
+          (scene.commentsCount != null && scene.commentsCount > 0) ||
+          (scene.reactionsTotal != null && scene.reactionsTotal > 0) ? (
+            <span className="flex items-center gap-2">
+              <span className="text-[#4a4a52]">·</span>
+              <ForkCountBadge forksCount={scene.forksCount} />
+              <CommentCountBadge commentsCount={scene.commentsCount} />
+              <ReactionTotalBadge
+                reactionsTotal={scene.reactionsTotal}
+                reactionCounts={scene.reactionCounts}
+              />
+            </span>
+          ) : null}
+        </div>
         <SceneTaxonomyDisplay
           category={scene.category}
           tags={scene.tags}
           className="mt-1.5"
         />
-        <p className="mt-1 font-sw-mono text-xs text-[#9aa6bd]">{scene.caption}</p>
-        {(scene.forksCount != null && scene.forksCount > 0) ||
-        (scene.commentsCount != null && scene.commentsCount > 0) ||
-        (scene.reactionsTotal != null && scene.reactionsTotal > 0) ? (
-          <div className="mt-1.5 flex items-center gap-2">
-            <ForkCountBadge forksCount={scene.forksCount} />
-            <CommentCountBadge commentsCount={scene.commentsCount} />
-            <ReactionTotalBadge
-              reactionsTotal={scene.reactionsTotal}
-              reactionCounts={scene.reactionCounts}
-            />
-          </div>
-        ) : null}
         <div
-          className="mt-3"
+          className="mt-2.5"
           onClick={(e) => e.stopPropagation()}
           onKeyDown={(e) => e.stopPropagation()}
         >
@@ -272,24 +268,24 @@ export default function DashboardSceneCard({
               e.stopPropagation();
               onCancelScene?.(scene);
             }}
-            className="mt-3 w-full rounded-full border-amber-300/40 bg-amber-400/10 text-amber-200 backdrop-blur-sm hover:bg-amber-400/20 hover:text-amber-100"
+            className="mt-2.5 w-full rounded-md border-white/12 bg-white/[0.04] text-[#e4e4e7] hover:bg-white/10 hover:text-white"
           >
             <XCircle data-icon="inline-start" />
             {cancelling ? "Cancelling…" : "Cancel processing"}
           </Button>
         )}
         {showSubmit && (
-          <div className="mt-3" onClick={(e) => e.stopPropagation()}>
+          <div className="mt-2.5" onClick={(e) => e.stopPropagation()}>
             <div className="flex gap-1.5">
               <Button
                 size="sm"
                 disabled={submitting}
                 onClick={handleSubmitClick}
                 className={cn(
-                  "flex-1 rounded-full border text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.25)] backdrop-blur-sm",
+                  "flex-1 rounded-md border text-[13px] font-medium",
                   scene.apiStatus === "FAILED"
-                    ? "border-rose-300/40 bg-gradient-to-r from-rose-500/40 to-amber-500/40 hover:from-rose-500/55 hover:to-amber-500/55"
-                    : "border-white/15 bg-gradient-to-r from-emerald-500/50 to-teal-500/50 hover:from-emerald-500/65 hover:to-teal-500/65",
+                    ? "border-white/12 bg-white/[0.04] text-[#e0918f] hover:bg-white/10"
+                    : "border-transparent bg-[#f4f4f5] text-[#0a0a0b] hover:bg-[#e4e4e7]",
                 )}
               >
                 <Send data-icon="inline-start" />
@@ -306,15 +302,15 @@ export default function DashboardSceneCard({
                 aria-label="Advanced training settings"
                 onClick={() => setShowAdvanced((v) => !v)}
                 className={cn(
-                  "rounded-full border-white/15 bg-white/5 px-2.5 text-[#c3ccdb] backdrop-blur-sm hover:bg-white/10 hover:text-white",
-                  showAdvanced && "bg-white/15 text-white",
+                  "rounded-md border-white/12 bg-white/[0.04] text-[#9a9aa2] hover:bg-white/10 hover:text-white",
+                  showAdvanced && "bg-white/10 text-white",
                 )}
               >
                 <Settings2 />
               </Button>
             </div>
             {showAdvanced && (
-              <div className="sw-glass mt-2 rounded-xl bg-black/20 p-2">
+              <div className="sw-glass mt-2 rounded-lg p-2">
                 <AdvancedSettingsPanel
                   trainConfig={trainConfig}
                   colmapConfig={colmapConfig}
@@ -343,12 +339,11 @@ function StatusTile({
 }) {
   return (
     <div
-      className="flex h-[180px] flex-col items-center justify-center rounded-t-2xl px-5 text-center"
+      className="flex h-[200px] flex-col items-center justify-center rounded-t-2xl px-5 text-center"
       style={{ background: tileBg }}
     >
       <span
-        className="inline-flex items-center gap-1.5 font-sw-mono text-[10px] font-semibold uppercase tracking-wider"
-        style={{ color: textColor }}
+        className="inline-flex items-center gap-1.5 font-sw-mono text-[10px] font-medium uppercase tracking-wider text-[#84848c]"
       >
         <StatusDot status={scene.status} pulse={pulse} className="h-1.5 w-1.5" />
         {scene.apiStatus === "UPLOADED"
@@ -363,38 +358,29 @@ function StatusTile({
       {scene.status === "training" && scene.progressPercent != null && (
         <>
           {scene.progressSubPhase && (
-            <p
-              className="mb-2 max-w-full truncate font-sw-mono text-[10px] uppercase tracking-wide opacity-80"
-              style={{ color: textColor }}
-            >
+            <p className="mb-2 max-w-full truncate font-sw-mono text-[10px] uppercase tracking-wide text-[#84848c]">
               {formatProgressSubPhase(scene.progressSubPhase)}
             </p>
           )}
           <div
-            className="my-3 font-sw-mono text-2xl font-semibold leading-none"
+            className="my-2.5 font-sw-mono text-xl font-semibold leading-none"
             style={{ color: textColor }}
           >
             {scene.progressPercent}%
           </div>
-          <div className="h-1 w-full overflow-hidden rounded-full bg-[#1e3a5f]">
+          <div className="h-[3px] w-full max-w-[140px] overflow-hidden rounded-full bg-white/10">
             <div
-              className="h-full rounded-full bg-[#3b82f6]"
+              className="h-full rounded-full bg-white/70"
               style={{ width: `${scene.progressPercent}%` }}
             />
           </div>
           {scene.eta && (
-            <p
-              className="mt-2 font-sw-mono text-[11px] opacity-90"
-              style={{ color: textColor }}
-            >
+            <p className="mt-2 font-sw-mono text-[11px] text-[#84848c]">
               ~{scene.eta} remaining
             </p>
           )}
           {scene.workerVersion && (
-            <p
-              className="mt-1 font-sw-mono text-[10px] uppercase tracking-wide opacity-60"
-              style={{ color: textColor }}
-            >
+            <p className="mt-1 font-sw-mono text-[10px] uppercase tracking-wide text-[#5a5a62]">
               Worker v{scene.workerVersion}
             </p>
           )}
@@ -404,12 +390,12 @@ function StatusTile({
       {scene.status === "queued" && scene.queuePosition != null && (
         <>
           <div
-            className="mb-1 mt-3 font-sw-mono text-2xl font-semibold leading-none"
+            className="mb-1 mt-2.5 font-sw-mono text-xl font-semibold leading-none"
             style={{ color: textColor }}
           >
             #{scene.queuePosition}
           </div>
-          <div className="font-sw-mono text-[11px] text-[#d97706]">
+          <div className="font-sw-mono text-[11px] text-[#84848c]">
             in queue · {scene.queueEta}
           </div>
         </>
@@ -418,25 +404,22 @@ function StatusTile({
       {scene.status === "draft" && scene.uploadedImageCount != null && (
         <>
           <div
-            className="mb-1 mt-3 font-sw-mono text-2xl font-semibold leading-none"
+            className="mb-1 mt-2.5 font-sw-mono text-xl font-semibold leading-none"
             style={{ color: textColor }}
           >
             {scene.uploadedImageCount}
           </div>
-          <div className="font-sw-mono text-[11px] text-[#737373]">images uploaded</div>
+          <div className="font-sw-mono text-[11px] text-[#84848c]">images uploaded</div>
         </>
       )}
 
       {scene.status === "failed" && scene.errorMessage && (
         <>
-          <div
-            className="my-3 max-w-[180px] font-sw-mono text-[11px] leading-snug opacity-90"
-            style={{ color: textColor }}
-          >
+          <div className="my-2.5 max-w-[180px] font-sw-mono text-[11px] leading-snug text-[#a1a1aa]">
             {scene.errorMessage}
           </div>
           {scene.failedAtIter && (
-            <div className="font-sw-mono text-[11px] text-[#b91c1c]/80">
+            <div className="font-sw-mono text-[11px] text-[#84848c]">
               at iter {scene.failedAtIter}
             </div>
           )}
@@ -444,7 +427,7 @@ function StatusTile({
       )}
 
       {scene.status === "failed" && (
-        <div className="mt-3 flex items-center gap-1.5 font-sw-mono text-[11px] text-[#f87171]/70">
+        <div className="mt-2.5 flex items-center gap-1.5 font-sw-mono text-[11px] text-[#84848c]">
           <RefreshCw className="h-3 w-3" strokeWidth={1.5} />
           Click Retry below to resubmit
         </div>

@@ -78,9 +78,9 @@ export default function ScenesDashboardView() {
     : "No scenes yet. Create one to get started.";
 
   return (
-    <div className="mx-auto w-full max-w-[1400px]">
-      <h1 className="mb-6 bg-gradient-to-r from-white via-sky-100 to-indigo-200 bg-clip-text text-xl font-bold tracking-tight text-transparent sm:text-2xl">
-        Splatworks: Scenes
+    <div className="mx-auto w-full max-w-[1600px]">
+      <h1 className="mb-5 text-lg font-semibold tracking-tight text-white sm:text-xl">
+        Scenes
       </h1>
 
       {actionMessage ? (
@@ -121,7 +121,7 @@ export default function ScenesDashboardView() {
       ) : null}
 
       {!error && loading && scenes.length === 0 ? (
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
           {Array.from({ length: 6 }).map((_, i) => (
             <SceneCardSkeleton key={i} />
           ))}
@@ -129,7 +129,7 @@ export default function ScenesDashboardView() {
       ) : !error && !loading && scenes.length === 0 ? (
         <p className="py-16 text-center text-sm text-[#909090]">{emptyMessage}</p>
       ) : !error && scenes.length > 0 ? (
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
           {scenes.map((scene) => (
             <DashboardSceneCard
               key={scene.id}
