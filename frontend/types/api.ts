@@ -247,6 +247,8 @@ export interface Scene {
   progressSubPhase?: string;
   /** Estimated seconds remaining for the current phase (worker-reported). */
   progressEtaSeconds?: number;
+  /** worker.py version that processed this scene (set once processing starts). */
+  workerVersion?: string;
   /** Per-type reaction counts (denormalized on list/feed responses). */
   reactionCounts?: ReactionCounts;
   /** Total reactions across all types. */

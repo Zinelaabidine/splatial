@@ -18,9 +18,46 @@ export type AdminAttempt = {
   progressPercent?: number;
   progressSubPhase?: string;
   progressEtaSeconds?: number;
+  /** worker.py version that processed this attempt. */
+  workerVersion?: string;
 };
 
 export type AdminAttemptsResponse = {
   items: AdminAttempt[];
   cursor?: string;
+};
+
+/** Worker AMI registry — mirrors GET /admin/worker-amis in the backend. */
+export type WorkerAmi = {
+  amiId: string;
+  label: string;
+  baseAmiId: string | null;
+  architecture: string | null;
+  reason: string | null;
+  registeredAt: string | null;
+  registeredBy: string | null;
+  lastBootInstanceId: string | null;
+  lastBootAt: string | null;
+};
+
+export type WorkerAmisResponse = {
+  items: WorkerAmi[];
+  currentAmiId: string | null;
+};
+
+export type RegisterWorkerAmiRequest = {
+  amiId: string;
+  label: string;
+  baseAmiId?: string;
+  reason?: string;
+};
+
+export type BootWorkerAmiResponse = {
+  amiId: string;
+  instanceId: string;
+};
+
+export type ActivateWorkerAmiResponse = {
+  currentAmiId: string;
+  note: string;
 };

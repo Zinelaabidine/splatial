@@ -1,7 +1,14 @@
 "use client";
 
 import { authenticatedFetch } from "@/services/apiClient";
-import type { AdminAttemptsResponse } from "@/types/admin";
+import type {
+  ActivateWorkerAmiResponse,
+  AdminAttemptsResponse,
+  BootWorkerAmiResponse,
+  RegisterWorkerAmiRequest,
+  WorkerAmi,
+  WorkerAmisResponse,
+} from "@/types/admin";
 
 export type ListAttemptsParams = {
   status?: string;
@@ -29,4 +36,39 @@ export async function listAdminAttempts(
   return authenticatedFetch(endpoint, {
     signal: params.signal,
   }) as Promise<AdminAttemptsResponse>;
+}
+
+/** GET /admin/worker-amis */
+export async function listWorkerAmis(
+  signal?: AbortSignal,
+): Promise<WorkerAmisResponse> {
+  return authenticatedFetch("/admin/worker-amis", { signal }) as Promise<WorkerAmisResponse>;
+}
+
+/** POST /admin/worker-amis — "Register a new AMI" */
+export async function registerWorkerAmi(
+  body: RegisterWorkerAmiRequest,
+): Promise<WorkerAmi> {
+  return authenticatedFetch("/admin/worker-amis", {
+    method: "POST",
+    body: JSON.stringify(body),
+  }) as Promise<WorkerAmi>;
+}
+
+/** POST /admin/worker-amis/{amiId}/boot — "Manual worker boot" */
+export async function bootWorkerAmi(
+  amiId: string,
+): Promise<BootWorkerAmiResponse> {
+  return authenticatedFetch(`/admin/worker-amis/${encodeURIComponent(amiId)}/boot`, {
+    method: "POST",
+  }) as Promise<BootWorkerAmiResponse>;
+}
+
+/** POST /admin/worker-amis/{amiId}/activate — "Update configuration" */
+export async function activateWorkerAmi(
+  amiId: string,
+): Promise<ActivateWorkerAmiResponse> {
+  return authenticatedFetch(`/admin/worker-amis/${encodeURIComponent(amiId)}/activate`, {
+    method: "POST",
+  }) as Promise<ActivateWorkerAmiResponse>;
 }

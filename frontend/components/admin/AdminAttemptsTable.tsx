@@ -78,6 +78,7 @@ function DetailPanel({ attempt }: { attempt: AdminAttempt }) {
         <Detail label="User" value={attempt.userId} mono />
         <Detail label="Spot request" value={attempt.spotRequestId} mono />
         <Detail label="Instance" value={attempt.ec2InstanceId} mono />
+        <Detail label="Worker version" value={attempt.workerVersion ?? null} mono />
         <Detail label="Created" value={formatWhen(attempt.createdAt)} />
       </div>
 

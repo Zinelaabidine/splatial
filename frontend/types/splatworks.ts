@@ -75,6 +75,8 @@ export type DashboardScene = {
   progressSubPhase?: string;
   currentIter?: string;
   eta?: string;
+  /** worker.py version that processed this scene. */
+  workerVersion?: string;
   queuePosition?: number;
   queueEta?: string;
   imageCount?: number;
