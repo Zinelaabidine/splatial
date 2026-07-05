@@ -458,6 +458,123 @@ COLMAP_SEQUENTIAL_OVERLAP = os.getenv("COLMAP_SEQUENTIAL_OVERLAP", "10").strip()
 COLMAP_BA_TOLERANCE = os.getenv("COLMAP_BA_TOLERANCE", "0.0001").strip()
 COLMAP_VOCAB_TREE_PATH = os.getenv("COLMAP_VOCAB_TREE_PATH", "").strip()
 
+# ----------------------------
+# COLMAP Configuration (per-message overrides via SQS colmapConfig)
+# ----------------------------
+# Defaults mirror the existing COLMAP_* env vars so omitting colmapConfig
+# entirely reproduces today's behavior exactly.
+DEFAULT_COLMAP_CONFIG: Dict[str, Any] = {
+    "matcher": COLMAP_MATCHER or "sequential",
+    "camera": "OPENCV",
+    "max_image_size": int(COLMAP_MAX_IMAGE_SIZE) if COLMAP_MAX_IMAGE_SIZE else 1600,
+    "max_num_features": int(COLMAP_MAX_NUM_FEATURES) if COLMAP_MAX_NUM_FEATURES else 4096,
+    "sequential_overlap": int(COLMAP_SEQUENTIAL_OVERLAP) if COLMAP_SEQUENTIAL_OVERLAP else 10,
+    "ba_tolerance": float(COLMAP_BA_TOLERANCE) if COLMAP_BA_TOLERANCE else 0.0001,
+    "vocab_tree_path": COLMAP_VOCAB_TREE_PATH,
+    "no_gpu": COLMAP_NO_GPU,
+}
+
+# Known vocab-tree files actually baked onto the worker AMI. A user-supplied
+# vocab_tree_path is only ever used as a lookup key into this allowlist —
+# never passed through to the filesystem/subprocess as a raw path.
+ALLOWED_VOCAB_TREE_PATHS = frozenset({
+    "/opt/colmap/vocab_tree_flickr100K_words256K.bin",
+})
+
+# Camera models COLMAP's feature_extractor accepts for --ImageReader.camera_model.
+ALLOWED_CAMERA_MODELS = frozenset({
+    "OPENCV",
+    "PINHOLE",
+    "SIMPLE_PINHOLE",
+    "SIMPLE_RADIAL",
+    "RADIAL",
+})
+
+ALLOWED_MATCHERS = frozenset({"sequential", "exhaustive", "vocab_tree"})
+
+
+def merge_colmap_config(overrides: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Merge message colmapConfig over DEFAULT_COLMAP_CONFIG (None values ignored)."""
+    merged = dict(DEFAULT_COLMAP_CONFIG)
+    if overrides:
+        for key, value in overrides.items():
+            if value is not None:
+                merged[key] = value
+
+    # Validate enums; fall back to a hardcoded-safe literal on bad input
+    # (never re-trust DEFAULT_COLMAP_CONFIG here, in case an operator set an
+    # invalid COLMAP_MATCHER/COLMAP_* env var — that must not propagate either).
+    if merged.get("matcher") not in ALLOWED_MATCHERS:
+        log.warning("colmapConfig matcher '%s' invalid; using 'sequential'", merged.get("matcher"))
+        merged["matcher"] = "sequential"
+
+    if merged.get("camera") not in ALLOWED_CAMERA_MODELS:
+        log.warning("colmapConfig camera '%s' invalid; using 'OPENCV'", merged.get("camera"))
+        merged["camera"] = "OPENCV"
+
+    if merged["matcher"] == "vocab_tree":
+        vocab_path = merged.get("vocab_tree_path") or ""
+        if vocab_path not in ALLOWED_VOCAB_TREE_PATHS:
+            log.warning(
+                "colmapConfig vocab_tree_path '%s' not in allowlist; falling back to env default",
+                vocab_path,
+            )
+            merged["vocab_tree_path"] = DEFAULT_COLMAP_CONFIG["vocab_tree_path"]
+
+    return merged
+
+
+def colmap_config_to_args(colmap_cfg: Dict[str, Any]) -> List[str]:
+    """
+    Convert a merged colmapConfig dict into a flat argv list for convert.py.
+
+    Rules mirror train_config_to_args: bool True -> flag only, bool False/None -> omit,
+    everything else -> ["--key", str(value)]. Unknown keys are dropped with a warning.
+    """
+    if not colmap_cfg:
+        return []
+
+    ALLOWED_KEYS = [
+        "matcher",
+        "camera",
+        "max_image_size",
+        "max_num_features",
+        "sequential_overlap",
+        "ba_tolerance",
+        "vocab_tree_path",
+        "no_gpu",
+    ]
+
+    # sequential_overlap only means anything for the sequential matcher;
+    # vocab_tree_path only means anything for the vocab_tree matcher.
+    matcher = colmap_cfg.get("matcher")
+
+    args: List[str] = []
+    for key in ALLOWED_KEYS:
+        if key not in colmap_cfg:
+            continue
+        value = colmap_cfg[key]
+        if value is None:
+            continue
+        if key not in ALLOWED_KEYS:
+            log.warning("colmapConfig key '%s' not in allowlist; ignoring", key)
+            continue
+        if key == "sequential_overlap" and matcher != "sequential":
+            continue
+        if key == "vocab_tree_path" and matcher != "vocab_tree":
+            continue
+        if key == "vocab_tree_path" and not value:
+            continue
+
+        flag = f"--{key}"
+        if isinstance(value, bool):
+            if value:
+                args.append(flag)
+            continue
+        args.extend([flag, str(value)])
+
+    return args
+
 
 def _gaussian_splatting_root() -> str:
     """Directory containing train.py / convert.py (co-located with worker.py on AMI)."""
@@ -702,6 +819,7 @@ class WorkItem:
     api_auth_token: str
     api_base_url: Optional[str] = None  # Optional override
     train_config: Optional[Dict[str, Any]] = None  # Optional training parameters
+    colmap_config: Optional[Dict[str, Any]] = None  # Optional COLMAP/convert.py parameters
     delete_poison_message: bool = False  # True when SQS body references a deleted attempt/scene
 
 def parse_message_body(body: str) -> Optional[WorkItem]:
@@ -757,6 +875,12 @@ def parse_message_body(body: str) -> Optional[WorkItem]:
             log.warning("trainConfig is present but not a dict; ignoring it")
             train_config = None
 
+        # Extract colmapConfig if present
+        colmap_config = data.get("colmapConfig") or data.get("colmap_config")
+        if colmap_config is not None and not isinstance(colmap_config, dict):
+            log.warning("colmapConfig is present but not a dict; ignoring it")
+            colmap_config = None
+
         # Infer input_file_type if missing or unknown
         if input_file_type not in ("images", "video", "zip"):
             if re.search(r"\.(zip)$", input_prefix, re.IGNORECASE):
@@ -781,6 +905,7 @@ def parse_message_body(body: str) -> Optional[WorkItem]:
             api_auth_token=str(api_token),
             api_base_url=api_base_url.rstrip("/") if api_base_url else None,
             train_config=train_config,
+            colmap_config=colmap_config,
         )
     except Exception as e:
         log.warning("Error parsing message body: %s", e)
@@ -839,6 +964,13 @@ def train_config_to_args(train_cfg: Dict[str, Any]) -> List[str]:
         "opacity_lr",
         "scaling_lr",
         "rotation_lr",
+        "random_background",
+        "train_test_exp",
+        "exposure_lr_init",
+        "exposure_lr_final",
+        "exposure_lr_delay_steps",
+        "exposure_lr_delay_mult",
+        "antialiasing",
     ]
     
     # Preferred order for deterministic output
@@ -1192,7 +1324,79 @@ def _test_train_config_to_args() -> None:
     assert merge_train_config({"iterations": 30000})["resolution"] == 2
     log.info("merge_train_config self-tests passed")
 
+    # New training keys added for advanced configuration
+    cfg_new = {
+        "random_background": True,
+        "train_test_exp": True,
+        "exposure_lr_init": 0.02,
+        "antialiasing": False,
+    }
+    args_new = train_config_to_args(cfg_new)
+    assert "--random_background" in args_new
+    assert "--train_test_exp" in args_new
+    assert "--exposure_lr_init" in args_new
+    assert args_new[args_new.index("--exposure_lr_init") + 1] == "0.02"
+    assert "--antialiasing" not in args_new  # False -> omitted
+    log.info("train_config_to_args new-key self-tests passed")
+
+
+def _test_colmap_config_to_args() -> None:
+    """Self-tests for colmap_config_to_args / merge_colmap_config conversion."""
+    # Defaults reproduce today's env-var-only behavior when no overrides given
+    assert merge_colmap_config(None) == DEFAULT_COLMAP_CONFIG
+    assert merge_colmap_config({}) == DEFAULT_COLMAP_CONFIG
+
+    # Overrides apply
+    merged = merge_colmap_config({"matcher": "exhaustive", "max_image_size": 2000})
+    assert merged["matcher"] == "exhaustive"
+    assert merged["max_image_size"] == 2000
+    assert merged["max_num_features"] == DEFAULT_COLMAP_CONFIG["max_num_features"]
+
+    # Invalid enum falls back to default rather than propagating bad input
+    bad_matcher = merge_colmap_config({"matcher": "not_a_real_matcher"})
+    assert bad_matcher["matcher"] == DEFAULT_COLMAP_CONFIG["matcher"]
+
+    bad_camera = merge_colmap_config({"camera": "FISHEYE_MADE_UP"})
+    assert bad_camera["camera"] == DEFAULT_COLMAP_CONFIG["camera"]
+
+    # vocab_tree_path must be in the fixed allowlist, otherwise fall back
+    unsafe_path = merge_colmap_config({
+        "matcher": "vocab_tree",
+        "vocab_tree_path": "/tmp/whatever_the_user_sent.bin",
+    })
+    assert unsafe_path["vocab_tree_path"] == DEFAULT_COLMAP_CONFIG["vocab_tree_path"]
+
+    allowed_path = next(iter(ALLOWED_VOCAB_TREE_PATHS))
+    safe_path = merge_colmap_config({"matcher": "vocab_tree", "vocab_tree_path": allowed_path})
+    assert safe_path["vocab_tree_path"] == allowed_path
+
+    # sequential_overlap only emitted for sequential matcher
+    seq_args = colmap_config_to_args(merge_colmap_config({"matcher": "sequential", "sequential_overlap": 15}))
+    assert "--sequential_overlap" in seq_args
+    assert seq_args[seq_args.index("--sequential_overlap") + 1] == "15"
+
+    exhaustive_args = colmap_config_to_args(merge_colmap_config({"matcher": "exhaustive", "sequential_overlap": 15}))
+    assert "--sequential_overlap" not in exhaustive_args
+
+    # vocab_tree_path only emitted for vocab_tree matcher, and only when non-empty
+    vocab_args = colmap_config_to_args(merge_colmap_config({"matcher": "vocab_tree", "vocab_tree_path": allowed_path}))
+    assert "--vocab_tree_path" in vocab_args
+    assert allowed_path in vocab_args
+
+    # no_gpu: bool True -> flag only, False -> omitted entirely
+    no_gpu_args = colmap_config_to_args(merge_colmap_config({"no_gpu": True}))
+    assert "--no_gpu" in no_gpu_args
+    default_args = colmap_config_to_args(DEFAULT_COLMAP_CONFIG)
+    assert "--no_gpu" not in default_args
+
+    # Empty / None config still produces valid (default-backed) args
+    assert colmap_config_to_args({}) == []
+
+    log.info("colmap_config_to_args / merge_colmap_config self-tests passed")
+
+
 _test_train_config_to_args()
+_test_colmap_config_to_args()
 
 # ----------------------------
 # S3 Operations
@@ -2356,6 +2560,7 @@ def run_colmap_subprocess(
     image_count: int = 0,
     progress_callback: Optional[Callable[[float, str, float], None]] = None,
     heartbeat_callback: Optional[callable] = None,
+    colmap_config: Optional[Dict[str, Any]] = None,
 ) -> Tuple[bool, List[str]]:
     """
     Run gaussian-splatting convert.py to produce COLMAP sparse reconstruction in scene_dir.
@@ -2366,6 +2571,9 @@ def run_colmap_subprocess(
         image_count: Number of source images (for step-weighted progress / ETA)
         progress_callback: Called with (local_colmap_percent, sub_step, eta_seconds)
         heartbeat_callback: Deprecated alias; ignored when progress_callback is set
+        colmap_config: Optional per-message COLMAP configuration (SQS colmapConfig).
+            Merged over DEFAULT_COLMAP_CONFIG (itself seeded from COLMAP_* env vars),
+            so omitting this reproduces today's env-var-only behavior exactly.
 
     Returns:
         Tuple[bool, List[str]]: (success, log_tail)
@@ -2377,23 +2585,16 @@ def run_colmap_subprocess(
         log.error(msg)
         return False, [msg]
 
+    effective_colmap_config = merge_colmap_config(colmap_config)
+    colmap_args = colmap_config_to_args(effective_colmap_config)
+    if colmap_config:
+        log.info("COLMAP colmapConfig overrides: %s", colmap_config)
+    log.info("Effective COLMAP config: %s", effective_colmap_config)
+
     cmd = [sys.executable, convert_script, "-s", scene_dir]
     if COLMAP_EXECUTABLE:
         cmd.extend(["--colmap_executable", COLMAP_EXECUTABLE])
-    if COLMAP_NO_GPU:
-        cmd.append("--no_gpu")
-    if COLMAP_MATCHER:
-        cmd.extend(["--matcher", COLMAP_MATCHER])
-    if COLMAP_MAX_IMAGE_SIZE:
-        cmd.extend(["--max_image_size", COLMAP_MAX_IMAGE_SIZE])
-    if COLMAP_MAX_NUM_FEATURES:
-        cmd.extend(["--max_num_features", COLMAP_MAX_NUM_FEATURES])
-    if COLMAP_SEQUENTIAL_OVERLAP:
-        cmd.extend(["--sequential_overlap", COLMAP_SEQUENTIAL_OVERLAP])
-    if COLMAP_BA_TOLERANCE:
-        cmd.extend(["--ba_tolerance", COLMAP_BA_TOLERANCE])
-    if COLMAP_VOCAB_TREE_PATH:
-        cmd.extend(["--vocab_tree_path", COLMAP_VOCAB_TREE_PATH])
+    cmd.extend(colmap_args)
 
     log.info("=" * 60)
     log.info("Starting COLMAP Conversion")
@@ -2404,7 +2605,11 @@ def run_colmap_subprocess(
     log.info("Full command: %s", " ".join(cmd))
 
     resolved_images = resolve_colmap_image_count(scene_dir, image_count)
-    tracker = ColmapProgressTracker(resolved_images, COLMAP_MATCHER, no_gpu=COLMAP_NO_GPU)
+    tracker = ColmapProgressTracker(
+        resolved_images,
+        effective_colmap_config["matcher"],
+        no_gpu=bool(effective_colmap_config["no_gpu"]),
+    )
     log.info(
         "COLMAP estimate: %d image(s), matcher=%s, ~%s total (%ds)",
         resolved_images,
@@ -3195,14 +3400,15 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
         _set_job_progress("COLMAP", overall_percent("COLMAP", 0))
 
         if needs_colmap:
+            effective_colmap_config = merge_colmap_config(item.colmap_config)
             colmap_image_count = resolve_colmap_image_count(
                 extracted_folder,
                 item.input_file_count,
             )
             colmap_estimate_s = estimate_colmap_duration_seconds(
                 colmap_image_count,
-                COLMAP_MATCHER,
-                no_gpu=COLMAP_NO_GPU,
+                effective_colmap_config["matcher"],
+                no_gpu=bool(effective_colmap_config["no_gpu"]),
             )
             log.info(
                 "COLMAP phase: %d image(s), estimated duration ~%s",
@@ -3238,6 +3444,7 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
                 interrupt_event=interrupt_event,
                 image_count=colmap_image_count,
                 progress_callback=colmap_progress,
+                colmap_config=item.colmap_config,
             )
 
             if interrupt_event.is_set() or global_stop.is_set():

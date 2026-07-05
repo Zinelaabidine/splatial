@@ -214,6 +214,77 @@ export interface UploadItem {
 }
 
 // ---------------------------------------------------------------------------
+// Advanced job configuration (POST /jobs/submit)
+//
+// All fields optional — the backend (backend/lib/job-config.js) applies
+// defaults and re-validates everything server-side. This mirrors that
+// allowlist field-for-field; keep both in sync when adding a knob.
+// ---------------------------------------------------------------------------
+
+/** Gaussian Splatting train.py parameters. */
+export interface TrainConfig {
+  data_device?: "cuda" | "cpu";
+  resolution?: number;
+  sh_degree?: number;
+  iterations?: number;
+  densify_from_iter?: number;
+  densify_until_iter?: number;
+  densify_grad_threshold?: number;
+  lambda_dssim?: number;
+  eval?: boolean;
+  white_background?: boolean;
+  test_iterations?: number | number[];
+  save_iterations?: number | number[];
+  checkpoint_iterations?: number | number[];
+  opacity_reset_interval?: number;
+  densification_interval?: number;
+  percent_dense?: number;
+  position_lr_init?: number;
+  position_lr_final?: number;
+  position_lr_delay_mult?: number;
+  position_lr_max_steps?: number;
+  feature_lr?: number;
+  opacity_lr?: number;
+  scaling_lr?: number;
+  rotation_lr?: number;
+  random_background?: boolean;
+  train_test_exp?: boolean;
+  exposure_lr_init?: number;
+  exposure_lr_final?: number;
+  exposure_lr_delay_steps?: number;
+  exposure_lr_delay_mult?: number;
+  antialiasing?: boolean;
+}
+
+export type ColmapMatcher = "sequential" | "exhaustive" | "vocab_tree";
+export type ColmapCamera = "OPENCV" | "PINHOLE" | "SIMPLE_PINHOLE" | "SIMPLE_RADIAL" | "RADIAL";
+
+/** COLMAP / convert.py parameters. */
+export interface ColmapConfig {
+  matcher?: ColmapMatcher;
+  camera?: ColmapCamera;
+  max_image_size?: number;
+  max_num_features?: number;
+  sequential_overlap?: number;
+  ba_tolerance?: number;
+  /** Required when matcher === "vocab_tree"; must be one of a fixed AMI-baked allowlist. */
+  vocab_tree_path?: string;
+  no_gpu?: boolean;
+}
+
+export interface SubmitJobRequest {
+  sceneId: string;
+  trainConfig?: TrainConfig;
+  colmapConfig?: ColmapConfig;
+}
+
+export interface SubmitJobResponse {
+  sceneId: string;
+  attemptId: string;
+  status: "QUEUED";
+}
+
+// ---------------------------------------------------------------------------
 // Scene Management MVP  (POST/GET/DELETE /api/v1/scenes)
 // ---------------------------------------------------------------------------
 export type InputType = "video" | "images" | "ply";

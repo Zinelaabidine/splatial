@@ -1,17 +1,32 @@
 "use client";
 
 import { authenticatedFetch } from "@/services/apiClient";
-import type { CancelJobResponse } from "@/types/api";
+import type {
+  CancelJobResponse,
+  ColmapConfig,
+  SubmitJobResponse,
+  TrainConfig,
+} from "@/types/api";
+
+export interface SubmitJobOptions {
+  trainConfig?: TrainConfig;
+  colmapConfig?: ColmapConfig;
+}
 
 export async function submitJob(
   sceneId: string,
+  options?: SubmitJobOptions,
   signal?: AbortSignal,
-): Promise<void> {
-  await authenticatedFetch("/jobs/submit", {
+): Promise<SubmitJobResponse> {
+  return authenticatedFetch("/jobs/submit", {
     method: "POST",
-    body: JSON.stringify({ sceneId }),
+    body: JSON.stringify({
+      sceneId,
+      ...(options?.trainConfig ? { trainConfig: options.trainConfig } : {}),
+      ...(options?.colmapConfig ? { colmapConfig: options.colmapConfig } : {}),
+    }),
     signal,
-  });
+  }) as Promise<SubmitJobResponse>;
 }
 
 export async function cancelJob(

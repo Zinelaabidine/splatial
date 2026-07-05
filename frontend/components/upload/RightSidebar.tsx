@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   AlertCircle,
   CheckCircle2,
   Image as ImageIcon,
   Loader2,
   Play,
+  Settings2,
   Trash2,
   X,
   XCircle,
@@ -14,15 +15,17 @@ import {
 
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
+import AdvancedSettingsPanel from "@/components/upload/AdvancedSettingsPanel";
 import { cn } from "@/lib/utils";
-import type { UploadItem, UploadStage } from "@/types/api";
+import type { ColmapConfig, TrainConfig, UploadItem, UploadStage } from "@/types/api";
+import type { SubmitJobOptions } from "@/services/jobsService";
 
 interface RightSidebarProps {
   uploads: UploadItem[];
   onCancel: (id: string) => void;
   onRemove: (id: string) => void;
   onClearTerminated: () => void;
-  onSubmit: (id: string) => void;
+  onSubmit: (id: string, options?: SubmitJobOptions) => void;
 }
 
 const ACTIVE_STAGES: ReadonlySet<UploadStage> = new Set([
@@ -251,11 +254,25 @@ function RecentTile({
 }: {
   item: UploadItem;
   onRemove: (id: string) => void;
-  onSubmit: (id: string) => void;
+  onSubmit: (id: string, options?: SubmitJobOptions) => void;
 }) {
   const ok = item.stage === "ready";
   const canceled = item.stage === "canceled";
   const uploaded = item.stage === "uploaded";
+
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [trainConfig, setTrainConfig] = useState<TrainConfig>({});
+  const [colmapConfig, setColmapConfig] = useState<ColmapConfig>({});
+
+  const hasOverrides =
+    Object.keys(trainConfig).length > 0 || Object.keys(colmapConfig).length > 0;
+
+  const handleSubmit = () => {
+    onSubmit(
+      item.id,
+      hasOverrides ? { trainConfig, colmapConfig } : undefined,
+    );
+  };
 
   return (
     <li className="group relative overflow-hidden rounded-xl border border-slate-100 bg-white transition-colors hover:border-slate-200">
@@ -319,14 +336,38 @@ function RecentTile({
           </p>
         ) : null}
         {uploaded ? (
-          <button
-            type="button"
-            onClick={() => onSubmit(item.id)}
-            className="mt-1.5 flex w-full items-center justify-center gap-1 rounded-md bg-indigo-600 px-2 py-1 text-[10px] font-semibold text-white hover:bg-indigo-700 active:bg-indigo-800"
-          >
-            <Play className="h-2.5 w-2.5" />
-            Submit
-          </button>
+          <div className="mt-1.5 flex flex-col gap-1.5">
+            <div className="flex gap-1">
+              <button
+                type="button"
+                onClick={handleSubmit}
+                className="flex flex-1 items-center justify-center gap-1 rounded-md bg-indigo-600 px-2 py-1 text-[10px] font-semibold text-white hover:bg-indigo-700 active:bg-indigo-800"
+              >
+                <Play className="h-2.5 w-2.5" />
+                Submit
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowAdvanced((v) => !v)}
+                aria-expanded={showAdvanced}
+                aria-label="Advanced settings"
+                className={cn(
+                  "flex items-center justify-center rounded-md border px-1.5 py-1 text-slate-500 hover:bg-slate-50 hover:text-slate-700",
+                  showAdvanced ? "border-indigo-200 bg-indigo-50 text-indigo-600" : "border-slate-200",
+                )}
+              >
+                <Settings2 className="h-2.5 w-2.5" />
+              </button>
+            </div>
+            {showAdvanced ? (
+              <AdvancedSettingsPanel
+                trainConfig={trainConfig}
+                colmapConfig={colmapConfig}
+                onTrainConfigChange={setTrainConfig}
+                onColmapConfigChange={setColmapConfig}
+              />
+            ) : null}
+          </div>
         ) : null}
       </div>
     </li>

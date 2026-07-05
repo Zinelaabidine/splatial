@@ -6,6 +6,7 @@ const { S3Client, HeadObjectCommand } = require("@aws-sdk/client-s3");
 const { randomUUID } = require("crypto");
 const response = require("../lib/response");
 const logger = require("../lib/logger");
+const { validateTrainConfig, validateColmapConfig } = require("../lib/job-config");
 
 const sqs   = new SQSClient({});
 const dynamo = new DynamoDBClient({});
@@ -18,14 +19,6 @@ const OUTPUT_BUCKET  = process.env.SPLAT_SCENES_BUCKET_NAME;
 const API_BASE_URL   = (process.env.API_BASE_URL ?? "").replace(/\/$/, "");
 const MAX_ATTEMPTS   = 3;
 
-/** Default training preset; request trainConfig keys override these. */
-const DEFAULT_TRAIN_CONFIG = Object.freeze({
-  iterations:         15000,
-  densify_until_iter: 7000,
-  resolution:         2,
-  sh_degree:          2,
-});
-
 const SUBMITTABLE = new Set(["READY", "FAILED", "UPLOADED"]);
 
 /**
@@ -34,9 +27,11 @@ const SUBMITTABLE = new Set(["READY", "FAILED", "UPLOADED"]);
  * Re-queues an existing scene for 3DGS training. Useful for scenes in
  * READY, FAILED, or UPLOADED state.
  *
- * Request body: { "sceneId": "...", "trainConfig"?: {} }
+ * Request body: { "sceneId": "...", "trainConfig"?: {}, "colmapConfig"?: {} }
  *
- * When trainConfig is omitted, defaults are applied (15k iterations, resolution 2, etc.).
+ * When trainConfig/colmapConfig are omitted, defaults are applied (see lib/job-config.js).
+ * Both are validated against a fixed allowlist — unrecognized keys or out-of-range
+ * values are rejected with a 400, never silently dropped or passed through.
  *
  * Success response (202): { "sceneId": "...", "attemptId": "...", "status": "QUEUED" }
  */
@@ -53,15 +48,20 @@ exports.handler = async (event) => {
     return response(400, { error: "Invalid JSON body" });
   }
 
-  const { sceneId, trainConfig } = body;
+  const { sceneId, trainConfig, colmapConfig } = body;
   if (!sceneId) return response(400, { error: "Missing required field: sceneId" });
 
-  if (trainConfig !== undefined &&
-      (typeof trainConfig !== "object" || Array.isArray(trainConfig) || trainConfig === null)) {
-    return response(400, { error: "trainConfig must be a plain object" });
+  const trainResult = validateTrainConfig(trainConfig);
+  if (!trainResult.ok) {
+    return response(400, { error: "Invalid trainConfig", details: trainResult.errors });
   }
+  const resolvedTrainConfig = trainResult.value;
 
-  const resolvedTrainConfig = { ...DEFAULT_TRAIN_CONFIG, ...(trainConfig ?? {}) };
+  const colmapResult = validateColmapConfig(colmapConfig);
+  if (!colmapResult.ok) {
+    return response(400, { error: "Invalid colmapConfig", details: colmapResult.errors });
+  }
+  const resolvedColmapConfig = colmapResult.value;
 
   const { Item } = await dynamo.send(
     new GetItemCommand({ TableName: TABLE, Key: { scene_id: { S: sceneId } } })
@@ -142,6 +142,10 @@ exports.handler = async (event) => {
         worker_token:    { S: workerToken },
         created_at:      { S: now },
         updated_at:      { S: now },
+        // Stored as JSON strings (not DynamoDB Map) so the resolved config is
+        // trivial to display as-is and to diff between attempts/reruns.
+        train_config:    { S: JSON.stringify(resolvedTrainConfig) },
+        colmap_config:   { S: JSON.stringify(resolvedColmapConfig) },
       },
     })
   );
@@ -173,6 +177,7 @@ exports.handler = async (event) => {
         queuedAt:       now,
         maxAttempts:    MAX_ATTEMPTS,
         trainConfig:    resolvedTrainConfig,
+        colmapConfig:   resolvedColmapConfig,
       }),
     })
   );
@@ -181,7 +186,11 @@ exports.handler = async (event) => {
   log.event("job.submitted", {
     sceneId,
     attemptId,
-    data: { attempt_number: attemptNumber, train_config: resolvedTrainConfig },
+    data: {
+      attempt_number: attemptNumber,
+      train_config: resolvedTrainConfig,
+      colmap_config: resolvedColmapConfig,
+    },
   });
 
   return response(202, { sceneId, attemptId, status: "QUEUED" });

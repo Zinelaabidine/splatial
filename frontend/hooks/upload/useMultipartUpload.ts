@@ -4,7 +4,7 @@ import { fetchAuthSession } from "aws-amplify/auth";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { getApiBaseUrl } from "@/api/baseUrl";
-import { submitJob as submitSceneJob } from "@/services/jobsService";
+import { submitJob as submitSceneJob, type SubmitJobOptions } from "@/services/jobsService";
 import {
   deleteSceneLegacy,
   getSceneStatus,
@@ -51,8 +51,8 @@ export interface UseMultipartUploadResult {
   remove: (id: string) => void;
   /** Drop every upload whose stage is `ready` / `failed` / `canceled`. */
   clearTerminated: () => void;
-  /** Queue an uploaded scene for 3DGS processing. */
-  submitJob: (id: string) => Promise<void>;
+  /** Queue an uploaded scene for 3DGS processing. Optional advanced config overrides. */
+  submitJob: (id: string, options?: SubmitJobOptions) => Promise<void>;
 }
 
 const TERMINAL_STAGES: ReadonlySet<UploadStage> = new Set([
@@ -407,7 +407,7 @@ export function useMultipartUpload(
   );
 
   const submitJob = useCallback(
-    async (id: string): Promise<void> => {
+    async (id: string, options?: SubmitJobOptions): Promise<void> => {
       const item = uploadsRef.current.find((u) => u.id === id);
       if (!item?.sceneId) return;
 
@@ -417,7 +417,7 @@ export function useMultipartUpload(
       patch(id, { stage: "processing", error: undefined });
 
       try {
-        await submitSceneJob(item.sceneId, controller.signal);
+        await submitSceneJob(item.sceneId, options, controller.signal);
 
         await pollScene(id, item.sceneId, controller);
       } catch (err) {

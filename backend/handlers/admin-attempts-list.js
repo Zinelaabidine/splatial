@@ -17,6 +17,16 @@ const MAX_LIMIT = 100;
 const SCAN_PAGE_SIZE = 100; // items scanned per DynamoDB page (pre-filter)
 const MAX_SCAN_PAGES = 10; // safety cap on table scans per request
 
+/** Parse a stored JSON-string config attribute; never throw on malformed data. */
+function parseConfigAttr(attr) {
+  if (!attr?.S) return null;
+  try {
+    return JSON.parse(attr.S);
+  } catch {
+    return null;
+  }
+}
+
 function encodeCursor(key) {
   if (!key) return undefined;
   return Buffer.from(JSON.stringify(key), "utf8").toString("base64");
@@ -48,6 +58,8 @@ function mapAttempt(item) {
     errorMessage: item.error_message?.S ?? null,
     createdAt: item.created_at?.S ?? null,
     updatedAt: item.updated_at?.S ?? null,
+    trainConfig: parseConfigAttr(item.train_config),
+    colmapConfig: parseConfigAttr(item.colmap_config),
     ...mapProgressFromItem(item),
   };
 }
