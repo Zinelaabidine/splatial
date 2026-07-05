@@ -8,7 +8,7 @@ import {
   isActiveSceneStatus,
   POLL_INTERVAL_MS,
 } from "@/lib/scenes/sceneMappers";
-import { cancelJob, submitJob } from "@/services/jobsService";
+import { cancelJob, submitJob, type SubmitJobOptions } from "@/services/jobsService";
 import { deleteScene, listScenes, updateScene } from "@/services/scenesService";
 import { ApiRequestError } from "@/lib/api/apiErrors";
 import { sceneViewerUrl } from "@/lib/scenes/viewerUrls";
@@ -91,7 +91,7 @@ export function useScenesDashboardGrid(search: string) {
   };
 
   const submitScene = useCallback(
-    async (scene: DashboardScene) => {
+    async (scene: DashboardScene, options?: SubmitJobOptions) => {
       if (!scene.sceneId || submittingId) return;
       setSubmittingId(scene.sceneId);
       setActionError(null);
@@ -109,7 +109,7 @@ export function useScenesDashboardGrid(search: string) {
         ),
       );
       try {
-        await submitJob(scene.sceneId);
+        await submitJob(scene.sceneId, options);
         await fetchScenes(true);
       } catch (err) {
         console.error("[useScenesDashboardGrid] submit failed", err);

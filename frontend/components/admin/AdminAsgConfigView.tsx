@@ -14,6 +14,9 @@ import {
   ExternalLink,
   Copy,
   Check,
+  Plus,
+  Trash2,
+  Pencil,
 } from "lucide-react";
 
 import { useIsAdmin } from "@/lib/auth/useIsAdmin";
@@ -23,11 +26,15 @@ import {
   bootWorker,
   releaseWorker,
   getSpotPrice,
+  listWorkerAmis,
+  createWorkerAmi,
+  deleteWorkerAmi,
 } from "@/services/adminService";
 import type {
   AdminAsgConfigResponse,
   AdminAsgInstance,
   SpotPriceResponse,
+  WorkerAmi,
 } from "@/types/admin";
 
 function formatWhen(iso: string | null): string {
@@ -150,6 +157,259 @@ function InstancesPanel({ instances }: { instances: AdminAsgInstance[] }) {
             ))}
           </tbody>
         </table>
+      )}
+    </div>
+  );
+}
+
+const AMI_ID_INPUT_RE = /^ami-[a-f0-9]{8,17}$/;
+
+/**
+ * Dropdown of registered worker AMIs (the DB-backed registry — never a live
+ * AWS catalog listing) plus an inline "register a new AMI" mini-form and a
+ * manual-entry escape hatch for an AMI that hasn't been registered yet.
+ */
+function AmiPicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (amiId: string) => void;
+}) {
+  const [amis, setAmis] = useState<WorkerAmi[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [manualEntry, setManualEntry] = useState(false);
+
+  const [showRegisterForm, setShowRegisterForm] = useState(false);
+  const [newAmiId, setNewAmiId] = useState("");
+  const [newLabel, setNewLabel] = useState("");
+  const [newDescription, setNewDescription] = useState("");
+  const [registering, setRegistering] = useState(false);
+  const [registerError, setRegisterError] = useState<string | null>(null);
+
+  const [showManage, setShowManage] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const abortRef = useRef<AbortController | null>(null);
+
+  const load = useCallback(async () => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const res = await listWorkerAmis(controller.signal);
+      setAmis(res.items);
+    } catch (e) {
+      if (controller.signal.aborted) return;
+      setLoadError(e instanceof Error ? e.message : "Failed to load AMI registry");
+    } finally {
+      if (!controller.signal.aborted) setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    load();
+    return () => abortRef.current?.abort();
+  }, [load]);
+
+  // If the current value isn't in the registry (e.g. loaded from launch
+  // template history, or a fresh manual entry), fall back to manual mode so
+  // it's still visible/editable rather than silently reverting to blank.
+  useEffect(() => {
+    if (!loading && value && !amis.some((a) => a.amiId === value)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setManualEntry(true);
+    }
+  }, [amis, loading, value]);
+
+  async function handleRegister() {
+    setRegistering(true);
+    setRegisterError(null);
+    try {
+      const created = await createWorkerAmi({
+        amiId: newAmiId.trim(),
+        label: newLabel.trim(),
+        description: newDescription.trim() || undefined,
+      });
+      setAmis((prev) => [created, ...prev]);
+      onChange(created.amiId);
+      setManualEntry(false);
+      setShowRegisterForm(false);
+      setNewAmiId("");
+      setNewLabel("");
+      setNewDescription("");
+    } catch (e) {
+      setRegisterError(e instanceof Error ? e.message : "Failed to register AMI");
+    } finally {
+      setRegistering(false);
+    }
+  }
+
+  async function handleDelete(amiId: string) {
+    setDeletingId(amiId);
+    try {
+      await deleteWorkerAmi(amiId);
+      setAmis((prev) => prev.filter((a) => a.amiId !== amiId));
+    } catch {
+      /* best-effort — leave the entry in place if delete fails */
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between">
+        <label className="block text-xs uppercase tracking-wide text-[#808080]">
+          AMI
+        </label>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setManualEntry((v) => !v)}
+            className="text-xs text-[#7fa8e0] hover:underline"
+          >
+            {manualEntry ? "Choose from list" : "Enter AMI ID manually"}
+          </button>
+        </div>
+      </div>
+
+      {manualEntry ? (
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="ami-xxxxxxxxxxxxxxxxx"
+          className="w-full rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-2 font-mono text-sm text-[#e8e8e8] outline-none focus:border-[#3b82f6]"
+        />
+      ) : (
+        <select
+          value={amis.some((a) => a.amiId === value) ? value : ""}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={loading}
+          className="w-full rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-2 font-mono text-sm text-[#e8e8e8] outline-none focus:border-[#3b82f6] disabled:opacity-50"
+        >
+          <option value="" disabled>
+            {loading ? "Loading…" : "Select a registered AMI"}
+          </option>
+          {amis.map((a) => (
+            <option key={a.amiId} value={a.amiId}>
+              {a.label} — {a.amiId}
+              {a.architecture ? ` (${a.architecture})` : ""}
+            </option>
+          ))}
+        </select>
+      )}
+
+      {loadError && (
+        <p className="mt-1 text-xs text-[#f0a8a8]">{loadError}</p>
+      )}
+
+      <div className="mt-1.5 flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => setShowRegisterForm((v) => !v)}
+          className="inline-flex items-center gap-1 text-xs text-[#7fa8e0] hover:underline"
+        >
+          <Plus className="h-3 w-3" />
+          Register a new AMI
+        </button>
+        {amis.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowManage((v) => !v)}
+            className="inline-flex items-center gap-1 text-xs text-[#7fa8e0] hover:underline"
+          >
+            <Pencil className="h-3 w-3" />
+            Manage list ({amis.length})
+          </button>
+        )}
+      </div>
+
+      {showRegisterForm && (
+        <div className="mt-3 rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-3">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <input
+              value={newAmiId}
+              onChange={(e) => setNewAmiId(e.target.value)}
+              placeholder="ami-xxxxxxxxxxxxxxxxx"
+              className="rounded-lg border border-[#2a2a2a] bg-[#141414] px-3 py-2 font-mono text-xs text-[#e8e8e8] outline-none focus:border-[#3b82f6]"
+            />
+            <input
+              value={newLabel}
+              onChange={(e) => setNewLabel(e.target.value)}
+              placeholder="Label, e.g. v12 - depth priors"
+              className="rounded-lg border border-[#2a2a2a] bg-[#141414] px-3 py-2 text-xs text-[#e8e8e8] outline-none focus:border-[#3b82f6]"
+            />
+          </div>
+          <input
+            value={newDescription}
+            onChange={(e) => setNewDescription(e.target.value)}
+            placeholder="Description (optional)"
+            className="mt-2 w-full rounded-lg border border-[#2a2a2a] bg-[#141414] px-3 py-2 text-xs text-[#e8e8e8] outline-none focus:border-[#3b82f6]"
+          />
+          <p className="mt-1.5 text-[11px] text-[#707070]">
+            Checked against EC2 once (existence + state) before it&apos;s saved to the
+            registry — this doesn&apos;t list or browse AWS&apos;s AMI catalog.
+          </p>
+          {registerError && (
+            <p className="mt-1.5 text-xs text-[#f0a8a8]">{registerError}</p>
+          )}
+          <div className="mt-2 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setShowRegisterForm(false)}
+              className="rounded-lg border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#e8e8e8] hover:bg-[#1f1f1f]"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={
+                registering ||
+                !AMI_ID_INPUT_RE.test(newAmiId.trim()) ||
+                !newLabel.trim()
+              }
+              onClick={handleRegister}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#3b82f6] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#2f6fd6] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {registering && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              Register
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showManage && amis.length > 0 && (
+        <ul className="mt-3 divide-y divide-[#242424] rounded-lg border border-[#2a2a2a]">
+          {amis.map((a) => (
+            <li
+              key={a.amiId}
+              className="flex items-center justify-between gap-2 px-3 py-2 text-xs"
+            >
+              <div className="min-w-0">
+                <div className="truncate text-[#e8e8e8]">{a.label}</div>
+                <div className="truncate font-mono text-[#808080]">{a.amiId}</div>
+              </div>
+              <button
+                type="button"
+                disabled={deletingId === a.amiId}
+                onClick={() => handleDelete(a.amiId)}
+                className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-[#2a2a2a] px-2 py-1 text-[#f0a8a8] hover:bg-[#2a1414] disabled:opacity-50"
+              >
+                {deletingId === a.amiId ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3 w-3" />
+                )}
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );
@@ -530,15 +790,7 @@ export default function AdminAsgConfigView() {
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <label className="mb-1 block text-xs uppercase tracking-wide text-[#808080]">
-                  AMI ID
-                </label>
-                <input
-                  value={amiId}
-                  onChange={(e) => setAmiId(e.target.value)}
-                  placeholder="ami-xxxxxxxxxxxxxxxxx"
-                  className="w-full rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-2 font-mono text-sm text-[#e8e8e8] outline-none focus:border-[#3b82f6]"
-                />
+                <AmiPicker value={amiId} onChange={setAmiId} />
                 {config.current.amiName && (
                   <p className="mt-1 truncate text-xs text-[#707070]">
                     Current: {config.current.amiName} ({config.current.architecture ?? "—"})

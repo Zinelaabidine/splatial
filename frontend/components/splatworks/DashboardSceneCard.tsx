@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { MoreVertical, Pencil, RefreshCw, Send, Trash2, XCircle } from "lucide-react";
+import { MoreVertical, Pencil, RefreshCw, Send, Settings2, Trash2, XCircle } from "lucide-react";
 
 import PointCloudThumbnail from "@/components/splatworks/PointCloudThumbnail";
 import CommentCountBadge from "@/components/splatworks/CommentCountBadge";
@@ -10,11 +10,13 @@ import ReactionTotalBadge from "@/components/splatworks/ReactionTotalBadge";
 import StatusDot, { STATUS_LABELS } from "@/components/splatworks/StatusDot";
 import SceneTaxonomyDisplay from "@/components/features/scenes/SceneTaxonomyDisplay";
 import { SceneVisibilityBadge, SceneVisibilityToggle } from "@/components/features/scenes/SceneVisibilityControl";
+import AdvancedSettingsPanel from "@/components/upload/AdvancedSettingsPanel";
 import { Button } from "@/components/ui/button";
 import { formatProgressSubPhase } from "@/lib/scenes/progressLabels";
 import { isActiveGpuJobStatus } from "@/lib/scenes/sceneMappers";
 import { cn } from "@/lib/utils";
-import type { SceneVisibility } from "@/types/api";
+import type { SubmitJobOptions } from "@/services/jobsService";
+import type { ColmapConfig, SceneVisibility, TrainConfig } from "@/types/api";
 import type { DashboardScene, SceneStatus } from "@/types/splatworks";
 
 const DARK_STATUS: Record<
@@ -52,7 +54,7 @@ const DARK_STATUS: Record<
 type DashboardSceneCardProps = {
   scene: DashboardScene;
   onClick: (scene: DashboardScene) => void;
-  onSubmitScene?: (scene: DashboardScene) => void;
+  onSubmitScene?: (scene: DashboardScene, options?: SubmitJobOptions) => void;
   onCancelScene?: (scene: DashboardScene) => void;
   onDeleteScene?: (scene: DashboardScene) => void;
   onEditScene?: (scene: DashboardScene) => void;
@@ -89,6 +91,20 @@ export default function DashboardSceneCard({
   const isViewable = scene.status === "completed";
   const showSubmit = canSubmitScene(scene);
   const showCancel = isActiveGpuJobStatus(scene.apiStatus);
+
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [trainConfig, setTrainConfig] = useState<TrainConfig>({});
+  const [colmapConfig, setColmapConfig] = useState<ColmapConfig>({});
+  const hasOverrides =
+    Object.values(trainConfig).some((v) => v !== undefined) ||
+    Object.values(colmapConfig).some((v) => v !== undefined);
+
+  const handleSubmitClick = () => {
+    onSubmitScene?.(
+      scene,
+      hasOverrides ? { trainConfig, colmapConfig } : undefined,
+    );
+  };
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -263,27 +279,51 @@ export default function DashboardSceneCard({
           </Button>
         )}
         {showSubmit && (
-          <Button
-            size="sm"
-            disabled={submitting}
-            onClick={(e) => {
-              e.stopPropagation();
-              onSubmitScene?.(scene);
-            }}
-            className={cn(
-              "mt-3 w-full rounded-full border text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.25)] backdrop-blur-sm",
-              scene.apiStatus === "FAILED"
-                ? "border-rose-300/40 bg-gradient-to-r from-rose-500/40 to-amber-500/40 hover:from-rose-500/55 hover:to-amber-500/55"
-                : "border-white/15 bg-gradient-to-r from-emerald-500/50 to-teal-500/50 hover:from-emerald-500/65 hover:to-teal-500/65",
+          <div className="mt-3" onClick={(e) => e.stopPropagation()}>
+            <div className="flex gap-1.5">
+              <Button
+                size="sm"
+                disabled={submitting}
+                onClick={handleSubmitClick}
+                className={cn(
+                  "flex-1 rounded-full border text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.25)] backdrop-blur-sm",
+                  scene.apiStatus === "FAILED"
+                    ? "border-rose-300/40 bg-gradient-to-r from-rose-500/40 to-amber-500/40 hover:from-rose-500/55 hover:to-amber-500/55"
+                    : "border-white/15 bg-gradient-to-r from-emerald-500/50 to-teal-500/50 hover:from-emerald-500/65 hover:to-teal-500/65",
+                )}
+              >
+                <Send data-icon="inline-start" />
+                {submitting
+                  ? "Submitting…"
+                  : scene.apiStatus === "FAILED"
+                    ? "Retry training"
+                    : "Submit for processing"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                aria-expanded={showAdvanced}
+                aria-label="Advanced training settings"
+                onClick={() => setShowAdvanced((v) => !v)}
+                className={cn(
+                  "rounded-full border-white/15 bg-white/5 px-2.5 text-[#c3ccdb] backdrop-blur-sm hover:bg-white/10 hover:text-white",
+                  showAdvanced && "bg-white/15 text-white",
+                )}
+              >
+                <Settings2 />
+              </Button>
+            </div>
+            {showAdvanced && (
+              <div className="sw-glass mt-2 rounded-xl bg-black/20 p-2">
+                <AdvancedSettingsPanel
+                  trainConfig={trainConfig}
+                  colmapConfig={colmapConfig}
+                  onTrainConfigChange={setTrainConfig}
+                  onColmapConfigChange={setColmapConfig}
+                />
+              </div>
             )}
-          >
-            <Send data-icon="inline-start" />
-            {submitting
-              ? "Submitting…"
-              : scene.apiStatus === "FAILED"
-                ? "Retry training"
-                : "Submit for processing"}
-          </Button>
+          </div>
         )}
       </div>
     </article>

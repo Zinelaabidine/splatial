@@ -1,5 +1,6 @@
 "use client";
 
+import { JOB_PRESETS, matchingPresetId } from "@/lib/scenes/jobPresets";
 import { cn } from "@/lib/utils";
 import type { ColmapConfig, TrainConfig } from "@/types/api";
 
@@ -24,13 +25,15 @@ type NumberField<T> = {
   min?: number;
   max?: number;
   step?: number;
-  placeholder?: string;
+  /** The value actually used server-side when this field is left blank. */
+  default: number;
 };
 
 type BoolField<T> = {
   key: keyof T;
   label: string;
   type: "bool";
+  default: boolean;
 };
 
 type SelectField<T> = {
@@ -38,55 +41,61 @@ type SelectField<T> = {
   label: string;
   type: "select";
   options: readonly string[];
+  default: string;
 };
 
 type FieldDef<T> = NumberField<T> | BoolField<T> | SelectField<T>;
 
+// Defaults below mirror, field-for-field:
+//  - COLMAP: worker/worker.py DEFAULT_COLMAP_CONFIG / backend/lib/job-config.js
+//  - Training: the Splatial preset (worker/worker.py DEFAULT_TRAIN_CONFIG) for
+//    iterations/densify_until_iter/resolution/sh_degree, and upstream train.py's
+//    own argparse defaults (arguments/__init__.py) for everything else.
 const COLMAP_FIELDS: FieldDef<ColmapConfig>[] = [
-  { key: "matcher", label: "Matcher", type: "select", options: ["sequential", "exhaustive", "vocab_tree"] },
-  { key: "camera", label: "Camera model", type: "select", options: ["OPENCV", "PINHOLE", "SIMPLE_PINHOLE", "SIMPLE_RADIAL", "RADIAL"] },
-  { key: "max_image_size", label: "Max image size (px)", type: "number", min: 512, max: 3200, step: 1 },
-  { key: "max_num_features", label: "Max SIFT features", type: "number", min: 512, max: 16384, step: 1 },
-  { key: "sequential_overlap", label: "Sequential overlap", type: "number", min: 1, max: 50, step: 1 },
-  { key: "ba_tolerance", label: "Bundle-adjustment tolerance", type: "number", min: 0, max: 1, step: 0.0001 },
-  { key: "no_gpu", label: "Force CPU (no GPU)", type: "bool" },
+  { key: "matcher", label: "Matcher", type: "select", options: ["sequential", "exhaustive", "vocab_tree"], default: "sequential" },
+  { key: "camera", label: "Camera model", type: "select", options: ["OPENCV", "PINHOLE", "SIMPLE_PINHOLE", "SIMPLE_RADIAL", "RADIAL"], default: "OPENCV" },
+  { key: "max_image_size", label: "Max image size (px)", type: "number", min: 512, max: 3200, step: 1, default: 1600 },
+  { key: "max_num_features", label: "Max SIFT features", type: "number", min: 512, max: 16384, step: 1, default: 4096 },
+  { key: "sequential_overlap", label: "Sequential overlap", type: "number", min: 1, max: 50, step: 1, default: 10 },
+  { key: "ba_tolerance", label: "Bundle-adjustment tolerance", type: "number", min: 0, max: 1, step: 0.0001, default: 0.0001 },
+  { key: "no_gpu", label: "Force CPU (no GPU)", type: "bool", default: false },
 ];
 
 const TRAIN_CORE_FIELDS: FieldDef<TrainConfig>[] = [
-  { key: "iterations", label: "Iterations", type: "number", min: 100, max: 100000, step: 100 },
-  { key: "sh_degree", label: "SH degree", type: "number", min: 0, max: 3, step: 1 },
-  { key: "resolution", label: "Resolution downscale", type: "number", min: -1, max: 8, step: 1 },
-  { key: "densify_from_iter", label: "Densify from iter", type: "number", min: 0, max: 100000, step: 100 },
-  { key: "densify_until_iter", label: "Densify until iter", type: "number", min: 0, max: 100000, step: 100 },
-  { key: "densify_grad_threshold", label: "Densify grad threshold", type: "number", min: 0, max: 1, step: 0.0001 },
-  { key: "lambda_dssim", label: "SSIM weight (lambda_dssim)", type: "number", min: 0, max: 1, step: 0.01 },
-  { key: "percent_dense", label: "Percent dense", type: "number", min: 0, max: 1, step: 0.01 },
-  { key: "eval", label: "Hold out test split (eval)", type: "bool" },
-  { key: "white_background", label: "White background", type: "bool" },
-  { key: "random_background", label: "Randomize background", type: "bool" },
-  { key: "data_device", label: "Data device", type: "select", options: ["cuda", "cpu"] },
+  { key: "iterations", label: "Iterations", type: "number", min: 100, max: 100000, step: 100, default: 15000 },
+  { key: "sh_degree", label: "SH degree", type: "number", min: 0, max: 3, step: 1, default: 2 },
+  { key: "resolution", label: "Resolution downscale", type: "number", min: -1, max: 8, step: 1, default: 2 },
+  { key: "densify_from_iter", label: "Densify from iter", type: "number", min: 0, max: 100000, step: 100, default: 500 },
+  { key: "densify_until_iter", label: "Densify until iter", type: "number", min: 0, max: 100000, step: 100, default: 7000 },
+  { key: "densify_grad_threshold", label: "Densify grad threshold", type: "number", min: 0, max: 1, step: 0.0001, default: 0.0002 },
+  { key: "lambda_dssim", label: "SSIM weight (lambda_dssim)", type: "number", min: 0, max: 1, step: 0.01, default: 0.2 },
+  { key: "percent_dense", label: "Percent dense", type: "number", min: 0, max: 1, step: 0.01, default: 0.01 },
+  { key: "eval", label: "Hold out test split (eval)", type: "bool", default: false },
+  { key: "white_background", label: "White background", type: "bool", default: false },
+  { key: "random_background", label: "Randomize background", type: "bool", default: false },
+  { key: "data_device", label: "Data device", type: "select", options: ["cuda", "cpu"], default: "cuda" },
 ];
 
 const TRAIN_LR_FIELDS: FieldDef<TrainConfig>[] = [
-  { key: "position_lr_init", label: "Position LR init", type: "number", min: 0, max: 1, step: 0.00001 },
-  { key: "position_lr_final", label: "Position LR final", type: "number", min: 0, max: 1, step: 0.0000001 },
-  { key: "position_lr_delay_mult", label: "Position LR delay mult", type: "number", min: 0, max: 1, step: 0.001 },
-  { key: "position_lr_max_steps", label: "Position LR max steps", type: "number", min: 1, max: 100000, step: 100 },
-  { key: "feature_lr", label: "Feature LR", type: "number", min: 0, max: 1, step: 0.0001 },
-  { key: "opacity_lr", label: "Opacity LR", type: "number", min: 0, max: 1, step: 0.001 },
-  { key: "scaling_lr", label: "Scaling LR", type: "number", min: 0, max: 1, step: 0.0001 },
-  { key: "rotation_lr", label: "Rotation LR", type: "number", min: 0, max: 1, step: 0.0001 },
-  { key: "exposure_lr_init", label: "Exposure LR init", type: "number", min: 0, max: 1, step: 0.001 },
-  { key: "exposure_lr_final", label: "Exposure LR final", type: "number", min: 0, max: 1, step: 0.0001 },
-  { key: "exposure_lr_delay_steps", label: "Exposure LR delay steps", type: "number", min: 0, max: 100000, step: 100 },
-  { key: "exposure_lr_delay_mult", label: "Exposure LR delay mult", type: "number", min: 0, max: 1, step: 0.01 },
+  { key: "position_lr_init", label: "Position LR init", type: "number", min: 0, max: 1, step: 0.00001, default: 0.00016 },
+  { key: "position_lr_final", label: "Position LR final", type: "number", min: 0, max: 1, step: 0.0000001, default: 0.0000016 },
+  { key: "position_lr_delay_mult", label: "Position LR delay mult", type: "number", min: 0, max: 1, step: 0.001, default: 0.01 },
+  { key: "position_lr_max_steps", label: "Position LR max steps", type: "number", min: 1, max: 100000, step: 100, default: 30000 },
+  { key: "feature_lr", label: "Feature LR", type: "number", min: 0, max: 1, step: 0.0001, default: 0.0025 },
+  { key: "opacity_lr", label: "Opacity LR", type: "number", min: 0, max: 1, step: 0.001, default: 0.025 },
+  { key: "scaling_lr", label: "Scaling LR", type: "number", min: 0, max: 1, step: 0.0001, default: 0.005 },
+  { key: "rotation_lr", label: "Rotation LR", type: "number", min: 0, max: 1, step: 0.0001, default: 0.001 },
+  { key: "exposure_lr_init", label: "Exposure LR init", type: "number", min: 0, max: 1, step: 0.001, default: 0.01 },
+  { key: "exposure_lr_final", label: "Exposure LR final", type: "number", min: 0, max: 1, step: 0.0001, default: 0.001 },
+  { key: "exposure_lr_delay_steps", label: "Exposure LR delay steps", type: "number", min: 0, max: 100000, step: 100, default: 0 },
+  { key: "exposure_lr_delay_mult", label: "Exposure LR delay mult", type: "number", min: 0, max: 1, step: 0.01, default: 0 },
 ];
 
 const TRAIN_ADVANCED_FIELDS: FieldDef<TrainConfig>[] = [
-  { key: "opacity_reset_interval", label: "Opacity reset interval", type: "number", min: 1, max: 100000, step: 100 },
-  { key: "densification_interval", label: "Densification interval", type: "number", min: 1, max: 10000, step: 10 },
-  { key: "train_test_exp", label: "Train/test exposure split", type: "bool" },
-  { key: "antialiasing", label: "Antialiasing", type: "bool" },
+  { key: "opacity_reset_interval", label: "Opacity reset interval", type: "number", min: 1, max: 100000, step: 100, default: 3000 },
+  { key: "densification_interval", label: "Densification interval", type: "number", min: 1, max: 10000, step: 10, default: 100 },
+  { key: "train_test_exp", label: "Train/test exposure split", type: "bool", default: false },
+  { key: "antialiasing", label: "Antialiasing", type: "bool", default: false },
 ];
 
 function isEmpty(value: unknown): boolean {
@@ -107,13 +116,18 @@ function FieldRow<T extends object>({
   if (field.type === "bool") {
     const checked = raw === true;
     return (
-      <label className="flex items-center justify-between gap-2 py-1.5 text-xs text-slate-600">
-        <span>{field.label}</span>
+      <label className="flex items-center justify-between gap-2 py-1.5 text-xs text-slate-200">
+        <span>
+          {field.label}
+          <span className="ml-1 text-slate-400">
+            (default: {field.default ? "on" : "off"})
+          </span>
+        </span>
         <input
           type="checkbox"
           checked={checked}
           onChange={(e) => onChange({ ...config, [field.key]: e.target.checked })}
-          className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+          className="h-3.5 w-3.5 shrink-0 rounded border-white/20 bg-white/5 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0"
         />
       </label>
     );
@@ -122,7 +136,7 @@ function FieldRow<T extends object>({
   if (field.type === "select") {
     const value = typeof raw === "string" ? raw : "";
     return (
-      <label className="flex flex-col gap-1 py-1.5 text-xs text-slate-600">
+      <label className="flex flex-col gap-1 py-1.5 text-xs text-slate-200">
         <span>{field.label}</span>
         <select
           value={value}
@@ -132,9 +146,9 @@ function FieldRow<T extends object>({
               [field.key]: e.target.value === "" ? undefined : e.target.value,
             })
           }
-          className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 focus:border-indigo-400 focus:outline-none"
+          className="rounded-md border border-white/15 bg-white/5 px-2 py-1 text-xs text-white focus:border-indigo-400 focus:outline-none [&_option]:bg-slate-900 [&_option]:text-white"
         >
-          <option value="">(default)</option>
+          <option value="">{field.default} (default)</option>
           {field.options.map((opt) => (
             <option key={opt} value={opt}>
               {opt}
@@ -148,7 +162,7 @@ function FieldRow<T extends object>({
   // number
   const value = typeof raw === "number" ? String(raw) : "";
   return (
-    <label className="flex flex-col gap-1 py-1.5 text-xs text-slate-600">
+    <label className="flex flex-col gap-1 py-1.5 text-xs text-slate-200">
       <span>{field.label}</span>
       <input
         type="number"
@@ -156,7 +170,7 @@ function FieldRow<T extends object>({
         min={field.min}
         max={field.max}
         step={field.step ?? 1}
-        placeholder="default"
+        placeholder={String(field.default)}
         onChange={(e) => {
           const next = e.target.value;
           if (isEmpty(next)) {
@@ -166,7 +180,7 @@ function FieldRow<T extends object>({
           const parsed = Number(next);
           onChange({ ...config, [field.key]: Number.isNaN(parsed) ? undefined : parsed });
         }}
-        className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 focus:border-indigo-400 focus:outline-none"
+        className="rounded-md border border-white/15 bg-white/5 px-2 py-1 text-xs text-white placeholder:text-slate-500 focus:border-indigo-400 focus:outline-none"
       />
     </label>
   );
@@ -186,11 +200,11 @@ function FieldSection<T extends object>({
   defaultOpen?: boolean;
 }) {
   return (
-    <details className="group rounded-lg border border-slate-100" open={defaultOpen}>
-      <summary className="cursor-pointer select-none list-none rounded-lg px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+    <details className="group rounded-lg border border-white/10" open={defaultOpen}>
+      <summary className="cursor-pointer select-none list-none rounded-lg px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-white/5">
         {title}
       </summary>
-      <div className="grid grid-cols-2 gap-x-3 gap-y-0 border-t border-slate-100 px-3 py-2">
+      <div className="grid grid-cols-2 gap-x-3 gap-y-0 border-t border-white/10 px-3 py-2">
         {fields.map((f) => (
           <FieldRow key={String(f.key)} field={f} config={config} onChange={onChange} />
         ))}
@@ -213,8 +227,48 @@ export default function AdvancedSettingsPanel({
   onColmapConfigChange,
   className,
 }: AdvancedSettingsPanelProps) {
+  const activePresetId = matchingPresetId(trainConfig, colmapConfig);
+  const isUntouched =
+    Object.keys(trainConfig).length === 0 && Object.keys(colmapConfig).length === 0;
+
   return (
     <div className={cn("flex flex-col gap-2", className)}>
+      <div className="flex flex-col gap-1.5 rounded-lg border border-white/10 p-2">
+        <div className="flex items-center justify-between px-1">
+          <span className="text-xs font-semibold text-slate-200">Presets</span>
+          <span className="text-[11px] text-slate-400">
+            {activePresetId
+              ? JOB_PRESETS.find((p) => p.id === activePresetId)?.label
+              : isUntouched
+                ? "Default"
+                : "Custom"}
+          </span>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {JOB_PRESETS.map((preset) => {
+            const active = preset.id === activePresetId;
+            return (
+              <button
+                key={preset.id}
+                type="button"
+                title={preset.description}
+                onClick={() => {
+                  onTrainConfigChange(preset.trainConfig);
+                  onColmapConfigChange(preset.colmapConfig);
+                }}
+                className={cn(
+                  "rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
+                  active
+                    ? "border-indigo-400/60 bg-indigo-500/20 text-indigo-200"
+                    : "border-white/15 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white",
+                )}
+              >
+                {preset.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
       <FieldSection
         title="COLMAP"
         fields={COLMAP_FIELDS}
@@ -241,7 +295,7 @@ export default function AdvancedSettingsPanel({
         onChange={onTrainConfigChange}
       />
       {colmapConfig.matcher === "vocab_tree" ? (
-        <p className="px-1 text-[11px] text-amber-600">
+        <p className="px-1 text-[11px] text-amber-300">
           vocab_tree requires a vocab tree file baked into the worker AMI; leave
           the path unset to use the operator-configured default.
         </p>

@@ -10,6 +10,10 @@ import type {
   BootWorkerResponse,
   ReleaseWorkerResponse,
   SpotPriceResponse,
+  WorkerAmisResponse,
+  CreateWorkerAmiPayload,
+  WorkerAmi,
+  DeleteWorkerAmiResponse,
 } from "@/types/admin";
 
 export type ListAttemptsParams = {
@@ -103,4 +107,42 @@ export async function getSpotPrice(
   return authenticatedFetch(`/admin/asg/spot-price?${qs}`, {
     signal,
   }) as Promise<SpotPriceResponse>;
+}
+
+/**
+ * GET /admin/worker-amis — the curated worker AMI registry. Not a live AWS
+ * catalog listing; this only returns AMIs an admin explicitly registered.
+ */
+export async function listWorkerAmis(
+  signal?: AbortSignal,
+): Promise<WorkerAmisResponse> {
+  return authenticatedFetch("/admin/worker-amis", {
+    signal,
+  }) as Promise<WorkerAmisResponse>;
+}
+
+/**
+ * POST /admin/worker-amis — register a new AMI into the registry. The
+ * backend does a single ec2:DescribeImages existence/state check on just
+ * this one AMI before saving (never a catalog listing).
+ */
+export async function createWorkerAmi(
+  payload: CreateWorkerAmiPayload,
+): Promise<WorkerAmi> {
+  return authenticatedFetch("/admin/worker-amis", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  }) as Promise<WorkerAmi>;
+}
+
+/**
+ * DELETE /admin/worker-amis/{amiId} — remove an AMI from the registry.
+ * Never touches the underlying AMI, launch template, or running instances.
+ */
+export async function deleteWorkerAmi(
+  amiId: string,
+): Promise<DeleteWorkerAmiResponse> {
+  return authenticatedFetch(`/admin/worker-amis/${encodeURIComponent(amiId)}`, {
+    method: "DELETE",
+  }) as Promise<DeleteWorkerAmiResponse>;
 }

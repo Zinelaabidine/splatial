@@ -26,6 +26,9 @@ const adminAsgBoot = require("./handlers/admin-asg-boot");
 const adminAsgRelease = require("./handlers/admin-asg-release");
 const adminAsgSpotPrice = require("./handlers/admin-asg-spot-price");
 const adminAsgCheckManualMode = require("./handlers/admin-asg-check-manual-mode");
+const adminWorkerAmisList = require("./handlers/admin-worker-amis-list");
+const adminWorkerAmiCreate = require("./handlers/admin-worker-ami-create");
+const adminWorkerAmiDelete = require("./handlers/admin-worker-ami-delete");
 const profileGetMe = require("./handlers/profile-get-me");
 const profileUpdateMe = require("./handlers/profile-update-me");
 const profileGetByUsername = require("./handlers/profile-get-by-username");
@@ -191,6 +194,12 @@ exports.handler = async (event) => {
         return await adminAsgRelease.handler(event);
       case "GET /admin/asg/spot-price":
         return await adminAsgSpotPrice.handler(event);
+      case "GET /admin/worker-amis":
+        return await adminWorkerAmisList.handler(event);
+      case "POST /admin/worker-amis":
+        return await adminWorkerAmiCreate.handler(event);
+      case "DELETE /admin/worker-amis/{amiId}":
+        return await adminWorkerAmiDelete.handler(event);
 
       // ── Internal (EventBridge-invoked only — not an API Gateway route) ────
       case "INTERNAL /asg/check-manual-mode":
