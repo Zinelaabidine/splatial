@@ -310,18 +310,26 @@ data "aws_iam_policy_document" "github_deploy_policy" {
       "iam:UntagRole",
       "iam:ListRoleTags",
     ]
-    resources = [
-      "arn:aws:iam::886601940523:role/${local.name_prefix}-github-deploy-role",
-      "arn:aws:iam::886601940523:role/splatial-local-dev-role",
-      # Legacy helloFromLambda scaffold exec role (tear-down only; role removed from config).
-      "arn:aws:iam::886601940523:role/${var.name}-lambda-exec-role",
-      # Constructed ARN for the upload Lambda execution role (does not exist yet).
-      "arn:aws:iam::886601940523:role/${var.name}-upload-lambda-exec-role",
-      # Constructed ARN for the Google Drive import Lambda execution role.
-      "arn:aws:iam::886601940523:role/${var.name}-gdrive-import-lambda-exec-role",
-      # Constructed ARN for the GPU worker instance role (does not exist yet).
-      "arn:aws:iam::886601940523:role/${local.name_prefix}-splat-worker-instance-role",
-    ]
+    resources = concat(
+      [
+        "arn:aws:iam::886601940523:role/${local.name_prefix}-github-deploy-role",
+        "arn:aws:iam::886601940523:role/splatial-local-dev-role",
+        # Legacy helloFromLambda scaffold exec role (tear-down only; role removed from config).
+        "arn:aws:iam::886601940523:role/${var.name}-lambda-exec-role",
+        # Constructed ARN for the upload Lambda execution role (does not exist yet).
+        "arn:aws:iam::886601940523:role/${var.name}-upload-lambda-exec-role",
+        # Constructed ARN for the Google Drive import Lambda execution role.
+        "arn:aws:iam::886601940523:role/${var.name}-gdrive-import-lambda-exec-role",
+        # Constructed ARN for the GPU worker instance role (does not exist yet).
+        "arn:aws:iam::886601940523:role/${local.name_prefix}-splat-worker-instance-role",
+      ],
+      var.enable_ami_bake_resources ? [
+        # Global bake workflow role (bootstrap) — dev state attaches its inline policy.
+        "arn:aws:iam::886601940523:role/splatial-github-ami-bake-role",
+        # Minimal SSM-only builder instance role (iam-github-oidc-bake.tf).
+        "arn:aws:iam::886601940523:role/${local.name_prefix}-ami-bake-instance-role",
+      ] : [],
+    )
   }
 
   # PassRole is constrained to Lambda only via the iam:PassedToService condition,
@@ -554,9 +562,14 @@ data "aws_iam_policy_document" "github_deploy_compute_policy" {
       "iam:TagInstanceProfile",
       "iam:UntagInstanceProfile",
     ]
-    resources = [
-      "arn:aws:iam::886601940523:instance-profile/${local.name_prefix}-splat-worker-instance-profile",
-    ]
+    resources = concat(
+      [
+        "arn:aws:iam::886601940523:instance-profile/${local.name_prefix}-splat-worker-instance-profile",
+      ],
+      var.enable_ami_bake_resources ? [
+        "arn:aws:iam::886601940523:instance-profile/${local.name_prefix}-ami-bake-instance-profile",
+      ] : [],
+    )
   }
 
   statement {
