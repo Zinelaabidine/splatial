@@ -171,6 +171,16 @@ resource "aws_lambda_function" "upload_lambda" {
       GDRIVE_IMPORT_FUNCTION_NAME = aws_lambda_function.gdrive_import_lambda.function_name
       WORKER_LOG_GROUP            = local.worker_log_group
       NODE_ENV                    = "production"
+
+      # Admin worker-AMI registry (Manual worker boot / Update configuration).
+      WORKER_AMIS_TABLE_NAME       = aws_dynamodb_table.worker_amis.name
+      WORKER_SUBNET_ID             = aws_subnet.worker_spot.id
+      WORKER_SECURITY_GROUP_ID     = aws_security_group.worker.id
+      WORKER_INSTANCE_PROFILE_NAME = aws_iam_instance_profile.worker_instance_profile.name
+      WORKER_INSTANCE_TYPE         = var.worker_instance_type
+      WORKER_QUEUE_NAME            = aws_sqs_queue.processing_queue.name
+      WORKER_DLQ_NAME              = aws_sqs_queue.processing_dlq.name
+      SPLATIAL_ENV                 = var.environment
     }
   }
 
