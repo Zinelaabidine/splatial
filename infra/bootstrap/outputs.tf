@@ -22,3 +22,8 @@ output "terraform_state_bucket" {
   description = "Name of the S3 bucket used for Terraform remote state."
   value       = aws_s3_bucket.terraform_state.id
 }
+
+output "github_ami_bake_role_arn" {
+  description = "ARN of the GitHub AMI-bake role assumed by bake-worker-ami.yml via OIDC (no static keys)."
+  value       = aws_iam_role.github_ami_bake.arn
+}

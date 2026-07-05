@@ -289,6 +289,7 @@ data "aws_iam_policy_document" "bootstrap_ci_permissions" {
       "arn:aws:iam::${var.aws_account_id}:role/splatial-*-github-deploy-role",
       "arn:aws:iam::${var.aws_account_id}:role/splatial-local-dev-role",
       "arn:aws:iam::${var.aws_account_id}:role/splatial-bootstrap-ci-role",
+      "arn:aws:iam::${var.aws_account_id}:role/splatial-github-ami-bake-role",
     ]
   }
 
@@ -341,4 +342,61 @@ resource "aws_iam_role_policy" "bootstrap_ci" {
   name   = "splatial-bootstrap-ci-policy"
   role   = aws_iam_role.bootstrap_ci.id
   policy = data.aws_iam_policy_document.bootstrap_ci_permissions.json
+}
+
+# ─── GitHub AMI-Bake Role (trust only, OIDC, no static keys) ──────────────────
+#
+# Assumed by .github/workflows/bake-worker-ami.yml to build and bake a fresh
+# GPU worker AMI. Same reasoning as bootstrap_ci above: trust is scoped via
+# job_workflow_ref to the exact workflow file on main, so no other workflow —
+# even one added later in this repo — can assume it. workflow_dispatch is the
+# only trigger on that workflow, so this role is never assumed by an
+# unattended push.
+#
+# This role is created WITHOUT permissions here, same pattern as
+# github_deploy above: the operational EC2/SSM permissions (which need to
+# reference the dev environment's worker subnet and security group) are
+# attached from infra/modules/static-site/iam-github-oidc-bake.tf, gated by
+# var.enable_ami_bake_resources (true only in infra/envs/dev). Keeping the
+# permissions in exactly one environment's state avoids three environments
+# fighting over the same global role's attached policy.
+
+data "aws_iam_policy_document" "github_ami_bake_trust" {
+  statement {
+    sid    = "AllowAmiBakeWorkflowOIDC"
+    effect = "Allow"
+
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.github.arn]
+    }
+
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+
+    # Only the bake workflow file, running from main, can assume this role —
+    # same job_workflow_ref pattern as bootstrap_ci_trust above.
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:job_workflow_ref"
+      values   = ["${local.github_repo_full}/.github/workflows/bake-worker-ami.yml@refs/heads/main"]
+    }
+  }
+}
+
+resource "aws_iam_role" "github_ami_bake" {
+  name        = "splatial-github-ami-bake-role"
+  description = "Assumed by bake-worker-ami.yml via OIDC to build/bake GPU worker AMIs. Trust policy managed in infra/bootstrap; permissions attached from infra/envs/dev."
+
+  assume_role_policy = data.aws_iam_policy_document.github_ami_bake_trust.json
+
+  tags = {
+    ManagedBy = "Terraform/bootstrap"
+    Purpose   = "github-actions-ami-bake"
+  }
 }
