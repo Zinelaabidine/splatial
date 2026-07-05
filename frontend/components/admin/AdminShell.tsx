@@ -4,10 +4,12 @@ import { useState } from "react";
 
 import AdminAttemptsView from "@/components/admin/AdminAttemptsView";
 import AdminAsgConfigView from "@/components/admin/AdminAsgConfigView";
+import WorkerAmiPanel from "@/components/admin/WorkerAmiPanel";
 
 const TABS = [
   { id: "attempts", label: "Attempts" },
   { id: "asg", label: "ASG config" },
+  { id: "worker-amis", label: "Worker AMIs" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -34,7 +36,9 @@ export default function AdminShell() {
         ))}
       </div>
 
-      {tab === "attempts" ? <AdminAttemptsView /> : <AdminAsgConfigView />}
+      {tab === "attempts" && <AdminAttemptsView />}
+      {tab === "asg" && <AdminAsgConfigView />}
+      {tab === "worker-amis" && <WorkerAmiPanel />}
     </div>
   );
 }

@@ -178,6 +178,16 @@ resource "aws_lambda_function" "upload_lambda" {
       ADMIN_SNS_TOPIC_ARN         = aws_sns_topic.admin_notifications.arn
       MANUAL_MODE_ALERT_MINUTES   = tostring(var.manual_mode_alert_minutes)
       NODE_ENV                    = "production"
+
+      # Admin worker-AMI registry (Manual worker boot / Update configuration).
+      WORKER_AMIS_TABLE_NAME       = aws_dynamodb_table.worker_amis.name
+      WORKER_SUBNET_ID             = aws_subnet.worker_spot.id
+      WORKER_SECURITY_GROUP_ID     = aws_security_group.worker.id
+      WORKER_INSTANCE_PROFILE_NAME = aws_iam_instance_profile.worker_instance_profile.name
+      WORKER_INSTANCE_TYPE         = var.worker_instance_type
+      WORKER_QUEUE_NAME            = aws_sqs_queue.processing_queue.name
+      WORKER_DLQ_NAME              = aws_sqs_queue.processing_dlq.name
+      SPLATIAL_ENV                 = var.environment
     }
   }
 

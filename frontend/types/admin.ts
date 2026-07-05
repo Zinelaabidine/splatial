@@ -18,6 +18,8 @@ export type AdminAttempt = {
   progressPercent?: number;
   progressSubPhase?: string;
   progressEtaSeconds?: number;
+  /** worker.py version that processed this attempt. */
+  workerVersion?: string;
 };
 
 export type AdminAttemptsResponse = {
@@ -137,31 +139,37 @@ export type SpotPriceResponse = {
   cheapest: SpotPriceEntry | null;
 };
 
-/**
- * Worker AMI registry — a small, hand-curated list of "known-good" AMIs
- * (mirrors GET /admin/worker-amis). Deliberately NOT a live AWS catalog
- * listing; admins register entries explicitly via POST /admin/worker-amis.
- */
+/** Worker AMI registry — mirrors GET /admin/worker-amis in the backend. */
 export type WorkerAmi = {
   amiId: string;
   label: string;
-  description: string | null;
+  baseAmiId: string | null;
   architecture: string | null;
-  createdBy: string | null;
-  createdAt: string | null;
+  reason: string | null;
+  registeredAt: string | null;
+  registeredBy: string | null;
+  lastBootInstanceId: string | null;
+  lastBootAt: string | null;
 };
 
 export type WorkerAmisResponse = {
   items: WorkerAmi[];
+  currentAmiId: string | null;
 };
 
-export type CreateWorkerAmiPayload = {
+export type RegisterWorkerAmiRequest = {
   amiId: string;
   label: string;
-  description?: string;
+  baseAmiId?: string;
+  reason?: string;
 };
 
-export type DeleteWorkerAmiResponse = {
+export type BootWorkerAmiResponse = {
   amiId: string;
-  deleted: true;
+  instanceId: string;
+};
+
+export type ActivateWorkerAmiResponse = {
+  currentAmiId: string;
+  note: string;
 };

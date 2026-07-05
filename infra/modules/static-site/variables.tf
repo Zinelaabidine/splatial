@@ -156,4 +156,3 @@ variable "manual_mode_alert_minutes" {
     error_message = "manual_mode_alert_minutes must be at least 1."
   }
 }
-

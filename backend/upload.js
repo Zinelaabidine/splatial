@@ -27,8 +27,9 @@ const adminAsgRelease = require("./handlers/admin-asg-release");
 const adminAsgSpotPrice = require("./handlers/admin-asg-spot-price");
 const adminAsgCheckManualMode = require("./handlers/admin-asg-check-manual-mode");
 const adminWorkerAmisList = require("./handlers/admin-worker-amis-list");
-const adminWorkerAmiCreate = require("./handlers/admin-worker-ami-create");
-const adminWorkerAmiDelete = require("./handlers/admin-worker-ami-delete");
+const adminWorkerAmiRegister = require("./handlers/admin-worker-ami-register");
+const adminWorkerAmiBoot = require("./handlers/admin-worker-ami-boot");
+const adminWorkerAmiActivate = require("./handlers/admin-worker-ami-activate");
 const profileGetMe = require("./handlers/profile-get-me");
 const profileUpdateMe = require("./handlers/profile-update-me");
 const profileGetByUsername = require("./handlers/profile-get-by-username");
@@ -197,9 +198,11 @@ exports.handler = async (event) => {
       case "GET /admin/worker-amis":
         return await adminWorkerAmisList.handler(event);
       case "POST /admin/worker-amis":
-        return await adminWorkerAmiCreate.handler(event);
-      case "DELETE /admin/worker-amis/{amiId}":
-        return await adminWorkerAmiDelete.handler(event);
+        return await adminWorkerAmiRegister.handler(event);
+      case "POST /admin/worker-amis/{amiId}/boot":
+        return await adminWorkerAmiBoot.handler(event);
+      case "POST /admin/worker-amis/{amiId}/activate":
+        return await adminWorkerAmiActivate.handler(event);
 
       // ── Internal (EventBridge-invoked only — not an API Gateway route) ────
       case "INTERNAL /asg/check-manual-mode":

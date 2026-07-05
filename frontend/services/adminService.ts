@@ -2,18 +2,19 @@
 
 import { authenticatedFetch } from "@/services/apiClient";
 import type {
+  ActivateWorkerAmiResponse,
   AdminAttemptsResponse,
   AdminAsgConfigResponse,
-  UpdateAsgConfigPayload,
-  UpdateAsgConfigResponse,
+  BootWorkerAmiResponse,
   BootWorkerPayload,
   BootWorkerResponse,
+  RegisterWorkerAmiRequest,
   ReleaseWorkerResponse,
   SpotPriceResponse,
-  WorkerAmisResponse,
-  CreateWorkerAmiPayload,
+  UpdateAsgConfigPayload,
+  UpdateAsgConfigResponse,
   WorkerAmi,
-  DeleteWorkerAmiResponse,
+  WorkerAmisResponse,
 } from "@/types/admin";
 
 export type ListAttemptsParams = {
@@ -109,40 +110,37 @@ export async function getSpotPrice(
   }) as Promise<SpotPriceResponse>;
 }
 
-/**
- * GET /admin/worker-amis — the curated worker AMI registry. Not a live AWS
- * catalog listing; this only returns AMIs an admin explicitly registered.
- */
+/** GET /admin/worker-amis */
 export async function listWorkerAmis(
   signal?: AbortSignal,
 ): Promise<WorkerAmisResponse> {
-  return authenticatedFetch("/admin/worker-amis", {
-    signal,
-  }) as Promise<WorkerAmisResponse>;
+  return authenticatedFetch("/admin/worker-amis", { signal }) as Promise<WorkerAmisResponse>;
 }
 
-/**
- * POST /admin/worker-amis — register a new AMI into the registry. The
- * backend does a single ec2:DescribeImages existence/state check on just
- * this one AMI before saving (never a catalog listing).
- */
-export async function createWorkerAmi(
-  payload: CreateWorkerAmiPayload,
+/** POST /admin/worker-amis — "Register a new AMI" */
+export async function registerWorkerAmi(
+  body: RegisterWorkerAmiRequest,
 ): Promise<WorkerAmi> {
   return authenticatedFetch("/admin/worker-amis", {
     method: "POST",
-    body: JSON.stringify(payload),
+    body: JSON.stringify(body),
   }) as Promise<WorkerAmi>;
 }
 
-/**
- * DELETE /admin/worker-amis/{amiId} — remove an AMI from the registry.
- * Never touches the underlying AMI, launch template, or running instances.
- */
-export async function deleteWorkerAmi(
+/** POST /admin/worker-amis/{amiId}/boot — "Manual worker boot" */
+export async function bootWorkerAmi(
   amiId: string,
-): Promise<DeleteWorkerAmiResponse> {
-  return authenticatedFetch(`/admin/worker-amis/${encodeURIComponent(amiId)}`, {
-    method: "DELETE",
-  }) as Promise<DeleteWorkerAmiResponse>;
+): Promise<BootWorkerAmiResponse> {
+  return authenticatedFetch(`/admin/worker-amis/${encodeURIComponent(amiId)}/boot`, {
+    method: "POST",
+  }) as Promise<BootWorkerAmiResponse>;
+}
+
+/** POST /admin/worker-amis/{amiId}/activate — "Update configuration" */
+export async function activateWorkerAmi(
+  amiId: string,
+): Promise<ActivateWorkerAmiResponse> {
+  return authenticatedFetch(`/admin/worker-amis/${encodeURIComponent(amiId)}/activate`, {
+    method: "POST",
+  }) as Promise<ActivateWorkerAmiResponse>;
 }

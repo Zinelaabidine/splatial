@@ -390,6 +390,14 @@ function StatusTile({
               ~{scene.eta} remaining
             </p>
           )}
+          {scene.workerVersion && (
+            <p
+              className="mt-1 font-sw-mono text-[10px] uppercase tracking-wide opacity-60"
+              style={{ color: textColor }}
+            >
+              Worker v{scene.workerVersion}
+            </p>
+          )}
         </>
       )}
 

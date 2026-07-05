@@ -7,7 +7,7 @@
 #      same "SSM only, zero inbound" posture as the production workers).
 #   3. Runs a smoke test: NVIDIA driver present, updated Python files compile
 #      cleanly inside the gaussian_splatting conda env.
-#   4. Stops the instance and bakes it into a new AMI.
+#   4. Bakes the still-running builder instance into a new AMI (--no-reboot).
 #   5. Always terminates the builder instance, success or failure.
 #   6. Prints the new AMI ID to the job summary — nothing more.
 #
@@ -147,6 +147,16 @@ jobs:
           aws s3 cp worker-bake.tar.gz "s3://${{ env.RAW_SCENES_BUCKET }}/${KEY}"
           echo "s3_key=${KEY}" >> "$GITHUB_OUTPUT"
 
+          # The builder AMI has no guarantee the aws CLI is on PATH for the
+          # non-interactive shell SSM executes commands in (confirmed: it
+          # isn't — "aws: not found", exit 127). A presigned URL lets the
+          # instance fetch the tarball with plain curl instead, which every
+          # Ubuntu image has. 15-minute expiry comfortably covers the time
+          # between staging and the SSM command actually running.
+          PRESIGN_URL=$(aws s3 presign "s3://${{ env.RAW_SCENES_BUCKET }}/${KEY}" --expires-in 900)
+          echo "::add-mask::${PRESIGN_URL}"
+          echo "presign_url=${PRESIGN_URL}" >> "$GITHUB_OUTPUT"
+
       - name: Launch builder instance
         id: launch
         run: |
@@ -194,10 +204,10 @@ jobs:
         id: smoke
         run: |
           SCRIPT=$(cat <<EOF
-          set -euo pipefail
+          set -eu
           mkdir -p /tmp/ami-bake
           cd /tmp/ami-bake
-          aws s3 cp s3://${{ env.RAW_SCENES_BUCKET }}/${{ steps.stage.outputs.s3_key }} worker-bake.tar.gz
+          curl -fsSL "${{ steps.stage.outputs.presign_url }}" -o worker-bake.tar.gz
           tar xzf worker-bake.tar.gz
           sudo mkdir -p /home/ubuntu/gaussian-splatting
           sudo cp worker.py convert.py imds_extract.py aws_config.py log_envelope.py /home/ubuntu/gaussian-splatting/
@@ -242,11 +252,10 @@ jobs:
             exit 1
           fi
 
-      - name: Stop builder instance
-        run: |
-          aws ec2 stop-instances --instance-ids "${{ steps.launch.outputs.instance_id }}"
-          aws ec2 wait instance-stopped --instance-ids "${{ steps.launch.outputs.instance_id }}"
-
+      # --no-reboot is safe because the smoke test above never starts
+      # gaussian-worker.service and leaves no in-flight writes — only static
+      # .py copies + systemctl daemon-reload. If the smoke test ever starts
+      # the service for real, drop --no-reboot and restore an explicit stop first.
       - name: Create image
         id: image
         run: |
@@ -256,8 +265,9 @@ jobs:
           IMAGE_ID=$(aws ec2 create-image \
             --instance-id "${{ steps.launch.outputs.instance_id }}" \
             --name "${{ steps.ctx.outputs.image_name }}" \
-            --description "Splatial worker AMI — ${{ inputs.label }} (base ${{ inputs.base_ami_id }}, ${{ github.sha }})" \
+            --description "Splatial worker AMI - ${{ inputs.label }} (base ${{ inputs.base_ami_id }}, ${{ github.sha }})" \
             --tag-specifications "$IMAGE_TAGS" "$SNAP_TAGS" \
+            --no-reboot \
             --query 'ImageId' --output text)
 
           echo "image_id=${IMAGE_ID}" >> "$GITHUB_OUTPUT"

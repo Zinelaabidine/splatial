@@ -15,7 +15,6 @@ import {
   Copy,
   Check,
   Plus,
-  Trash2,
   Pencil,
 } from "lucide-react";
 
@@ -27,8 +26,7 @@ import {
   releaseWorker,
   getSpotPrice,
   listWorkerAmis,
-  createWorkerAmi,
-  deleteWorkerAmi,
+  registerWorkerAmi,
 } from "@/services/adminService";
 import type {
   AdminAsgConfigResponse,
@@ -184,12 +182,11 @@ function AmiPicker({
   const [showRegisterForm, setShowRegisterForm] = useState(false);
   const [newAmiId, setNewAmiId] = useState("");
   const [newLabel, setNewLabel] = useState("");
-  const [newDescription, setNewDescription] = useState("");
+  const [newReason, setNewReason] = useState("");
   const [registering, setRegistering] = useState(false);
   const [registerError, setRegisterError] = useState<string | null>(null);
 
   const [showManage, setShowManage] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
 
@@ -230,10 +227,10 @@ function AmiPicker({
     setRegistering(true);
     setRegisterError(null);
     try {
-      const created = await createWorkerAmi({
+      const created = await registerWorkerAmi({
         amiId: newAmiId.trim(),
         label: newLabel.trim(),
-        description: newDescription.trim() || undefined,
+        ...(newReason.trim() ? { reason: newReason.trim() } : {}),
       });
       setAmis((prev) => [created, ...prev]);
       onChange(created.amiId);
@@ -241,23 +238,11 @@ function AmiPicker({
       setShowRegisterForm(false);
       setNewAmiId("");
       setNewLabel("");
-      setNewDescription("");
+      setNewReason("");
     } catch (e) {
       setRegisterError(e instanceof Error ? e.message : "Failed to register AMI");
     } finally {
       setRegistering(false);
-    }
-  }
-
-  async function handleDelete(amiId: string) {
-    setDeletingId(amiId);
-    try {
-      await deleteWorkerAmi(amiId);
-      setAmis((prev) => prev.filter((a) => a.amiId !== amiId));
-    } catch {
-      /* best-effort — leave the entry in place if delete fails */
-    } finally {
-      setDeletingId(null);
     }
   }
 
@@ -346,9 +331,9 @@ function AmiPicker({
             />
           </div>
           <input
-            value={newDescription}
-            onChange={(e) => setNewDescription(e.target.value)}
-            placeholder="Description (optional)"
+            value={newReason}
+            onChange={(e) => setNewReason(e.target.value)}
+            placeholder="Reason (optional)"
             className="mt-2 w-full rounded-lg border border-[#2a2a2a] bg-[#141414] px-3 py-2 text-xs text-[#e8e8e8] outline-none focus:border-[#3b82f6]"
           />
           <p className="mt-1.5 text-[11px] text-[#707070]">
@@ -386,27 +371,9 @@ function AmiPicker({
       {showManage && amis.length > 0 && (
         <ul className="mt-3 divide-y divide-[#242424] rounded-lg border border-[#2a2a2a]">
           {amis.map((a) => (
-            <li
-              key={a.amiId}
-              className="flex items-center justify-between gap-2 px-3 py-2 text-xs"
-            >
-              <div className="min-w-0">
-                <div className="truncate text-[#e8e8e8]">{a.label}</div>
-                <div className="truncate font-mono text-[#808080]">{a.amiId}</div>
-              </div>
-              <button
-                type="button"
-                disabled={deletingId === a.amiId}
-                onClick={() => handleDelete(a.amiId)}
-                className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-[#2a2a2a] px-2 py-1 text-[#f0a8a8] hover:bg-[#2a1414] disabled:opacity-50"
-              >
-                {deletingId === a.amiId ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <Trash2 className="h-3 w-3" />
-                )}
-                Remove
-              </button>
+            <li key={a.amiId} className="px-3 py-2 text-xs">
+              <div className="truncate text-[#e8e8e8]">{a.label}</div>
+              <div className="truncate font-mono text-[#808080]">{a.amiId}</div>
             </li>
           ))}
         </ul>
