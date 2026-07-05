@@ -19,9 +19,18 @@ resource "aws_dynamodb_table" "follows" {
   }
 
   global_secondary_index {
-    name            = "followee-follower-index"
-    hash_key        = "followee_id"
-    range_key       = "follower_id"
+    name = "followee-follower-index"
+
+    key_schema {
+      attribute_name = "followee_id"
+      key_type       = "HASH"
+    }
+
+    key_schema {
+      attribute_name = "follower_id"
+      key_type       = "RANGE"
+    }
+
     projection_type = "KEYS_ONLY"
   }
 

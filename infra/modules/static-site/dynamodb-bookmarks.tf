@@ -24,9 +24,18 @@ resource "aws_dynamodb_table" "bookmarks" {
   }
 
   global_secondary_index {
-    name            = "user_id-added_at-index"
-    hash_key        = "user_id"
-    range_key       = "added_at"
+    name = "user_id-added_at-index"
+
+    key_schema {
+      attribute_name = "user_id"
+      key_type       = "HASH"
+    }
+
+    key_schema {
+      attribute_name = "added_at"
+      key_type       = "RANGE"
+    }
+
     projection_type = "KEYS_ONLY"
   }
 

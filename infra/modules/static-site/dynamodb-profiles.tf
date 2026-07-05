@@ -18,8 +18,13 @@ resource "aws_dynamodb_table" "profiles" {
   }
 
   global_secondary_index {
-    name            = "username-index"
-    hash_key        = "username"
+    name = "username-index"
+
+    key_schema {
+      attribute_name = "username"
+      key_type       = "HASH"
+    }
+
     projection_type = "KEYS_ONLY"
   }
 
