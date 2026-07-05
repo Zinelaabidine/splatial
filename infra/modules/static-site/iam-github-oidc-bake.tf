@@ -142,11 +142,11 @@ data "aws_iam_policy_document" "github_ami_bake_policy" {
     }
   }
 
-  # CreateImage's resulting image/snapshot IDs don't exist at authorization
-  # time, so the source instance is the only resource AWS can check —
-  # scoped down to instances tagged for this pipeline, not any instance.
+  # CreateImage is evaluated against instance, image, AND snapshot resource
+  # types (AND logic). The source instance is tag-scoped; the AMI and EBS
+  # snapshots do not exist yet so they cannot carry ec2:ResourceTag conditions.
   statement {
-    sid    = "EC2CreateImageBakeBuilder"
+    sid    = "EC2CreateImageBakeBuilderInstance"
     effect = "Allow"
     actions = [
       "ec2:CreateImage",
@@ -159,6 +159,18 @@ data "aws_iam_policy_document" "github_ami_bake_policy" {
       variable = "ec2:ResourceTag/Purpose"
       values   = ["ami-bake"]
     }
+  }
+
+  statement {
+    sid    = "EC2CreateImageBakeBuilderArtifacts"
+    effect = "Allow"
+    actions = [
+      "ec2:CreateImage",
+    ]
+    resources = [
+      "arn:aws:ec2:${var.aws_region}::image/*",
+      "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:snapshot/*",
+    ]
   }
 
   # Stop before CreateImage — same Purpose=ami-bake tag scope as terminate.
