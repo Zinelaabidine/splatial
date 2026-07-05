@@ -169,7 +169,7 @@ data "aws_iam_policy_document" "github_ami_bake_policy" {
     ]
     resources = [
       "arn:aws:ec2:${var.aws_region}::image/*",
-      "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:snapshot/*",
+      "arn:aws:ec2:${var.aws_region}::snapshot/*",
     ]
   }
 
