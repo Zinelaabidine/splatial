@@ -7,12 +7,8 @@ import { Bell, ChevronRight, CreditCard, LogOut, UserCog } from "lucide-react";
 
 import { UserAvatar } from "@/components/splatworks/SplatworksLogo";
 import { useAppAccount } from "@/hooks/layout/useAppAccount";
+import { useDismissablePopover } from "@/hooks/layout/useDismissablePopover";
 import { cn } from "@/lib/utils";
-
-type SettingsPanelProps = {
-  open: boolean;
-  onClose: () => void;
-};
 
 const ROW_CLASSNAME = (danger?: boolean) =>
   cn(
@@ -78,65 +74,83 @@ function MenuRow({
   );
 }
 
-export default function SettingsPanel({ open, onClose }: SettingsPanelProps) {
+export default function SettingsPanel() {
   const account = useAppAccount();
   const { signOut } = useAuthenticator((ctx) => [ctx.signOut]);
   const [emailNotifications, setEmailNotifications] = useState(true);
+  const { open, setOpen, ref } = useDismissablePopover<HTMLDivElement>();
 
-  if (!open) return null;
+  const close = () => setOpen(false);
 
   const handleSignOut = () => {
-    onClose();
+    close();
     signOut();
   };
 
   return (
-    <div
-      aria-label="Account menu"
-      className="sw-popover absolute right-0 top-full z-50 mt-2 w-80 overflow-hidden rounded-xl p-2"
-    >
-      {/* Profile card — a card inside the card, the Facebook signature. */}
-      <div className="rounded-lg bg-white/[0.05] p-3">
-        <div className="flex items-center gap-3">
-          <UserAvatar initials={account.initials} size={40} />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-white">{account.name}</p>
-            <p className="truncate font-sw-mono text-xs text-[#909090]">{account.email}</p>
+    <div ref={ref} className="relative shrink-0">
+      <button
+        type="button"
+        aria-label="Account menu"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className={cn(
+          "flex shrink-0 items-center justify-center rounded-full transition-opacity hover:opacity-80",
+          open && "ring-2 ring-white/30",
+        )}
+      >
+        <UserAvatar initials={account.initials} size={30} />
+      </button>
+
+      {open && (
+        <div
+          aria-label="Account menu"
+          className="sw-popover absolute right-0 top-full z-50 mt-2 w-80 overflow-hidden rounded-xl p-2"
+        >
+          {/* Profile card — a card inside the card, the Facebook signature. */}
+          <div className="rounded-lg bg-white/[0.05] p-3">
+            <div className="flex items-center gap-3">
+              <UserAvatar initials={account.initials} size={40} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-white">{account.name}</p>
+                <p className="truncate font-sw-mono text-xs text-[#909090]">{account.email}</p>
+              </div>
+            </div>
+            <Link
+              href="/settings/profile"
+              onClick={close}
+              className="mt-3 flex items-center gap-2 rounded-md bg-white/[0.06] px-3 py-2 text-xs font-medium text-[#e8e8e8] transition-colors hover:bg-white/[0.1]"
+            >
+              <UserCog className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} aria-hidden />
+              Profile settings
+            </Link>
+          </div>
+
+          <div className="my-2 flex flex-col gap-0.5">
+            <MenuRow icon={CreditCard} label="Plan" detail={account.plan} />
+            <MenuRow
+              icon={Bell}
+              label="Email notifications"
+              trailing={
+                <input
+                  type="checkbox"
+                  checked={emailNotifications}
+                  onChange={(e) => setEmailNotifications(e.target.checked)}
+                  aria-label="Email notifications"
+                  className={cn(
+                    "h-4 w-4 shrink-0 cursor-pointer rounded border border-[#404040] bg-[#1a1a1a]",
+                    "accent-[#3b82f6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3b82f6]/50",
+                  )}
+                />
+              }
+            />
+          </div>
+
+          <div className="border-t border-white/[0.06] pt-2">
+            <MenuRow icon={LogOut} label="Sign out" danger trailing={null} onClick={handleSignOut} />
           </div>
         </div>
-        <Link
-          href="/settings/profile"
-          onClick={onClose}
-          className="mt-3 flex items-center gap-2 rounded-md bg-white/[0.06] px-3 py-2 text-xs font-medium text-[#e8e8e8] transition-colors hover:bg-white/[0.1]"
-        >
-          <UserCog className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} aria-hidden />
-          Profile settings
-        </Link>
-      </div>
-
-      <div className="my-2 flex flex-col gap-0.5">
-        <MenuRow icon={CreditCard} label="Plan" detail={account.plan} />
-        <MenuRow
-          icon={Bell}
-          label="Email notifications"
-          trailing={
-            <input
-              type="checkbox"
-              checked={emailNotifications}
-              onChange={(e) => setEmailNotifications(e.target.checked)}
-              aria-label="Email notifications"
-              className={cn(
-                "h-4 w-4 shrink-0 cursor-pointer rounded border border-[#404040] bg-[#1a1a1a]",
-                "accent-[#3b82f6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3b82f6]/50",
-              )}
-            />
-          }
-        />
-      </div>
-
-      <div className="border-t border-white/[0.06] pt-2">
-        <MenuRow icon={LogOut} label="Sign out" danger trailing={null} onClick={handleSignOut} />
-      </div>
+      )}
     </div>
   );
 }

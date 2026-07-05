@@ -3,12 +3,9 @@
 import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
 
-import ActivityPanel from "@/components/layout/panels/ActivityPanel";
-import TrainingPanel from "@/components/layout/panels/TrainingPanel";
 import AppSidebar from "@/components/layout/AppSidebar";
 import { AppShellProvider } from "@/components/layout/AppShellContext";
 import AppTopBar from "@/components/layout/AppTopBar";
-import { useTrainingCount } from "@/hooks/layout/useTrainingCount";
 import { NotificationsBadgeProvider } from "@/hooks/notifications/useNotificationsBadge";
 import { cn } from "@/lib/utils";
 
@@ -23,10 +20,6 @@ function AppShellInner({ children, fullBleed: fullBleedProp }: AppShellProps) {
     fullBleedProp ?? pathname.startsWith("/scenes/view");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [openPanel, setOpenPanel] = useState<"training" | "activity" | null>(
-    null,
-  );
-  const trainingCount = useTrainingCount();
 
   const handleMenuClick = () => {
     // Same hamburger drives the mobile drawer and the desktop icon-rail —
@@ -61,23 +54,12 @@ function AppShellInner({ children, fullBleed: fullBleedProp }: AppShellProps) {
             mobileNavOpen ? "translate-x-0" : "-translate-x-full",
           )}
         >
-          <AppSidebar
-            trainingCount={trainingCount}
-            collapsed={false}
-            onNavAction={(id) => {
-              setOpenPanel(id);
-              setMobileNavOpen(false);
-            }}
-          />
+          <AppSidebar collapsed={false} onNavigate={() => setMobileNavOpen(false)} />
         </div>
 
         {/* Desktop static sidebar — collapses to an icon rail via the hamburger */}
         <div className="hidden md:block">
-          <AppSidebar
-            trainingCount={trainingCount}
-            collapsed={sidebarCollapsed}
-            onNavAction={(id) => setOpenPanel(id)}
-          />
+          <AppSidebar collapsed={sidebarCollapsed} />
         </div>
 
         <main
@@ -91,15 +73,6 @@ function AppShellInner({ children, fullBleed: fullBleedProp }: AppShellProps) {
           {children}
         </main>
       </div>
-
-      <TrainingPanel
-        open={openPanel === "training"}
-        onClose={() => setOpenPanel(null)}
-      />
-      <ActivityPanel
-        open={openPanel === "activity"}
-        onClose={() => setOpenPanel(null)}
-      />
     </div>
   );
 }

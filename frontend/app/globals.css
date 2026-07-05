@@ -986,24 +986,6 @@ body {
   box-shadow: none;
 }
 
-/* Generic numeric badge (unread/pending counts) for nav rows that have
-   real backing data — distinct from the amber "live job" indicator
-   below, which specifically means "running right now". */
-.sw-nav-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1.125rem;
-  height: 1.125rem;
-  padding: 0 0.3125rem;
-  border-radius: 999px;
-  background: #3b82f6;
-  color: #fff;
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 1;
-}
-
 /* Active nav icon — plain white, no drop-shadow glow. */
 .sw-icon-glow {
   filter: none;
