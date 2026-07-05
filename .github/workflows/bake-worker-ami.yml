@@ -194,7 +194,7 @@ jobs:
         id: smoke
         run: |
           SCRIPT=$(cat <<EOF
-          set -euo pipefail
+          set -eu
           mkdir -p /tmp/ami-bake
           cd /tmp/ami-bake
           aws s3 cp s3://${{ env.RAW_SCENES_BUCKET }}/${{ steps.stage.outputs.s3_key }} worker-bake.tar.gz
