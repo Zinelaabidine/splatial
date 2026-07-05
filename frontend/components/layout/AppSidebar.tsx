@@ -10,14 +10,11 @@ import {
   Home,
   Plus,
   Rss,
-  Settings,
   ShieldCheck,
   TrendingUp,
 } from "lucide-react";
 
 import SplatworksLogo from "@/components/splatworks/SplatworksLogo";
-import { UserAvatar } from "@/components/splatworks/SplatworksLogo";
-import { useAppAccount } from "@/hooks/layout/useAppAccount";
 import { useIsAdmin } from "@/lib/auth/useIsAdmin";
 import { cn } from "@/lib/utils";
 
@@ -26,8 +23,8 @@ type NavActionId = "training" | "activity";
 
 type AppSidebarProps = {
   trainingCount?: number;
+  collapsed?: boolean;
   onNavAction?: (id: NavActionId) => void;
-  onSettingsClick?: () => void;
 };
 
 const NAV: {
@@ -97,12 +94,11 @@ const navItemClassName = (isActive: boolean) =>
 
 export default function AppSidebar({
   trainingCount = 0,
+  collapsed = false,
   onNavAction,
-  onSettingsClick,
 }: AppSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const account = useAppAccount();
   const isAdmin = useIsAdmin();
 
   const navItems = isAdmin
@@ -118,16 +114,24 @@ export default function AppSidebar({
       ]
     : NAV;
 
-  const hasTrainingActivity = trainingCount > 0;
-
   return (
     <aside
       aria-label="Main navigation"
-      className="sw-glass sw-glass-border relative z-10 my-3 ml-3 flex h-[calc(100%-1.5rem)] w-[240px] shrink-0 flex-col overflow-y-auto rounded-2xl px-3 py-4"
+      className={cn(
+        "sw-glass sw-glass-border relative z-10 my-3 ml-3 flex h-[calc(100%-1.5rem)] shrink-0 flex-col overflow-y-auto overflow-x-hidden rounded-2xl py-4 transition-[width] duration-200 ease-out",
+        collapsed ? "w-[68px] px-2" : "w-[240px] px-3",
+      )}
     >
-      <SplatworksLogo variant="dark" className="relative z-[1] mb-5 px-1" />
+      <SplatworksLogo
+        variant="dark"
+        compact={collapsed}
+        className={cn("relative z-[1] mb-5", collapsed ? "px-0" : "px-1")}
+      />
 
-      <nav aria-label="Primary" className="relative z-[1] flex flex-col gap-0.5">
+      <nav
+        aria-label="Primary"
+        className="relative z-[1] flex flex-col gap-0.5"
+      >
         {navItems.map(({ id, label, href, icon: Icon, match }) => {
           const isActive = match(pathname);
           const showTrainingBadge = id === "training" && trainingCount > 0;
@@ -144,8 +148,10 @@ export default function AppSidebar({
                 )}
                 strokeWidth={isActive ? 2 : 1.5}
               />
-              <span className="min-w-0 flex-1 truncate">{label}</span>
-              {showTrainingBadge && (
+              {!collapsed && (
+                <span className="min-w-0 flex-1 truncate">{label}</span>
+              )}
+              {!collapsed && showTrainingBadge && (
                 <span
                   className="sw-training-badge shrink-0"
                   aria-label={`${trainingCount} training ${trainingCount === 1 ? "job" : "jobs"} in progress`}
@@ -156,10 +162,20 @@ export default function AppSidebar({
                   </span>
                 </span>
               )}
+              {collapsed && showTrainingBadge && (
+                <span
+                  className="sw-training-dot absolute right-1.5 top-1.5"
+                  aria-hidden
+                />
+              )}
             </>
           );
 
-          const className = cn(navItemClassName(isActive), "group");
+          const className = cn(
+            navItemClassName(isActive),
+            "group",
+            collapsed && "justify-center px-0",
+          );
 
           if (href === "#") {
             const actionId = id as NavActionId;
@@ -168,6 +184,7 @@ export default function AppSidebar({
                 key={id}
                 type="button"
                 className={className}
+                title={collapsed ? label : undefined}
                 aria-label={showTrainingBadge ? `${label}, ${trainingCount} in progress` : label}
                 onClick={() => onNavAction?.(actionId)}
               >
@@ -181,6 +198,7 @@ export default function AppSidebar({
               key={id}
               href={href}
               className={className}
+              title={collapsed ? label : undefined}
               aria-current={isActive ? "page" : undefined}
             >
               {inner}
@@ -192,34 +210,16 @@ export default function AppSidebar({
       <button
         type="button"
         onClick={() => router.push("/scenes/create")}
-        className="sw-new-scene relative z-[1] mt-5 flex h-10 w-full items-center justify-center gap-2 rounded-full text-sm font-semibold text-white transition-[filter,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 focus-visible:ring-offset-0"
-      >
-        <Plus className="relative z-[1] h-4 w-4" strokeWidth={2} aria-hidden />
-        <span className="relative z-[1]">New scene</span>
-      </button>
-
-      <div
+        title={collapsed ? "New scene" : undefined}
+        aria-label="New scene"
         className={cn(
-          "sw-control sw-profile-card relative z-[1] mt-auto flex items-center gap-2.5 rounded-2xl px-2.5 py-2.5",
-          hasTrainingActivity && "sw-profile-attention",
+          "sw-new-scene relative z-[1] mt-5 flex h-10 items-center justify-center gap-2 rounded-full text-sm font-semibold text-white transition-[filter,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 focus-visible:ring-offset-0",
+          collapsed ? "w-10 self-center" : "w-full",
         )}
       >
-        <div className="sw-profile-avatar-ring shrink-0">
-          <UserAvatar initials={account.initials} size={36} />
-        </div>
-        <div className="min-w-0 flex-1 leading-tight">
-          <div className="truncate text-sm font-semibold text-white">{account.name}</div>
-          <div className="font-sw-mono truncate text-[11px] text-[#9aa6bd]">{account.plan}</div>
-        </div>
-        <button
-          type="button"
-          aria-label="Settings"
-          className="shrink-0 rounded-lg p-1.5 text-[#9aa6bd] transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
-          onClick={() => onSettingsClick?.()}
-        >
-          <Settings className="h-4 w-4" strokeWidth={1.5} aria-hidden />
-        </button>
-      </div>
+        <Plus className="relative z-[1] h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
+        {!collapsed && <span className="relative z-[1]">New scene</span>}
+      </button>
     </aside>
   );
 }

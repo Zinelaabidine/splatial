@@ -23,11 +23,19 @@ function AppShellInner({ children, fullBleed: fullBleedProp }: AppShellProps) {
   const fullBleed =
     fullBleedProp ?? pathname.startsWith("/scenes/view");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [openPanel, setOpenPanel] = useState<"training" | "activity" | null>(
     null,
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
   const trainingCount = useTrainingCount();
+
+  const handleMenuClick = () => {
+    // Same hamburger drives the mobile drawer and the desktop icon-rail —
+    // only the breakpoint-relevant markup is visible at a given width.
+    setMobileNavOpen((open) => !open);
+    setSidebarCollapsed((collapsed) => !collapsed);
+  };
 
   return (
     <div className="relative flex h-screen flex-col overflow-hidden text-[#eef1f7]">
@@ -37,7 +45,7 @@ function AppShellInner({ children, fullBleed: fullBleedProp }: AppShellProps) {
       <div className="sw-field-stars pointer-events-none fixed inset-0 -z-10" />
 
       <AppTopBar
-        onMenuClick={() => setMobileNavOpen((o) => !o)}
+        onMenuClick={handleMenuClick}
         onAccountClick={() => setSettingsOpen(true)}
       />
 
@@ -51,22 +59,29 @@ function AppShellInner({ children, fullBleed: fullBleedProp }: AppShellProps) {
           />
         )}
 
+        {/* Mobile overlay drawer — always shows the full, labeled sidebar */}
         <div
           className={cn(
-            "fixed inset-y-14 left-0 z-50 transform transition-transform md:static md:translate-x-0",
-            mobileNavOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
+            "fixed inset-y-14 left-0 z-50 transform transition-transform md:hidden",
+            mobileNavOpen ? "translate-x-0" : "-translate-x-full",
           )}
         >
           <AppSidebar
             trainingCount={trainingCount}
+            collapsed={false}
             onNavAction={(id) => {
               setOpenPanel(id);
               setMobileNavOpen(false);
             }}
-            onSettingsClick={() => {
-              setSettingsOpen(true);
-              setMobileNavOpen(false);
-            }}
+          />
+        </div>
+
+        {/* Desktop static sidebar — collapses to an icon rail via the hamburger */}
+        <div className="hidden md:block">
+          <AppSidebar
+            trainingCount={trainingCount}
+            collapsed={sidebarCollapsed}
+            onNavAction={(id) => setOpenPanel(id)}
           />
         </div>
 

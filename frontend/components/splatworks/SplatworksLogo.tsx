@@ -1,30 +1,40 @@
 type SplatworksLogoProps = {
   variant?: "dark" | "light";
   className?: string;
+  compact?: boolean;
 };
 
 export default function SplatworksLogo({
   variant = "dark",
   className,
+  compact = false,
 }: SplatworksLogoProps) {
   const fill = variant === "dark" ? "#19c2ad" : "#0e8a7d";
   const textColor = variant === "dark" ? "#f4f7fa" : "#1a1a18";
 
   return (
     <div className={className}>
-      <div className="flex items-center gap-2.5 px-2">
+      <div
+        className={
+          compact
+            ? "flex items-center justify-center"
+            : "flex items-center gap-2.5 px-2"
+        }
+      >
         <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden>
           <circle cx="7" cy="8" r="3" fill={fill} />
           <circle cx="15" cy="6" r="2.4" fill={fill} opacity="0.7" />
           <circle cx="13" cy="14" r="3.4" fill={fill} opacity="0.5" />
           <circle cx="6" cy="15" r="2" fill={fill} opacity="0.85" />
         </svg>
-        <span
-          className="text-base font-bold tracking-[-0.01em]"
-          style={{ color: textColor }}
-        >
-          Splatworks
-        </span>
+        {!compact && (
+          <span
+            className="text-base font-bold tracking-[-0.01em]"
+            style={{ color: textColor }}
+          >
+            Splatworks
+          </span>
+        )}
       </div>
     </div>
   );

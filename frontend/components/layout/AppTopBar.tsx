@@ -34,9 +34,9 @@ export default function AppTopBar({ onMenuClick, onAccountClick }: AppTopBarProp
     <header className="sw-glass-bar sticky top-0 z-50 flex h-14 shrink-0 items-center gap-3 px-4">
       <button
         type="button"
-        aria-label="Menu"
+        aria-label="Toggle navigation"
         onClick={onMenuClick}
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#f1f1f1] hover:bg-white/10 md:hidden"
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#f1f1f1] hover:bg-white/10"
       >
         <Menu className="h-5 w-5" />
       </button>
