@@ -103,3 +103,8 @@ variable "attach_deploy_policies_to_local_dev_role" {
   default     = false
 }
 
+variable "enable_ami_bake_resources" {
+  description = "Create the AMI-bake builder instance role/profile and attach bake permissions (from infra/modules/static-site/iam-github-oidc-bake.tf) to the splatial-github-ami-bake-role created in infra/bootstrap. That role is a single global role, not one per environment, so exactly one environment (dev) should set this true — enabling it in more than one env's state would cause each apply to fight over the same role's attached policy."
+  type        = bool
+  default     = false
+}

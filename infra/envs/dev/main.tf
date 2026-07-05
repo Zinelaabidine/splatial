@@ -36,6 +36,11 @@ module "static_site" {
 
   attach_deploy_policies_to_local_dev_role = true
 
+  # The AMI-bake pipeline (.github/workflows/bake-worker-ami.yml) builds and
+  # smoke-tests against dev's worker subnet/security group. This must be true
+  # in exactly one environment — see the variable description.
+  enable_ami_bake_resources = true
+
 }
 
 # ---------------------------------------------------------------------------

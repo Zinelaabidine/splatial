@@ -1,0 +1,307 @@
+# bake-worker-ami.yml — build and bake a fresh GPU worker AMI
+#
+# WHAT THIS DOES
+#   1. Launches a throwaway EC2 builder instance from an existing worker AMI
+#      (incremental bake — see worker/provision.sh for the from-scratch path).
+#   2. Copies the current worker/*.py + systemd unit onto it via SSM (no SSH —
+#      same "SSM only, zero inbound" posture as the production workers).
+#   3. Runs a smoke test: NVIDIA driver present, updated Python files compile
+#      cleanly inside the gaussian_splatting conda env.
+#   4. Stops the instance and bakes it into a new AMI.
+#   5. Always terminates the builder instance, success or failure.
+#   6. Prints the new AMI ID to the job summary — nothing more.
+#
+# WHAT THIS DELIBERATELY DOES NOT DO
+#   - It does not update infra/modules/static-site/compute.tf or
+#     locals.worker_ami_id. Per CLAUDE.md, the AMI reference is only ever
+#     updated by a human after a tested build, through the normal
+#     plan/apply flow.
+#   - It does not register the AMI in the admin worker-AMI registry
+#     (POST /admin/worker-amis is Cognito-JWT + isAdmin() gated; there is no
+#     clean way for CI to call it without minting a real admin session, and
+#     that auth boundary shouldn't be carved open for a CI credential).
+#     Register the printed AMI ID manually from the ASG admin page.
+#   - The smoke test does NOT start gaussian-worker.service against the real
+#     SQS queue names. The builder's IAM role intentionally has no SQS
+#     permissions (see infra/modules/static-site/iam-github-oidc-bake.tf), so
+#     it could only fail there — and letting a disposable box near production
+#     queue names at all is the wrong shape of test. Full end-to-end
+#     validation (real COLMAP/3DGS run) happens after registering the AMI, by
+#     using the existing admin "Manual worker boot" control to boot one real
+#     worker on it.
+#
+# AUTHENTICATION
+#   Assumes splatial-github-ami-bake-role via GitHub OIDC. Trust is scoped in
+#   infra/bootstrap/main.tf to job_workflow_ref for exactly this file on main
+#   — no other workflow can assume it. Combined with workflow_dispatch-only
+#   triggering and the `environment: ami-bake` protection rule below, running
+#   this requires both pushing to main AND a human manually dispatching it.
+#
+# ONE-TIME MANUAL SETUP REQUIRED
+#   Create an "ami-bake" GitHub Environment (Settings → Environments) with at
+#   least one required reviewer, same as the existing "infra-bootstrap"
+#   environment used by bootstrap.yml. This is a belt-and-suspenders approval
+#   gate on top of the job_workflow_ref trust restriction.
+#
+name: bake worker AMI
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_ami_id:
+        description: "AMI to build from (incremental bake). Defaults to the current dev worker AMI — update if a different one is now registered/live."
+        type: string
+        default: "ami-0a6913682d6d953eb"
+        required: true
+      label:
+        description: "Short label for this bake, e.g. 'fix-colmap-timeout' (used in the new AMI's Name tag)"
+        type: string
+        required: true
+      reason:
+        description: "Optional context for the job summary / AMI description"
+        type: string
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: bake-worker-ami
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  INSTANCE_TYPE: g5g.xlarge
+  NAME_PREFIX: splatial-dev
+  RAW_SCENES_BUCKET: splatial-dev-raw-scenes
+  INSTANCE_PROFILE_NAME: splatial-dev-ami-bake-instance-profile
+
+jobs:
+  bake:
+    name: Bake worker AMI
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: ami-bake
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::886601940523:role/splatial-github-ami-bake-role
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify AWS identity
+        run: aws sts get-caller-identity
+
+      - name: Set run context
+        id: ctx
+        run: |
+          SHORT_SHA="$(git rev-parse --short HEAD)"
+          RUN_KEY="${{ github.run_id }}-${{ github.run_attempt }}"
+          TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+          SAFE_LABEL="$(echo '${{ inputs.label }}' | tr -c 'a-zA-Z0-9-' '-' | cut -c1-40)"
+          {
+            echo "short_sha=${SHORT_SHA}"
+            echo "run_key=${RUN_KEY}"
+            echo "timestamp=${TIMESTAMP}"
+            echo "safe_label=${SAFE_LABEL}"
+            echo "image_name=splatial-worker-${SAFE_LABEL}-${SHORT_SHA}-${TIMESTAMP}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Look up dev networking (subnet + security group)
+        id: net
+        run: |
+          SUBNET_ID=$(aws ec2 describe-subnets \
+            --filters "Name=tag:Name,Values=${{ env.NAME_PREFIX }}-spot-instance-*-subnet" \
+            --query 'Subnets[0].SubnetId' --output text)
+          SG_ID=$(aws ec2 describe-security-groups \
+            --filters "Name=group-name,Values=${{ env.NAME_PREFIX }}-splat-worker-sg" \
+            --query 'SecurityGroups[0].GroupId' --output text)
+          if [ -z "$SUBNET_ID" ] || [ "$SUBNET_ID" = "None" ]; then
+            echo "Could not resolve worker subnet — has infra/envs/dev been applied?" >&2
+            exit 1
+          fi
+          if [ -z "$SG_ID" ] || [ "$SG_ID" = "None" ]; then
+            echo "Could not resolve worker security group — has infra/envs/dev been applied?" >&2
+            exit 1
+          fi
+          {
+            echo "subnet_id=${SUBNET_ID}"
+            echo "sg_id=${SG_ID}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Package worker files
+        run: |
+          tar czf worker-bake.tar.gz -C worker \
+            worker.py convert.py imds_extract.py aws_config.py log_envelope.py gaussian-worker.service
+
+      - name: Stage worker files in S3
+        id: stage
+        run: |
+          KEY="_ami-bake/${{ steps.ctx.outputs.run_key }}/worker-bake.tar.gz"
+          aws s3 cp worker-bake.tar.gz "s3://${{ env.RAW_SCENES_BUCKET }}/${KEY}"
+          echo "s3_key=${KEY}" >> "$GITHUB_OUTPUT"
+
+      - name: Launch builder instance
+        id: launch
+        run: |
+          TAGS="ResourceType=instance,Tags=[{Key=Name,Value=${{ env.NAME_PREFIX }}-ami-bake-builder},{Key=Purpose,Value=ami-bake},{Key=Environment,Value=dev},{Key=Project,Value=splatial},{Key=ManagedBy,Value=github-actions-bake},{Key=GitSha,Value=${{ steps.ctx.outputs.short_sha }}},{Key=RunUrl,Value=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}}]"
+          VOL_TAGS="ResourceType=volume,Tags=[{Key=Purpose,Value=ami-bake},{Key=Environment,Value=dev},{Key=Project,Value=splatial},{Key=ManagedBy,Value=github-actions-bake}]"
+
+          INSTANCE_ID=$(aws ec2 run-instances \
+            --image-id "${{ inputs.base_ami_id }}" \
+            --instance-type "${{ env.INSTANCE_TYPE }}" \
+            --subnet-id "${{ steps.net.outputs.subnet_id }}" \
+            --security-group-ids "${{ steps.net.outputs.sg_id }}" \
+            --iam-instance-profile "Name=${{ env.INSTANCE_PROFILE_NAME }}" \
+            --metadata-options "HttpTokens=required,HttpEndpoint=enabled,HttpPutResponseHopLimit=1" \
+            --block-device-mappings 'DeviceName=/dev/xvda,Ebs={VolumeSize=100,VolumeType=gp3,DeleteOnTermination=true}' \
+            --tag-specifications "$TAGS" "$VOL_TAGS" \
+            --count 1 \
+            --query 'Instances[0].InstanceId' --output text)
+
+          echo "instance_id=${INSTANCE_ID}" >> "$GITHUB_OUTPUT"
+          echo "Builder instance: ${INSTANCE_ID}"
+
+      # Every step from here on must run even if a later step fails, so the
+      # always()-gated cleanup job at the bottom can find the instance ID.
+      - name: Wait for instance running
+        run: |
+          aws ec2 wait instance-running --instance-ids "${{ steps.launch.outputs.instance_id }}"
+
+      - name: Wait for SSM registration
+        run: |
+          for i in $(seq 1 30); do
+            STATE=$(aws ssm describe-instance-information \
+              --filters "Key=InstanceIds,Values=${{ steps.launch.outputs.instance_id }}" \
+              --query 'InstanceInformationList[0].PingStatus' --output text 2>/dev/null || echo "None")
+            if [ "$STATE" = "Online" ]; then
+              echo "SSM agent online."
+              exit 0
+            fi
+            echo "Waiting for SSM agent... (${i}/30)"
+            sleep 10
+          done
+          echo "SSM agent never came online within 5 minutes." >&2
+          exit 1
+
+      - name: Copy worker files + smoke test via SSM
+        id: smoke
+        run: |
+          SCRIPT=$(cat <<EOF
+          set -euo pipefail
+          mkdir -p /tmp/ami-bake
+          cd /tmp/ami-bake
+          aws s3 cp s3://${{ env.RAW_SCENES_BUCKET }}/${{ steps.stage.outputs.s3_key }} worker-bake.tar.gz
+          tar xzf worker-bake.tar.gz
+          sudo mkdir -p /home/ubuntu/gaussian-splatting
+          sudo cp worker.py convert.py imds_extract.py aws_config.py log_envelope.py /home/ubuntu/gaussian-splatting/
+          sudo chown ubuntu:ubuntu /home/ubuntu/gaussian-splatting/*.py
+          sudo cp gaussian-worker.service /etc/systemd/system/gaussian-worker.service
+          sudo systemctl daemon-reload
+          echo "== nvidia-smi =="
+          nvidia-smi
+          echo "== py_compile smoke test =="
+          sudo -u ubuntu /home/ubuntu/miniconda3/bin/conda run --no-capture-output -n gaussian_splatting python -m py_compile /home/ubuntu/gaussian-splatting/worker.py /home/ubuntu/gaussian-splatting/convert.py /home/ubuntu/gaussian-splatting/imds_extract.py /home/ubuntu/gaussian-splatting/aws_config.py /home/ubuntu/gaussian-splatting/log_envelope.py
+          echo "SMOKE_TEST_OK"
+          EOF
+          )
+
+          CMD_ID=$(aws ssm send-command \
+            --instance-ids "${{ steps.launch.outputs.instance_id }}" \
+            --document-name "AWS-RunShellScript" \
+            --parameters "commands=[$(jq -Rs . <<< "$SCRIPT")]" \
+            --query 'Command.CommandId' --output text)
+
+          echo "SSM command: ${CMD_ID}"
+
+          for i in $(seq 1 30); do
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$CMD_ID" \
+              --instance-id "${{ steps.launch.outputs.instance_id }}" \
+              --query 'Status' --output text 2>/dev/null || echo "Pending")
+            case "$STATUS" in
+              Success|Failed|Cancelled|TimedOut) break ;;
+              *) echo "Command status: ${STATUS} (${i}/30)"; sleep 10 ;;
+            esac
+          done
+
+          echo "== stdout =="
+          aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "${{ steps.launch.outputs.instance_id }}" --query 'StandardOutputContent' --output text
+          echo "== stderr =="
+          aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "${{ steps.launch.outputs.instance_id }}" --query 'StandardErrorContent' --output text
+
+          if [ "$STATUS" != "Success" ]; then
+            echo "Smoke test failed (status: ${STATUS})." >&2
+            exit 1
+          fi
+
+      - name: Stop builder instance
+        run: |
+          aws ec2 stop-instances --instance-ids "${{ steps.launch.outputs.instance_id }}"
+          aws ec2 wait instance-stopped --instance-ids "${{ steps.launch.outputs.instance_id }}"
+
+      - name: Create image
+        id: image
+        run: |
+          IMAGE_TAGS="ResourceType=image,Tags=[{Key=Purpose,Value=ami-bake},{Key=Environment,Value=dev},{Key=Project,Value=splatial},{Key=ManagedBy,Value=github-actions-bake},{Key=GitSha,Value=${{ steps.ctx.outputs.short_sha }}},{Key=BaseAmi,Value=${{ inputs.base_ami_id }}}]"
+          SNAP_TAGS="ResourceType=snapshot,Tags=[{Key=Purpose,Value=ami-bake},{Key=Environment,Value=dev},{Key=Project,Value=splatial},{Key=ManagedBy,Value=github-actions-bake}]"
+
+          IMAGE_ID=$(aws ec2 create-image \
+            --instance-id "${{ steps.launch.outputs.instance_id }}" \
+            --name "${{ steps.ctx.outputs.image_name }}" \
+            --description "Splatial worker AMI — ${{ inputs.label }} (base ${{ inputs.base_ami_id }}, ${{ github.sha }})" \
+            --tag-specifications "$IMAGE_TAGS" "$SNAP_TAGS" \
+            --query 'ImageId' --output text)
+
+          echo "image_id=${IMAGE_ID}" >> "$GITHUB_OUTPUT"
+          echo "New AMI: ${IMAGE_ID}"
+
+      - name: Wait for image available
+        run: |
+          timeout 1200 aws ec2 wait image-available --image-ids "${{ steps.image.outputs.image_id }}"
+
+      - name: Read image details
+        id: details
+        run: |
+          ARCH=$(aws ec2 describe-images --image-ids "${{ steps.image.outputs.image_id }}" --query 'Images[0].Architecture' --output text)
+          echo "architecture=${ARCH}" >> "$GITHUB_OUTPUT"
+
+      - name: Write job summary
+        run: |
+          {
+            echo "## Worker AMI baked"
+            echo ""
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| AMI ID | \`${{ steps.image.outputs.image_id }}\` |"
+            echo "| Architecture | ${{ steps.details.outputs.architecture }} |"
+            echo "| Base AMI | \`${{ inputs.base_ami_id }}\` |"
+            echo "| Label | ${{ inputs.label }} |"
+            echo "| Reason | ${{ inputs.reason }} |"
+            echo "| Git SHA | ${{ github.sha }} |"
+            echo "| Name tag | ${{ steps.ctx.outputs.image_name }} |"
+            echo ""
+            echo "**Not yet live.** To use it:"
+            echo "1. Register it: ASG admin page → \"Register a new AMI\" → AMI ID \`${{ steps.image.outputs.image_id }}\`, label \"${{ inputs.label }}\"."
+            echo "2. Smoke-test it for real: \"Manual worker boot\" on the same page, let one real scene run through it."
+            echo "3. Only then, update \`locals.worker_ami_id\` in \`infra/modules/static-site/compute.tf\` by hand and go through the normal plan/apply flow."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Runs on success AND failure — a builder instance must never be left
+      # running. Also removes the staged S3 tarball regardless of outcome.
+      - name: Cleanup (always)
+        if: always()
+        run: |
+          if [ -n "${{ steps.launch.outputs.instance_id }}" ]; then
+            echo "Terminating ${{ steps.launch.outputs.instance_id }}"
+            aws ec2 terminate-instances --instance-ids "${{ steps.launch.outputs.instance_id }}" || true
+          fi
+          if [ -n "${{ steps.stage.outputs.s3_key }}" ]; then
+            aws s3 rm "s3://${{ env.RAW_SCENES_BUCKET }}/${{ steps.stage.outputs.s3_key }}" || true
+          fi
