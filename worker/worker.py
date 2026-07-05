@@ -95,6 +95,16 @@ Environment Variables:
 
 from __future__ import annotations
 
+# ----------------------------
+# Worker version
+# ----------------------------
+# Bumped by hand whenever worker.py (or its co-located convert.py / train.py
+# invocation) changes in a way worth tracking against processed scenes. Read
+# back by the backend on every attempt PATCH/heartbeat and surfaced on the
+# scene view so it's obvious which worker build produced a given result.
+# Bump this before triggering a new AMI bake (.github/workflows/bake-worker-ami.yml).
+WORKER_VERSION = "1.0.0"
+
 import hashlib
 import json
 import logging
@@ -931,6 +941,7 @@ def build_progress_body(
     body: Dict[str, Any] = {
         "progressPhase": normalize_phase(phase),
         "progressPercent": percent,
+        "workerVersion": WORKER_VERSION,
     }
     if sub_phase:
         body["progressSubPhase"] = sub_phase
@@ -3045,6 +3056,7 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
             "status": "RUNNING",
             "progressPhase": "INIT",
             "progressPercent": 0,
+            "workerVersion": WORKER_VERSION,
         }
         if current_instance_id:
             start_patch["ec2InstanceId"] = current_instance_id
