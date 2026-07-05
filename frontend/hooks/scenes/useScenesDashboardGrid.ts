@@ -13,13 +13,48 @@ import { deleteScene, listScenes, updateScene } from "@/services/scenesService";
 import { ApiRequestError } from "@/lib/api/apiErrors";
 import { sceneViewerUrl } from "@/lib/scenes/viewerUrls";
 import type { SceneVisibility } from "@/types/api";
-import type { DashboardScene } from "@/types/splatworks";
+import type { DashboardScene, SceneStatus } from "@/types/splatworks";
+import type { SortOption } from "@/types/dashboard";
+
+export type StatusFilter = SceneStatus | "all";
+export type SceneViewMode = "grid" | "list";
+
+const SORT_OPTIONS: SortOption[] = ["newest", "oldest", "name"];
+export const STATUS_FILTER_OPTIONS: StatusFilter[] = [
+  "all",
+  "draft",
+  "queued",
+  "training",
+  "completed",
+  "failed",
+];
+
+function sortScenes(list: DashboardScene[], sortBy: SortOption): DashboardScene[] {
+  const copy = [...list];
+  switch (sortBy) {
+    case "name":
+      return copy.sort((a, b) => a.title.localeCompare(b.title));
+    case "oldest":
+      return copy.sort((a, b) =>
+        (a.createdAtIso ?? "").localeCompare(b.createdAtIso ?? ""),
+      );
+    default:
+      return copy.sort((a, b) =>
+        (b.createdAtIso ?? "").localeCompare(a.createdAtIso ?? ""),
+      );
+  }
+}
 
 export function useScenesDashboardGrid(search: string) {
   const router = useRouter();
   const [scenes, setScenes] = useState<DashboardScene[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<SortOption>("newest");
+  const [sortOpen, setSortOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [statusOpen, setStatusOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<SceneViewMode>("grid");
   const [submittingId, setSubmittingId] = useState<string | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [modalCancelling, setModalCancelling] = useState(false);
@@ -75,9 +110,11 @@ export function useScenesDashboardGrid(search: string) {
 
   const filteredScenes = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return scenes;
-    return scenes.filter((s) => s.title.toLowerCase().includes(q));
-  }, [scenes, search]);
+    let list = scenes;
+    if (q) list = list.filter((s) => s.title.toLowerCase().includes(q));
+    if (statusFilter !== "all") list = list.filter((s) => s.status === statusFilter);
+    return sortScenes(list, sortBy);
+  }, [scenes, search, statusFilter, sortBy]);
 
   const openScene = (scene: DashboardScene) => {
     if (scene.status === "completed" && scene.sceneId) {
@@ -303,8 +340,20 @@ export function useScenesDashboardGrid(search: string) {
 
   return {
     scenes: filteredScenes,
+    totalCount: scenes.length,
     loading,
     error,
+    sortBy,
+    setSortBy,
+    sortOpen,
+    setSortOpen,
+    sortOptions: SORT_OPTIONS,
+    statusFilter,
+    setStatusFilter,
+    statusOpen,
+    setStatusOpen,
+    viewMode,
+    setViewMode,
     actionError,
     actionMessage,
     submittingId,

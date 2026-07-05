@@ -65,6 +65,8 @@ export type DashboardScene = {
   tags?: string[];
   /** Bottom caption line (mono, muted). */
   caption: string;
+  /** ISO created timestamp — used for Newest/Oldest sorting. */
+  createdAtIso?: string;
   preview?: SplatPreviewTint;
   /** Presigned thumbnail image when the user has set one. */
   thumbnailUrl?: string;

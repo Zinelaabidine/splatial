@@ -36,7 +36,10 @@ function AppShellInner({ children, fullBleed: fullBleedProp }: AppShellProps) {
       <div className="sw-field-glow pointer-events-none fixed inset-0 -z-20" />
       <div className="sw-field-stars pointer-events-none fixed inset-0 -z-10" />
 
-      <AppTopBar onMenuClick={() => setMobileNavOpen((o) => !o)} />
+      <AppTopBar
+        onMenuClick={() => setMobileNavOpen((o) => !o)}
+        onAccountClick={() => setSettingsOpen(true)}
+      />
 
       <div className="flex min-h-0 flex-1">
         {mobileNavOpen && (

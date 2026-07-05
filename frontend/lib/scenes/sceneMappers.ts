@@ -131,6 +131,7 @@ export function apiSceneToDashboardScene(scene: Scene): DashboardScene {
     category: scene.category ?? null,
     tags: scene.tags ?? [],
     caption: dashboardCaption(scene, status),
+    createdAtIso: scene.createdAt,
     ...(scene.thumbnailUrl ? { thumbnailUrl: scene.thumbnailUrl } : {}),
     ...(scene.progressPercent != null
       ? { progressPercent: scene.progressPercent }
