@@ -379,12 +379,22 @@ data "aws_iam_policy_document" "github_ami_bake_trust" {
       values   = ["sts.amazonaws.com"]
     }
 
-    # Only the bake workflow file, running from main, can assume this role —
-    # same job_workflow_ref pattern as bootstrap_ci_trust above.
+    # Same repo-scoped sub pattern as bootstrap_ci_trust — required when the
+    # workflow job uses environment: ami-bake (sub becomes
+    # repo:OWNER/REPO:environment:ami-bake, not ref:refs/heads/main).
     condition {
-      test     = "StringEquals"
+      test     = "StringLike"
+      variable = "token.actions.githubusercontent.com:sub"
+      values   = ["repo:${local.github_repo_full}:*"]
+    }
+
+    # Only the bake workflow file on main can assume this role. StringLike on
+    # job_workflow_ref (not StringEquals) matches GitHub's claim whether the
+    # job uses environment: ami-bake or runs directly on the branch.
+    condition {
+      test     = "StringLike"
       variable = "token.actions.githubusercontent.com:job_workflow_ref"
-      values   = ["${local.github_repo_full}/.github/workflows/bake-worker-ami.yml@refs/heads/main"]
+      values   = ["${local.github_repo_full}/.github/workflows/bake-worker-ami.yml@*"]
     }
   }
 }
