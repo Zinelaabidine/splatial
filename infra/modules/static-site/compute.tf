@@ -15,28 +15,36 @@ resource "aws_security_group" "worker" {
     description = "Allow all outbound (S3, SQS, DynamoDB, SSM)"
   }
 
-  # Opt-in, per environment (see variables.tf worker_ssh_allowed_cidr). Empty
-  # in staging/prod, so those stay SSM-only with zero inbound rules. Dev sets
-  # this so an admin can SSH in directly with the GaussianWorker key pair
-  # (see worker_ssh_key_name on aws_launch_template.worker below) instead of
-  # going through Session Manager.
-  dynamic "ingress" {
-    for_each = var.worker_ssh_allowed_cidr != "" ? [var.worker_ssh_allowed_cidr] : []
-    content {
-      from_port   = 22
-      to_port     = 22
-      protocol    = "tcp"
-      cidr_blocks = [ingress.value]
-      description = "SSH (opt-in, see worker_ssh_allowed_cidr)"
-    }
-  }
-
   tags = {
     Name        = "${local.name_prefix}-splat-worker-sg"
     Environment = var.environment
     Project     = var.project_name
     ManagedBy   = "terraform"
   }
+}
+
+# Opt-in SSH ingress (see variables.tf worker_ssh_allowed_cidr). Empty in
+# staging/prod — those stay SSM-only with zero inbound rules. Dev sets this so
+# an admin can SSH in directly with the GaussianWorker key pair (see
+# worker_ssh_key_name on aws_launch_template.worker below) instead of going
+# through Session Manager.
+#
+# Kept out of aws_security_group.worker inline blocks so this resource can
+# depend on time_sleep.compute_iam_propagation without a cycle: the compute IAM
+# policy references aws_security_group.worker.id for ec2:RunInstances.
+resource "aws_vpc_security_group_ingress_rule" "worker_ssh" {
+  for_each = var.worker_ssh_allowed_cidr != "" ? { ssh = var.worker_ssh_allowed_cidr } : {}
+
+  provider = aws.this
+
+  security_group_id = aws_security_group.worker.id
+  from_port         = 22
+  to_port           = 22
+  ip_protocol       = "tcp"
+  cidr_ipv4         = each.value
+  description       = "SSH (opt-in, see worker_ssh_allowed_cidr)"
+
+  depends_on = [time_sleep.compute_iam_propagation]
 }
 
 # ── Launch Template ───────────────────────────────────────────────────────────
