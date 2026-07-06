@@ -13,7 +13,8 @@ const HEARTBEAT_INTERVAL_MS = 60_000;
  *
  * This is Phase-2 infrastructure that may not be deployed to every
  * environment. Returns `null` and never opens a socket when
- * NEXT_PUBLIC_PRESENCE_WS_URL is unset, so callers should treat `null` as
+ * NEXT_PUBLIC_PRESENCE_WS_URL is unset (set at build time from the
+ * presence_ws_endpoint Terraform output in deploy.yml), so callers should treat `null` as
  * "no presence data" rather than "zero viewers" and hide the UI entirely
  * in that case — see SceneInfoCard.
  */

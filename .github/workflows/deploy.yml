@@ -204,6 +204,7 @@ jobs:
             echo "api_endpoint=$(terraform output -raw api_endpoint)"
             echo "raw_scenes_bucket_name=$(terraform output -raw raw_scenes_bucket_name)"
             echo "scenes_table_name=$(terraform output -raw scenes_table_name)"
+            echo "presence_ws_endpoint=$(terraform output -raw presence_ws_endpoint)"
           } >> "$GITHUB_OUTPUT"
       - name: Setup Node.js
         if: needs.changes.outputs.frontend == 'true'
@@ -227,6 +228,7 @@ jobs:
           NEXT_PUBLIC_API_GATEWAY_URL: ${{ steps.tf.outputs.api_endpoint }}
           NEXT_PUBLIC_RAW_SCENES_BUCKET: ${{ steps.tf.outputs.raw_scenes_bucket_name }}
           NEXT_PUBLIC_SCENES_TABLE: ${{ steps.tf.outputs.scenes_table_name }}
+          NEXT_PUBLIC_PRESENCE_WS_URL: ${{ steps.tf.outputs.presence_ws_endpoint }}
       - name: Sync Static Assets to S3
         if: needs.changes.outputs.frontend == 'true'
         working-directory: frontend
