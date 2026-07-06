@@ -83,6 +83,12 @@ async function commentResponseFromItem(item) {
     body: item.body?.S ?? "",
     mentions: item.mention_usernames?.SS ?? [],
     createdAt: item.created_at?.S ?? "",
+    // Threaded replies (one level deep — a reply cannot itself be replied
+    // to, see createReply). Top-level comments carry replyCount; replies
+    // carry parentCommentId. See dynamodb-comments.tf for the sparse GSI
+    // that makes listReplies() efficient.
+    parentCommentId: item.parent_comment_id?.S ?? null,
+    replyCount: Number(item.reply_count?.N ?? 0),
   };
 }
 
@@ -146,6 +152,87 @@ async function createComment({ sceneId, userId, authorProfile, body, mentions })
   return await commentResponseFromItem(item);
 }
 
+/**
+ * Replies are one level deep only — a reply can't itself be replied to.
+ * This keeps the DynamoDB model (and the UI) simple: every comment is
+ * either a top-level comment or a reply, never a deeper thread.
+ */
+async function createReply({ sceneId, parentCommentId, userId, authorProfile, body, mentions }) {
+  const validatedBody = validateBody(body);
+
+  const parent = await getComment(sceneId, parentCommentId);
+  if (!parent) {
+    const err = new Error("Comment not found");
+    err.statusCode = 404;
+    throw err;
+  }
+  if (parent.parent_comment_id?.S) {
+    const err = new Error("Cannot reply to a reply");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const createdAt = new Date().toISOString();
+  const commentId = `${createdAt}#${randomUUID()}`;
+
+  const item = {
+    scene_id: { S: sceneId },
+    comment_id: { S: commentId },
+    user_id: { S: userId },
+    body: { S: validatedBody },
+    created_at: { S: createdAt },
+    parent_comment_id: { S: parentCommentId },
+    ...authorFieldsFromProfile(authorProfile),
+  };
+
+  if (mentions?.usernames?.length > 0 && mentions?.userIds?.length > 0) {
+    item.mention_usernames = { SS: mentions.usernames };
+    item.mention_user_ids = { SS: mentions.userIds };
+  }
+
+  await dynamo.send(
+    new TransactWriteItemsCommand({
+      TransactItems: [
+        {
+          Put: {
+            TableName: COMMENTS_TABLE,
+            Item: item,
+          },
+        },
+        {
+          Update: {
+            TableName: COMMENTS_TABLE,
+            Key: {
+              scene_id: { S: sceneId },
+              comment_id: { S: parentCommentId },
+            },
+            UpdateExpression:
+              "SET reply_count = if_not_exists(reply_count, :zero) + :one",
+            ExpressionAttributeValues: {
+              ":zero": { N: "0" },
+              ":one": { N: "1" },
+            },
+          },
+        },
+        {
+          Update: {
+            TableName: SCENES_TABLE,
+            Key: { scene_id: { S: sceneId } },
+            UpdateExpression:
+              "SET comments_count = if_not_exists(comments_count, :zero) + :one",
+            ExpressionAttributeValues: {
+              ":zero": { N: "0" },
+              ":one": { N: "1" },
+            },
+          },
+        },
+      ],
+    })
+  );
+
+  return await commentResponseFromItem(item);
+}
+
 async function deleteComment({ sceneId, commentId, scene, callerId }) {
   const comment = await getComment(sceneId, commentId);
   if (!comment) {
@@ -165,37 +252,69 @@ async function deleteComment({ sceneId, commentId, scene, callerId }) {
     throw err;
   }
 
-  try {
-    await dynamo.send(
-      new TransactWriteItemsCommand({
-        TransactItems: [
-          {
-            Delete: {
-              TableName: COMMENTS_TABLE,
-              Key: {
-                scene_id: { S: sceneId },
-                comment_id: { S: commentId },
-              },
-              ConditionExpression: "attribute_exists(comment_id)",
-            },
-          },
-          {
-            Update: {
-              TableName: SCENES_TABLE,
-              Key: { scene_id: { S: sceneId } },
-              UpdateExpression:
-                "SET comments_count = if_not_exists(comments_count, :zero) + :minusOne",
-              ConditionExpression: "if_not_exists(comments_count, :zero) >= :one",
-              ExpressionAttributeValues: {
-                ":zero": { N: "0" },
-                ":one": { N: "1" },
-                ":minusOne": { N: "-1" },
-              },
-            },
-          },
-        ],
-      })
+  const parentCommentId = comment.parent_comment_id?.S ?? null;
+  const replyCount = Number(comment.reply_count?.N ?? 0);
+
+  // Deleting a top-level comment with existing replies would orphan them
+  // (DynamoDB has no cascade delete). Block it rather than silently leaving
+  // dangling replies or scanning-and-batch-deleting on every request.
+  if (!parentCommentId && replyCount > 0) {
+    const err = new Error(
+      "Cannot delete a comment that has replies. Delete the replies first."
     );
+    err.statusCode = 409;
+    throw err;
+  }
+
+  const transactItems = [
+    {
+      Delete: {
+        TableName: COMMENTS_TABLE,
+        Key: {
+          scene_id: { S: sceneId },
+          comment_id: { S: commentId },
+        },
+        ConditionExpression: "attribute_exists(comment_id)",
+      },
+    },
+    {
+      Update: {
+        TableName: SCENES_TABLE,
+        Key: { scene_id: { S: sceneId } },
+        UpdateExpression:
+          "SET comments_count = if_not_exists(comments_count, :zero) + :minusOne",
+        ConditionExpression: "if_not_exists(comments_count, :zero) >= :one",
+        ExpressionAttributeValues: {
+          ":zero": { N: "0" },
+          ":one": { N: "1" },
+          ":minusOne": { N: "-1" },
+        },
+      },
+    },
+  ];
+
+  if (parentCommentId) {
+    transactItems.push({
+      Update: {
+        TableName: COMMENTS_TABLE,
+        Key: {
+          scene_id: { S: sceneId },
+          comment_id: { S: parentCommentId },
+        },
+        UpdateExpression:
+          "SET reply_count = if_not_exists(reply_count, :zero) + :minusOne",
+        ConditionExpression: "if_not_exists(reply_count, :zero) >= :one",
+        ExpressionAttributeValues: {
+          ":zero": { N: "0" },
+          ":one": { N: "1" },
+          ":minusOne": { N: "-1" },
+        },
+      },
+    });
+  }
+
+  try {
+    await dynamo.send(new TransactWriteItemsCommand({ TransactItems: transactItems }));
   } catch (err) {
     if (isTransactionCanceledForCondition(err, 0)) {
       const notFound = new Error("Comment not found");
@@ -223,6 +342,12 @@ async function listComments({ sceneId, limit, exclusiveStartKey }) {
     new QueryCommand({
       TableName: COMMENTS_TABLE,
       KeyConditionExpression: "scene_id = :sceneId",
+      // Replies live under their parent (see listReplies) and are excluded
+      // from the top-level feed. Note: DynamoDB applies Limit before this
+      // filter, so a page can legitimately return fewer than `limit` items
+      // once a scene has replies — acceptable for a comments feed at this
+      // scale; revisit with a dedicated sparse GSI if pagination gaps show up.
+      FilterExpression: "attribute_not_exists(parent_comment_id)",
       ExpressionAttributeValues: { ":sceneId": { S: sceneId } },
       ScanIndexForward: false,
       Limit: limit,
@@ -240,10 +365,40 @@ async function listComments({ sceneId, limit, exclusiveStartKey }) {
   };
 }
 
+async function listReplies({ sceneId, parentCommentId, limit, exclusiveStartKey }) {
+  const result = await dynamo.send(
+    new QueryCommand({
+      TableName: COMMENTS_TABLE,
+      IndexName: "parent_comment_id-index",
+      KeyConditionExpression: "parent_comment_id = :parentCommentId",
+      ExpressionAttributeValues: { ":parentCommentId": { S: parentCommentId } },
+      // Oldest-first: replies read like a conversation, unlike the
+      // newest-first top-level feed.
+      ScanIndexForward: true,
+      Limit: limit,
+      ExclusiveStartKey: exclusiveStartKey,
+    })
+  );
+
+  const replies = await Promise.all(
+    (result.Items ?? [])
+      .filter((item) => item.scene_id?.S === sceneId)
+      .map((item) => commentResponseFromItem(item))
+  );
+
+  return {
+    replies,
+    lastEvaluatedKey: result.LastEvaluatedKey,
+  };
+}
+
 module.exports = {
   validateBody,
   createComment,
+  createReply,
   deleteComment,
   listComments,
+  listReplies,
+  getComment,
   commentResponseFromItem,
 };

@@ -36,3 +36,10 @@ export function applyViewMatrix(m: number[]): void;
 
 /** True after startViewer has begun initialising the engine. */
 export function isViewerStarted(): boolean;
+
+/**
+ * Snaps the live camera back to the scene's default view and clears any
+ * trajectory override. Recovers a camera that drifted outside the
+ * reconstructed splat volume — wired to the viewer dock's "Home" button.
+ */
+export function resetView(): void;

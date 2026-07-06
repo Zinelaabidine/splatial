@@ -56,5 +56,9 @@ exports.handler = async (event) => {
     commentsCount: Number(item.comments_count?.N ?? 0),
     myReaction,
     isBookmarked: bookmarked,
+    // Denormalized onto the scene item at create time (see lib/scene-owner.js)
+    // — no extra profile lookup needed. Powers the viewer's scene info card.
+    ownerUsername: item.owner_username?.S ?? "",
+    ownerDisplayName: item.owner_display_name?.S ?? "",
   });
 };

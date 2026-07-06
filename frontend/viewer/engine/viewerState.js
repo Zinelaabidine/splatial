@@ -1,4 +1,4 @@
-import { cameras as defaultCameras } from "@/config/defaultCameras";
+import { cameras as defaultCameras, defaultViewMatrix } from "@/config/defaultCameras";
 import { createViewerControls } from "@/hooks/viewer/useViewerControls";
 import { getProjectionMatrix, multiply4 } from "@/math/matrix4x4";
 import { createViewerEngine } from "./viewerEngine";
@@ -29,6 +29,18 @@ export function applyViewMatrix(m) {
 
 export function isViewerStarted() {
   return viewerStarted;
+}
+
+/**
+ * Recovers a lost camera: clears any trajectory override and snaps the live
+ * view back to the scene's default matrix. Wired to the dock's "Home"
+ * button — a single drag can otherwise send the camera outside the
+ * reconstructed splat volume with no other way back short of reloading.
+ */
+export function resetView() {
+  if (!_controls) return;
+  clearOverrideMatrix();
+  _controls.setViewMatrix(defaultViewMatrix);
 }
 
 export function setViewerStarted(value) {

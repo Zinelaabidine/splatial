@@ -483,6 +483,28 @@ resource "aws_apigatewayv2_route" "scene_comment_delete" {
   target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
 }
 
+# ── Threaded comment replies (one level deep) ─────────────────────────────
+
+resource "aws_apigatewayv2_route" "scene_comment_reply_create" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "POST /api/v1/scenes/{sceneId}/comments/{commentId}/replies"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
+resource "aws_apigatewayv2_route" "scene_comment_replies_list" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "GET /api/v1/scenes/{sceneId}/comments/{commentId}/replies"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
 resource "aws_apigatewayv2_route" "scene_shot_create" {
   api_id    = aws_apigatewayv2_api.http_api.id
   route_key = "POST /api/v1/scenes/{sceneId}/shots"

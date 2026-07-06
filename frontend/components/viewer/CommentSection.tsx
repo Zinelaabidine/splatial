@@ -247,11 +247,11 @@ export default function CommentSection({
 
   return (
     <section
-      className="border-t border-[#2a2a2a] bg-[#121212] px-4 py-6 sm:px-6"
+      className="flex h-full min-h-0 flex-col bg-[#121212]"
       aria-label="Comments"
     >
-      <div className="mx-auto max-w-2xl">
-        <h2 className="mb-4 text-sm font-semibold text-white">
+      <header className="shrink-0 border-b border-[#2a2a2a] px-4 py-3">
+        <h2 className="text-sm font-semibold text-white">
           Comments
           {commentsCount > 0 ? (
             <span className="ml-2 font-sw-mono text-xs font-normal text-[#909090]">
@@ -259,58 +259,9 @@ export default function CommentSection({
             </span>
           ) : null}
         </h2>
+      </header>
 
-        <div className="mb-6 space-y-2">
-          <Textarea
-            value={draft}
-            onChange={(e) => {
-              const next = e.target.value.slice(0, MAX_COMMENT_LENGTH);
-              setDraft(next);
-              setPostError(null);
-            }}
-            placeholder="Add a comment…"
-            rows={3}
-            disabled={posting}
-            aria-label="Comment text"
-          />
-          <div className="flex items-center justify-between gap-3">
-            <span
-              className={
-                atLimit
-                  ? "font-sw-mono text-xs text-amber-400"
-                  : "font-sw-mono text-xs text-[#737373]"
-              }
-            >
-              {charCount}/{MAX_COMMENT_LENGTH}
-            </span>
-            <Button
-              type="button"
-              size="sm"
-              disabled={!canPost}
-              onClick={() => void handlePost()}
-              className="bg-[#19c2ad] text-black hover:bg-[#15a896]"
-            >
-              {posting ? (
-                <>
-                  <Loader2 className="animate-spin" />
-                  Posting…
-                </>
-              ) : (
-                "Post"
-              )}
-            </Button>
-          </div>
-          {postError ? (
-            <p className="text-xs text-red-400" role="alert">
-              {postError}
-            </p>
-          ) : null}
-          <p className="text-xs text-[#737373]">
-            Tip: mention someone with{" "}
-            <span className="font-sw-mono text-[#909090]">@username</span>
-          </p>
-        </div>
-
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         {loading ? (
           <CommentListSkeleton />
         ) : loadError ? (
@@ -330,9 +281,12 @@ export default function CommentSection({
             </Button>
           </div>
         ) : comments.length === 0 ? (
-          <p className="py-6 text-center text-sm text-[#909090]">
-            No comments yet — be the first
-          </p>
+          <div className="flex h-full flex-col items-center justify-center gap-1 py-10 text-center">
+            <p className="text-sm text-[#c4c4c4]">No comments yet</p>
+            <p className="text-xs text-[#707070]">
+              Be the first to say something about this scene.
+            </p>
+          </div>
         ) : (
           <ul className="space-y-5">
             {comments.map((comment) => {
@@ -347,6 +301,9 @@ export default function CommentSection({
                     canDelete={canDelete}
                     deleting={deletingId === comment.commentId}
                     onDelete={(id) => void handleDelete(id)}
+                    sceneId={sceneId}
+                    currentUserId={currentUserId}
+                    isSceneOwner={isSceneOwner}
                   />
                 </li>
               );
@@ -379,6 +336,53 @@ export default function CommentSection({
               </p>
             ) : null}
           </div>
+        ) : null}
+      </div>
+
+      <div className="shrink-0 space-y-2 border-t border-[#2a2a2a] px-4 py-3">
+        <Textarea
+          value={draft}
+          onChange={(e) => {
+            const next = e.target.value.slice(0, MAX_COMMENT_LENGTH);
+            setDraft(next);
+            setPostError(null);
+          }}
+          placeholder="Add a comment…"
+          rows={2}
+          disabled={posting}
+          aria-label="Comment text"
+        />
+        <div className="flex items-center justify-between gap-3">
+          <span
+            className={
+              atLimit
+                ? "font-sw-mono text-xs text-amber-400"
+                : "font-sw-mono text-xs text-[#737373]"
+            }
+          >
+            {charCount}/{MAX_COMMENT_LENGTH}
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            disabled={!canPost}
+            onClick={() => void handlePost()}
+            className="bg-[#19c2ad] text-black hover:bg-[#15a896]"
+          >
+            {posting ? (
+              <>
+                <Loader2 className="animate-spin" />
+                Posting…
+              </>
+            ) : (
+              "Post"
+            )}
+          </Button>
+        </div>
+        {postError ? (
+          <p className="text-xs text-red-400" role="alert">
+            {postError}
+          </p>
         ) : null}
       </div>
     </section>

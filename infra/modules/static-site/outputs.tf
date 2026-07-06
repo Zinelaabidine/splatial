@@ -172,3 +172,8 @@ output "worker_asg_subnet_ids" {
   description = "Subnet IDs passed to the worker ASG vpc_zone_identifier (multi-AZ Spot placement)"
   value       = local.worker_asg_subnet_ids
 }
+
+output "presence_ws_endpoint" {
+  description = "wss:// endpoint of the presence WebSocket API. Set as NEXT_PUBLIC_PRESENCE_WS_URL in the frontend build to enable the viewer's live viewer-count indicator; unset it and the feature no-ops."
+  value       = aws_apigatewayv2_stage.presence_ws.invoke_url
+}

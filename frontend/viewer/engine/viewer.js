@@ -4,6 +4,7 @@ import {
   disposeControls,
   getViewMatrixSnapshot,
   isViewerStarted,
+  resetView as resetViewState,
   runViewer,
   setOverrideMatrix,
   setViewerStarted,
@@ -39,6 +40,11 @@ export function readViewMatrix() {
 
 /** Jump the live camera to a saved view matrix (keeps user control afterward). */
 export { applyViewMatrix, isViewerStarted };
+
+/** Snaps the live camera back to the scene's default view. See viewerState.resetView. */
+export function resetView() {
+  resetViewState();
+}
 
 /** Overrides the view matrix every frame for trajectory playback. Pass null to release. */
 export function setViewMatrix(m) {

@@ -18,6 +18,8 @@ export function useSceneViewUrl(sceneId: string) {
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [commentsCount, setCommentsCount] = useState(0);
   const [sceneName, setSceneName] = useState<string | undefined>(undefined);
+  const [ownerUsername, setOwnerUsername] = useState<string | undefined>(undefined);
+  const [ownerDisplayName, setOwnerDisplayName] = useState<string | undefined>(undefined);
   const [forkedFromSceneId, setForkedFromSceneId] = useState<string | null>(null);
   const [forkedFromUsername, setForkedFromUsername] = useState<string | null>(null);
   const [forksCount, setForksCount] = useState(0);
@@ -38,6 +40,8 @@ export function useSceneViewUrl(sceneId: string) {
       setIsBookmarked(false);
       setCommentsCount(0);
       setSceneName(undefined);
+      setOwnerUsername(undefined);
+      setOwnerDisplayName(undefined);
       setForkedFromSceneId(null);
       setForkedFromUsername(null);
       setForksCount(0);
@@ -56,6 +60,8 @@ export function useSceneViewUrl(sceneId: string) {
           setCommentsCount(scene.commentsCount ?? 0);
           setIsBookmarked(scene.isBookmarked ?? false);
           if (scene.name) setSceneName(scene.name);
+          if (scene.ownerUsername) setOwnerUsername(scene.ownerUsername);
+          if (scene.ownerDisplayName) setOwnerDisplayName(scene.ownerDisplayName);
           if (scene.forkedFromSceneId) setForkedFromSceneId(scene.forkedFromSceneId);
           if (scene.forkedFromUsername) setForkedFromUsername(scene.forkedFromUsername);
           setForksCount(scene.forksCount ?? 0);
@@ -101,6 +107,8 @@ export function useSceneViewUrl(sceneId: string) {
     commentsCount: sceneId ? commentsCount : 0,
     setCommentsCount,
     sceneName: sceneId ? sceneName : undefined,
+    ownerUsername: sceneId ? ownerUsername : undefined,
+    ownerDisplayName: sceneId ? ownerDisplayName : undefined,
     forkedFromSceneId: sceneId ? forkedFromSceneId : null,
     forkedFromUsername: sceneId ? forkedFromUsername : null,
     forksCount: sceneId ? forksCount : 0,

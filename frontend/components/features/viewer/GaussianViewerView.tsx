@@ -8,6 +8,8 @@ import ReactionBar from "@/components/viewer/ReactionBar";
 import RemixAttribution from "@/components/viewer/RemixAttribution";
 import RemixButton from "@/components/viewer/RemixButton";
 import RemixSuccessBanner from "@/components/viewer/RemixSuccessBanner";
+import SceneInfoCard from "@/components/viewer/SceneInfoCard";
+import ShareButton from "@/components/viewer/ShareButton";
 import type { ReactionSummary } from "@/types/api";
 
 const LegacySplatViewer = dynamic(
@@ -21,6 +23,8 @@ type GaussianViewerViewProps = {
   reactionSummary: ReactionSummary | null;
   isBookmarked: boolean;
   sceneName?: string;
+  ownerUsername?: string;
+  ownerDisplayName?: string;
   forkedFromSceneId?: string | null;
   forkedFromUsername?: string | null;
   forksCount?: number;
@@ -37,6 +41,8 @@ export default function GaussianViewerView({
   reactionSummary,
   isBookmarked,
   sceneName,
+  ownerUsername,
+  ownerDisplayName,
   forkedFromSceneId,
   forkedFromUsername,
   forksCount = 0,
@@ -89,8 +95,36 @@ export default function GaussianViewerView({
         <RemixSuccessBanner />
       </Suspense>
 
+      {/* Scene identity — top-left. What the old viewer never showed: whose
+          scene this is and what it's called. */}
+      <div className="pointer-events-none absolute left-4 top-4 z-[var(--z-canvas-overlay)] max-w-[calc(100%-2rem)]">
+        <SceneInfoCard
+          sceneId={sceneId}
+          sceneName={sceneName}
+          ownerUsername={ownerUsername}
+          ownerDisplayName={ownerDisplayName}
+          isSceneOwner={isSceneOwner}
+        />
+      </div>
+
+      {/* Engagement actions — top-right, deliberately separate from the
+          Tours/Shots/Trajectory dock (bottom-center): "operate the scene"
+          and "engage with the scene" are different tasks. */}
+      <div className="pointer-events-none absolute right-4 top-4 z-[var(--z-canvas-overlay)] flex flex-wrap items-start justify-end gap-2">
+        {reactionSummary ? (
+          <ReactionBar key={sceneId} sceneId={sceneId} initialSummary={reactionSummary} />
+        ) : null}
+        <RemixButton sceneId={sceneId} sceneName={sceneName} />
+        <BookmarkButton
+          key={`${sceneId}-bookmark`}
+          sceneId={sceneId}
+          initialBookmarked={isBookmarked}
+        />
+        <ShareButton sceneId={sceneId} />
+      </div>
+
       {(showAttribution || forksCount > 0) && (
-        <div className="pointer-events-none absolute inset-x-0 top-4 z-10 flex flex-col items-center gap-2 px-4">
+        <div className="pointer-events-none absolute inset-x-0 top-4 z-[var(--z-canvas-overlay)] flex flex-col items-center gap-2 px-4">
           {showAttribution ? (
             <div className="pointer-events-auto max-w-lg rounded-full border border-white/10 bg-black/70 px-4 py-2 shadow-lg backdrop-blur-md">
               <RemixAttribution
@@ -107,18 +141,6 @@ export default function GaussianViewerView({
           ) : null}
         </div>
       )}
-
-      <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 flex flex-wrap items-end justify-center gap-3 px-4">
-        {reactionSummary ? (
-          <ReactionBar key={sceneId} sceneId={sceneId} initialSummary={reactionSummary} />
-        ) : null}
-        <RemixButton sceneId={sceneId} sceneName={sceneName} />
-        <BookmarkButton
-          key={`${sceneId}-bookmark`}
-          sceneId={sceneId}
-          initialBookmarked={isBookmarked}
-        />
-      </div>
     </div>
   );
 }

@@ -5,6 +5,7 @@ import type {
   Comment,
   CommentsResponse,
   DeleteCommentResponse,
+  RepliesResponse,
 } from "@/types/api";
 
 export const MAX_COMMENT_LENGTH = 1000;
@@ -49,4 +50,34 @@ export async function deleteComment(
       signal,
     },
   ) as Promise<DeleteCommentResponse>;
+}
+
+export async function listReplies(
+  sceneId: string,
+  commentId: string,
+  cursor?: string,
+  signal?: AbortSignal,
+): Promise<RepliesResponse> {
+  const base = `/api/v1/scenes/${encodeURIComponent(sceneId)}/comments/${encodeURIComponent(commentId)}/replies`;
+  const path =
+    cursor != null && cursor !== ""
+      ? `${base}?cursor=${encodeURIComponent(cursor)}`
+      : base;
+  return authenticatedFetch(path, { signal }) as Promise<RepliesResponse>;
+}
+
+export async function createReply(
+  sceneId: string,
+  commentId: string,
+  body: string,
+  signal?: AbortSignal,
+): Promise<Comment> {
+  return authenticatedFetch(
+    `/api/v1/scenes/${encodeURIComponent(sceneId)}/comments/${encodeURIComponent(commentId)}/replies`,
+    {
+      method: "POST",
+      body: JSON.stringify({ body }),
+      signal,
+    },
+  ) as Promise<Comment>;
 }

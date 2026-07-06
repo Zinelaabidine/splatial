@@ -105,7 +105,7 @@ export default function SettingsPanel() {
       {open && (
         <div
           aria-label="Account menu"
-          className="sw-popover absolute right-0 top-full z-50 mt-2 w-80 overflow-hidden rounded-xl p-2"
+          className="sw-popover absolute right-0 top-full z-[var(--z-app-popover)] mt-2 w-80 overflow-hidden rounded-xl p-2"
         >
           {/* Profile card — a card inside the card, the Facebook signature. */}
           <div className="rounded-lg bg-white/[0.05] p-3">

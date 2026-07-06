@@ -18,6 +18,30 @@ resource "aws_dynamodb_table" "comments" {
     type = "S"
   }
 
+  attribute {
+    name = "parent_comment_id"
+    type = "S"
+  }
+
+  # Sparse GSI: parent_comment_id is only set on reply items (see
+  # lib/comments.js createReply). Lets listReplies() fetch a top-level
+  # comment's replies without scanning the whole scene's comment history.
+  global_secondary_index {
+    name = "parent_comment_id-index"
+
+    key_schema {
+      attribute_name = "parent_comment_id"
+      key_type       = "HASH"
+    }
+
+    key_schema {
+      attribute_name = "comment_id"
+      key_type       = "RANGE"
+    }
+
+    projection_type = "ALL"
+  }
+
   point_in_time_recovery {
     enabled = true
   }

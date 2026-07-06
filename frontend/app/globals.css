@@ -251,11 +251,35 @@ body {
     @apply font-sans;
   }
 }
+/* ─── App-wide z-index scale ─────────────────────────────────────────────
+   Two independent stacking worlds used to collide here: the legacy splat
+   viewer (z-index: 99–1000, written before the app shell existed) and the
+   Tailwind-based shell chrome (z-40/z-50 popovers, modals). Because nothing
+   established a stacking-context boundary between them, the viewer's
+   canvas-overlay panels (Shots/Tours/Trajectory, z-index: 999) could render
+   on top of header popovers like the account menu (z-50), corrupting both.
+   `isolation: isolate` on .splat-viewer-container (below) is the actual fix —
+   it caps every descendant z-index at the container's own stacking level, so
+   999 can never again outrank the app shell. These variables exist so any
+   *new* app-shell chrome (dock, popovers, modals) is written against one
+   documented scale instead of picking arbitrary numbers. */
+:root {
+  --z-canvas-overlay: 10;   /* attribution/fork badges layered over the canvas */
+  --z-canvas-controls: 30;  /* viewer dock, shots/tours/trajectory panels, scene info card */
+  --z-app-header: 50;       /* sticky top bar */
+  --z-app-popover: 1000;    /* account menu, dialogs anchored to header/dock */
+}
+
 /* ─── Legacy Gaussian Splat Viewer ──────────────────────────────────────────
-   All rules are scoped to .splat-viewer-container so they cannot leak.      */
+   All rules are scoped to .splat-viewer-container so they cannot leak.
+   `isolation: isolate` creates a new stacking context: every z-index inside
+   (up to 1000, see above) is only ever compared against siblings *within*
+   this container, never against the app shell (header, popovers, modals)
+   outside it — regardless of the numeric values used on either side.      */
 .splat-viewer-container {
   position: absolute;
   inset: 0;
+  isolation: isolate;
   background: black;
   color: white;
   text-shadow: 0 0 3px black;
@@ -464,6 +488,83 @@ body {
 .traj-btn--export  { border-color: rgba(59,130,246,0.6); color: #93c5fd; }
 .traj-btn--stop    { border-color: rgba(249,115,22,0.6); color: #fdba74; }
 .traj-btn--clear   { border-color: rgba(255,255,255,0.14); color: #64748b; }
+
+/* ─── Viewer dock (unified bottom control bar) ──────────────────────────────
+   Replaces three independently-floating widgets (Shots top-right, Tours
+   bottom-right, Trajectory bottom-left) with one row of toggle buttons.
+   Only one of .shots-panel / .tours-panel / .traj-panel is mounted at a
+   time now (see LegacySplatViewer), each wrapped in .dock-panel-anchor so
+   it opens directly above the dock instead of retaining its old corner. */
+.viewer-dock {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-canvas-controls);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 6px;
+  pointer-events: auto;
+}
+.viewer-dock-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #cbd5e1;
+  font-size: 11px;
+  font-family: ui-monospace, 'Cascadia Code', monospace;
+  cursor: pointer;
+  transition: background 100ms, color 100ms, border-color 100ms;
+  white-space: nowrap;
+}
+.viewer-dock-btn:hover { background: rgba(255, 255, 255, 0.1); color: #f1f5f9; }
+.viewer-dock-btn--active {
+  background: rgba(25, 194, 173, 0.16);
+  border-color: rgba(25, 194, 173, 0.4);
+  color: #7eead9;
+}
+.viewer-dock-dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ef4444;
+  animation: trajPulse 1s ease-in-out infinite;
+}
+.dock-panel-anchor {
+  position: absolute;
+  bottom: 58px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-canvas-controls);
+  width: min(320px, calc(100% - 20px));
+}
+/* Neutralize the panel's own corner positioning — the anchor wrapper now
+   owns placement so Shots/Tours/Trajectory all open in the same spot. */
+.dock-panel-anchor > .shots-panel,
+.dock-panel-anchor > .tours-panel,
+.dock-panel-anchor > .traj-panel {
+  position: static;
+  top: auto;
+  right: auto;
+  bottom: auto;
+  left: auto;
+  margin: 0 auto;
+  width: 100%;
+}
 
 /* ─── Shots panel (saved camera viewpoints) ─────────────────────────────── */
 .shots-panel {

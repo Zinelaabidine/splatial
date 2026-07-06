@@ -104,6 +104,9 @@ export interface SceneStatusResponse {
   forkedFromSceneId?: string | null;
   forkedFromUsername?: string | null;
   forksCount?: number;
+  /** Denormalized owner identity, for the viewer's scene info card. */
+  ownerUsername?: string;
+  ownerDisplayName?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -117,6 +120,10 @@ export interface Comment {
   authorDisplayName: string;
   authorAvatarUrl?: string | null;
   body: string;
+  /** Set when this comment is a reply to another comment (threaded replies). */
+  parentCommentId?: string | null;
+  /** Denormalized count of direct replies. Omitted/0 for replies themselves. */
+  replyCount?: number;
   /** Lowercase handles the backend resolved from @mentions in `body`. */
   mentions?: string[];
   createdAt: string;
@@ -124,6 +131,11 @@ export interface Comment {
 
 export interface CommentsResponse {
   comments: Comment[];
+  nextCursor?: string;
+}
+
+export interface RepliesResponse {
+  replies: Comment[];
   nextCursor?: string;
 }
 

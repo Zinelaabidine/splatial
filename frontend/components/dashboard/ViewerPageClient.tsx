@@ -31,7 +31,13 @@ export default function ViewerPageClient() {
   usePageSearch("", false);
 
   return (
-    <div className="min-h-full">
+    // `h-full` (not `min-h-full`) is required here: GaussianViewer's new
+    // side-rail layout resolves its own height as a percentage of this div,
+    // and percentage heights only resolve against an ancestor with a
+    // *definite* height — a min-height floor doesn't count. `<main>` in
+    // AppShell provides that definite height via `flex-1` inside a
+    // `h-screen flex-col` shell.
+    <div className="h-full">
       <ViewerShell
         sceneId={sceneId}
         shotId={shotId}

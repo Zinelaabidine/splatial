@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { CameraTrajectoryProvider } from "@/hooks/viewer/CameraTrajectoryContext";
 import { startViewer, stopViewer } from "@/viewer/engine/viewer";
 import ShotsPanel from "@/components/viewer/ShotsPanel";
 import ToursPanel from "@/components/viewer/ToursPanel";
 import TrajectoryControls from "@/components/viewer/TrajectoryControls";
+import ViewerDock, { type DockPanelId } from "@/components/viewer/ViewerDock";
 
 interface LegacySplatViewerProps {
   /** Absolute, pre-signed URL pointing to a .splat or .ply file. */
@@ -41,6 +42,18 @@ export default function LegacySplatViewer({
       stopViewer();
     };
   }, [splatUrl]);
+
+  // Only one of Shots / Tours / Trajectory is ever open at a time, and none
+  // are open by default — the previous version rendered all three as
+  // permanently-visible floating widgets. Deep links (?shot=... / ?tour=...)
+  // still auto-open the relevant panel so shared links keep working.
+  const [activePanel, setActivePanel] = useState<DockPanelId | null>(() =>
+    tourId ? "tours" : shotId ? "shots" : null,
+  );
+
+  const togglePanel = (panel: DockPanelId) => {
+    setActivePanel((current) => (current === panel ? null : panel));
+  };
 
   return (
     <div className="splat-viewer-container">
@@ -94,21 +107,38 @@ export default function LegacySplatViewer({
       </div>
 
       <CameraTrajectoryProvider>
-        <TrajectoryControls />
-        {sceneId ? (
-          <>
+        {activePanel === "trajectory" ? (
+          <div className="dock-panel-anchor">
+            <TrajectoryControls />
+          </div>
+        ) : null}
+
+        {sceneId && activePanel === "shots" ? (
+          <div className="dock-panel-anchor">
             <ShotsPanel
               sceneId={sceneId}
               shotId={shotId}
               isSceneOwner={isSceneOwner}
             />
+          </div>
+        ) : null}
+
+        {sceneId && activePanel === "tours" ? (
+          <div className="dock-panel-anchor">
             <ToursPanel
               sceneId={sceneId}
               tourId={tourId}
               isSceneOwner={isSceneOwner}
             />
-          </>
+          </div>
         ) : null}
+
+        <ViewerDock
+          activePanel={activePanel}
+          onSelect={togglePanel}
+          showShots={Boolean(sceneId)}
+          showTours={Boolean(sceneId)}
+        />
       </CameraTrajectoryProvider>
     </div>
   );
