@@ -13,6 +13,20 @@ on:
       - "worker/**"
       - ".cursor/**"
       - "**/*.prompt.md"
+  workflow_dispatch:
+    inputs:
+      deploy_frontend:
+        description: "Build and deploy frontend to S3 / CloudFront"
+        type: boolean
+        default: true
+      deploy_backend:
+        description: "Re-zip and deploy backend Lambdas via Terraform"
+        type: boolean
+        default: false
+      deploy_infra:
+        description: "Run full Terraform apply (infra HCL changes)"
+        type: boolean
+        default: false
 permissions:
   contents: read
   id-token: write
@@ -32,16 +46,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
-      frontend: ${{ steps.filter.outputs.frontend }}
-      backend: ${{ steps.filter.outputs.backend }}
-      infra: ${{ steps.filter.outputs.infra }}
-      infra_tf: ${{ steps.filter.outputs.infra_tf }}
+      frontend: ${{ steps.resolve.outputs.frontend }}
+      backend: ${{ steps.resolve.outputs.backend }}
+      infra: ${{ steps.resolve.outputs.infra }}
+      infra_tf: ${{ steps.resolve.outputs.infra_tf }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - uses: dorny/paths-filter@v3
+        if: github.event_name == 'push'
         id: filter
         with:
           base: ${{ github.event.before }}
@@ -57,6 +72,32 @@ jobs:
             # HCL-only changes — workflow edits alone must not trigger a full apply.
             infra_tf:
               - 'infra/**'
+      - name: Resolve deploy targets
+        id: resolve
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            to_bool() {
+              case "$1" in
+                true|True|TRUE) echo "true" ;;
+                *) echo "false" ;;
+              esac
+            }
+            frontend=$(to_bool "${{ inputs.deploy_frontend }}")
+            backend=$(to_bool "${{ inputs.deploy_backend }}")
+            infra=$(to_bool "${{ inputs.deploy_infra }}")
+            infra_tf=$(to_bool "${{ inputs.deploy_infra }}")
+          else
+            frontend="${{ steps.filter.outputs.frontend }}"
+            backend="${{ steps.filter.outputs.backend }}"
+            infra="${{ steps.filter.outputs.infra }}"
+            infra_tf="${{ steps.filter.outputs.infra_tf }}"
+          fi
+          {
+            echo "frontend=$frontend"
+            echo "backend=$backend"
+            echo "infra=$infra"
+            echo "infra_tf=$infra_tf"
+          } >> "$GITHUB_OUTPUT"
   ci:
     name: lint and test
     runs-on: ubuntu-latest
