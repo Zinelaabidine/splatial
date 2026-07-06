@@ -2,9 +2,13 @@ resource "null_resource" "upload_lambda_deps" {
   triggers = {
     # Re-run npm install whenever package.json or any handler/lib source changes.
     package_json = filesha256("${local.backend_source_dir}/package.json")
+    # Excludes node_modules: dependency changes are already covered by the
+    # package_json hash above, and walking node_modules here was hashing
+    # thousands of vendored files on every plan/apply for no reason.
     handlers = sha256(join("", [
       for f in sort(fileset(local.backend_source_dir, "**/*.js")) :
       filesha256("${local.backend_source_dir}/${f}")
+      if !startswith(f, "node_modules/")
     ]))
   }
 
