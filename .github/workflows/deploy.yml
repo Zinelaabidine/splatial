@@ -138,7 +138,9 @@ jobs:
         if: needs.changes.outputs.infra == 'true'
         working-directory: ${{ steps.set-env.outputs.tf_dir }}
         run: |
-          terraform apply -auto-approve \
+          # -refresh=false: these targets only update IAM policy JSON from HCL/state
+          # IDs — no need to refresh all 226 resources (often hangs on EC2 APIs).
+          terraform apply -refresh=false -auto-approve \
             -target=module.static_site.aws_iam_policy.github_deploy_compute_policy \
             -target=module.static_site.aws_iam_role_policy_attachment.github_deploy_compute \
             -target=module.static_site.time_sleep.compute_iam_propagation
@@ -172,7 +174,7 @@ jobs:
             -target=module.static_site.aws_iam_role_policy_attachment.github_deploy_cdn
             -target=module.static_site.time_sleep.cdn_iam_propagation
           )
-          terraform apply -auto-approve "${DEPLOY_IAM_TARGETS[@]}"
+          terraform apply -refresh=false -auto-approve "${DEPLOY_IAM_TARGETS[@]}"
       - name: Refresh AWS credentials after IAM policy update
         if: needs.changes.outputs.infra == 'true'
         uses: aws-actions/configure-aws-credentials@v4
