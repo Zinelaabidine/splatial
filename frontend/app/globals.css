@@ -267,6 +267,8 @@ body {
   --z-canvas-overlay: 10;   /* attribution/fork badges layered over the canvas */
   --z-canvas-controls: 30;  /* viewer dock, shots/tours/trajectory panels, scene info card */
   --z-app-header: 50;       /* sticky top bar */
+  --z-app-overlay-backdrop: 55; /* subtle dim behind viewer overlay panels */
+  --z-app-overlay-panel: 60;    /* left nav + comments slide-over panels */
   --z-app-popover: 1000;    /* account menu, dialogs anchored to header/dock */
 }
 
@@ -1049,6 +1051,29 @@ body {
 .sw-sidebar-panel {
   background: #111114;
   border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Viewer overlay panels — frosted dark glass floating above the canvas. */
+.sw-overlay-panel {
+  background: rgba(10, 10, 12, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow:
+    0 16px 48px rgba(0, 0, 0, 0.42),
+    0 2px 8px rgba(0, 0, 0, 0.28);
+}
+
+/* Floating card variant — inset panel with lifted shadow for comments overlay. */
+.sw-overlay-panel-floating {
+  background: rgba(8, 8, 10, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(20px) saturate(1.2);
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
+  box-shadow:
+    0 24px 64px rgba(0, 0, 0, 0.55),
+    0 8px 24px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 /* Anchored popovers that float over busy content (account menu off the

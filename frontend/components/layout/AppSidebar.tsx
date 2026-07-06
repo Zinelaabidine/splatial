@@ -10,6 +10,7 @@ import {
   Plus,
   Rss,
   ShieldCheck,
+  X,
 } from "lucide-react";
 
 import SplatworksLogo from "@/components/splatworks/SplatworksLogo";
@@ -21,6 +22,8 @@ type NavId = "explore" | "feed" | "saved" | "home" | "splats" | "admin";
 type AppSidebarProps = {
   collapsed?: boolean;
   onNavigate?: () => void;
+  variant?: "default" | "overlay";
+  onClose?: () => void;
 };
 
 type NavItem = {
@@ -82,7 +85,12 @@ const navRowClassName = (isActive: boolean, collapsed: boolean) =>
     isActive && "sw-nav-active",
   );
 
-export default function AppSidebar({ collapsed = false, onNavigate }: AppSidebarProps) {
+export default function AppSidebar({
+  collapsed = false,
+  onNavigate,
+  variant = "default",
+  onClose,
+}: AppSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const isAdmin = useIsAdmin();
@@ -130,15 +138,38 @@ export default function AppSidebar({ collapsed = false, onNavigate }: AppSidebar
     <aside
       aria-label="Main navigation"
       className={cn(
-        "sw-sidebar-panel relative z-10 flex h-full shrink-0 flex-col overflow-y-auto overflow-x-hidden py-5 transition-[width] duration-200 ease-out",
-        collapsed ? "w-[68px] px-2" : "w-[248px] pl-3",
+        "relative z-10 flex h-full shrink-0 flex-col overflow-y-auto overflow-x-hidden py-5 transition-[width] duration-200 ease-out",
+        variant === "overlay"
+          ? "w-full bg-transparent px-4"
+          : cn(
+              "sw-sidebar-panel",
+              collapsed ? "w-[68px] px-2" : "w-[248px] pl-3",
+            ),
       )}
     >
-      <SplatworksLogo
-        variant="dark"
-        compact={collapsed}
-        className={cn("relative z-[1] mb-5", collapsed ? "px-0" : "px-1 pr-3")}
-      />
+      <div
+        className={cn(
+          "relative z-[1] mb-5 flex items-center",
+          collapsed ? "justify-center" : "justify-between gap-2 pr-1",
+        )}
+      >
+        <SplatworksLogo
+          variant="dark"
+          compact={collapsed}
+          className={cn(collapsed ? "px-0" : "px-1")}
+        />
+        {variant === "overlay" && onClose ? (
+          <button
+            type="button"
+            data-overlay-focus
+            aria-label="Close navigation"
+            onClick={onClose}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#c8c8d0] transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/25"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        ) : null}
+      </div>
 
       {!collapsed && (
         <div className="relative z-[1] mb-4 mr-3 h-px bg-white/8" aria-hidden />

@@ -1,8 +1,11 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { useEffect } from "react";
 
 import CommentSection from "@/components/viewer/CommentSection";
+import OverlayPanel from "@/components/layout/OverlayPanel";
+import { useAppShell } from "@/components/layout/AppShellContext";
 import { useIsSceneOwner } from "@/hooks/viewer/useIsSceneOwner";
 import { useSceneViewUrl } from "@/hooks/viewer/useSceneViewUrl";
 
@@ -11,7 +14,7 @@ const GaussianViewerView = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="flex h-[min(60vh,720px)] items-center justify-center bg-black">
+      <div className="flex h-full items-center justify-center bg-black">
         <p className="text-sm text-slate-400">Initialising viewer…</p>
       </div>
     ),
@@ -28,7 +31,7 @@ type GaussianViewerProps = {
   };
 };
 
-/** Resolves the presigned view URL and renders the viewer with comments below. */
+/** Resolves the presigned view URL and renders a full-bleed viewer with overlay comments. */
 export default function GaussianViewer({
   sceneId,
   shotId,
@@ -51,51 +54,61 @@ export default function GaussianViewer({
     loading,
   } = useSceneViewUrl(sceneId);
   const isSceneOwner = useIsSceneOwner(sceneId);
+  const {
+    commentsOverlayOpen,
+    setCommentsOverlayOpen,
+    setViewerCommentsCount,
+    commentsTriggerRef,
+  } = useAppShell();
 
   const forkedFromSceneId =
     forkedFromSceneIdFromApi ?? lineageFromUrl?.forkedFromSceneId ?? null;
   const forkedFromUsername =
     forkedFromUsernameFromApi ?? lineageFromUrl?.forkedFromUsername ?? null;
 
-  // Side-by-side on large screens: the canvas fills the remaining width and
-  // comments live in a fixed-width rail that scrolls independently, full
-  // height. The old layout stacked a fixed-height viewer block above a
-  // full-width comment section, so comments only appeared after scrolling
-  // the whole page down — disconnected from the scene they're about.
-  // `<main>` in AppShell is `flex-1` inside a `h-screen` column, so `h-full`
-  // here resolves to a real pixel height, not 0.
+  useEffect(() => {
+    setViewerCommentsCount(commentsCount);
+  }, [commentsCount, setViewerCommentsCount]);
+
   return (
-    <div className="flex h-full min-h-0 flex-col lg:flex-row">
-      <div className="min-h-[320px] min-w-0 flex-1">
-        <GaussianViewerView
-          sceneId={sceneId}
-          splatUrl={splatUrl}
-          reactionSummary={reactionSummary}
-          isBookmarked={isBookmarked}
-          sceneName={sceneName}
-          ownerUsername={ownerUsername}
-          ownerDisplayName={ownerDisplayName}
-          forkedFromSceneId={forkedFromSceneId}
-          forkedFromUsername={forkedFromUsername}
-          forksCount={forksCount}
-          error={error}
-          loading={loading}
-          shotId={shotId}
-          tourId={tourId}
-          isSceneOwner={isSceneOwner}
-        />
-      </div>
+    <div className="relative h-full w-full">
+      <GaussianViewerView
+        sceneId={sceneId}
+        splatUrl={splatUrl}
+        reactionSummary={reactionSummary}
+        isBookmarked={isBookmarked}
+        sceneName={sceneName}
+        ownerUsername={ownerUsername}
+        ownerDisplayName={ownerDisplayName}
+        forkedFromSceneId={forkedFromSceneId}
+        forkedFromUsername={forkedFromUsername}
+        forksCount={forksCount}
+        error={error}
+        loading={loading}
+        shotId={shotId}
+        tourId={tourId}
+        isSceneOwner={isSceneOwner}
+      />
 
       {splatUrl && !error ? (
-        <div className="h-[45vh] min-h-[280px] shrink-0 border-t border-[#2a2a2a] lg:h-full lg:w-[380px] lg:border-l lg:border-t-0">
+        <OverlayPanel
+          open={commentsOverlayOpen}
+          onClose={() => setCommentsOverlayOpen(false)}
+          side="right"
+          variant="floating"
+          ariaLabel="Comments"
+          returnFocusRef={commentsTriggerRef}
+        >
           <CommentSection
             key={sceneId}
             sceneId={sceneId}
             initialCommentsCount={commentsCount}
             isSceneOwner={isSceneOwner}
             onCommentsCountChange={setCommentsCount}
+            variant="overlay"
+            onClose={() => setCommentsOverlayOpen(false)}
           />
-        </div>
+        </OverlayPanel>
       ) : null}
     </div>
   );

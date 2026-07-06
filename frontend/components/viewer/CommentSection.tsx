@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import CommentRow from "@/components/viewer/CommentRow";
@@ -15,12 +15,15 @@ import {
 } from "@/services/commentsService";
 import { getMyProfile } from "@/services/profileService";
 import type { Comment } from "@/types/api";
+import { cn } from "@/lib/utils";
 
 type CommentSectionProps = {
   sceneId: string;
   initialCommentsCount?: number;
   isSceneOwner?: boolean;
   onCommentsCountChange?: (count: number) => void;
+  variant?: "default" | "overlay";
+  onClose?: () => void;
 };
 
 function CommentListSkeleton() {
@@ -45,6 +48,8 @@ export default function CommentSection({
   initialCommentsCount = 0,
   isSceneOwner = false,
   onCommentsCountChange,
+  variant = "default",
+  onClose,
 }: CommentSectionProps) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [nextCursor, setNextCursor] = useState<string | undefined>(undefined);
@@ -247,21 +252,49 @@ export default function CommentSection({
 
   return (
     <section
-      className="flex h-full min-h-0 flex-col bg-[#121212]"
+      className={cn(
+        "flex h-full min-h-0 flex-col",
+        variant === "overlay" ? "bg-transparent" : "bg-[#121212]",
+      )}
       aria-label="Comments"
     >
-      <header className="shrink-0 border-b border-[#2a2a2a] px-4 py-3">
-        <h2 className="text-sm font-semibold text-white">
-          Comments
-          {commentsCount > 0 ? (
-            <span className="ml-2 font-sw-mono text-xs font-normal text-[#909090]">
-              {commentsCount}
-            </span>
+      <header
+        className={cn(
+          "shrink-0 border-b px-4 py-3",
+          variant === "overlay"
+            ? "border-white/10 bg-black/35 backdrop-blur-md"
+            : "border-[#2a2a2a]",
+        )}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold text-white">
+            Comments
+            {commentsCount > 0 ? (
+              <span className="ml-2 font-sw-mono text-xs font-normal text-[#c4c4cc]">
+                {commentsCount}
+              </span>
+            ) : null}
+          </h2>
+          {variant === "overlay" && onClose ? (
+            <button
+              type="button"
+              data-overlay-focus
+              aria-label="Close comments"
+              onClick={onClose}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#d0d0d8] transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/25"
+            >
+              <X className="h-4 w-4" />
+            </button>
           ) : null}
-        </h2>
+        </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+      <div
+        className={cn(
+          "min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4",
+          variant === "overlay" && "text-[#ececf0]",
+        )}
+      >
         {loading ? (
           <CommentListSkeleton />
         ) : loadError ? (
@@ -282,8 +315,8 @@ export default function CommentSection({
           </div>
         ) : comments.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-1 py-10 text-center">
-            <p className="text-sm text-[#c4c4c4]">No comments yet</p>
-            <p className="text-xs text-[#707070]">
+            <p className="text-sm text-[#e0e0e6]">No comments yet</p>
+            <p className="text-xs text-[#a0a0aa]">
               Be the first to say something about this scene.
             </p>
           </div>
@@ -339,7 +372,14 @@ export default function CommentSection({
         ) : null}
       </div>
 
-      <div className="shrink-0 space-y-2 border-t border-[#2a2a2a] px-4 py-3">
+      <div
+        className={cn(
+          "shrink-0 space-y-2 border-t px-4 py-3",
+          variant === "overlay"
+            ? "border-white/10 bg-black/40 backdrop-blur-md"
+            : "border-[#2a2a2a]",
+        )}
+      >
         <Textarea
           value={draft}
           onChange={(e) => {
@@ -357,7 +397,9 @@ export default function CommentSection({
             className={
               atLimit
                 ? "font-sw-mono text-xs text-amber-400"
-                : "font-sw-mono text-xs text-[#737373]"
+                : variant === "overlay"
+                  ? "font-sw-mono text-xs text-[#a8a8b4]"
+                  : "font-sw-mono text-xs text-[#737373]"
             }
           >
             {charCount}/{MAX_COMMENT_LENGTH}

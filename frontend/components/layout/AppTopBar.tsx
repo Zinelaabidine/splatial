@@ -1,7 +1,8 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Menu, Search, X } from "lucide-react";
+import { Menu, MessageSquare, Search, X } from "lucide-react";
+import { type RefObject } from "react";
 
 import { useAppShell } from "@/components/layout/AppShellContext";
 import NotificationBell from "@/components/layout/NotificationBell";
@@ -12,6 +13,7 @@ import { cn } from "@/lib/utils";
 
 type AppTopBarProps = {
   onMenuClick?: () => void;
+  menuButtonRef?: RefObject<HTMLButtonElement | null>;
 };
 
 const SECTION_LABELS: { match: (p: string) => boolean; label: string }[] = [
@@ -28,18 +30,31 @@ const SECTION_LABELS: { match: (p: string) => boolean; label: string }[] = [
 const iconButtonClass =
   "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[#e8e8ec] transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/25";
 
-export default function AppTopBar({ onMenuClick }: AppTopBarProps) {
-  const { search, setSearch, searchPlaceholder, showSearch } = useAppShell();
+export default function AppTopBar({ onMenuClick, menuButtonRef }: AppTopBarProps) {
+  const {
+    search,
+    setSearch,
+    searchPlaceholder,
+    showSearch,
+    isViewerPage,
+    navOverlayOpen,
+    commentsOverlayOpen,
+    toggleCommentsOverlay,
+    viewerCommentsCount,
+    commentsTriggerRef,
+  } = useAppShell();
   const pathname = usePathname();
   const section = SECTION_LABELS.find((s) => s.match(pathname))?.label;
 
   return (
     <header className="sw-glass-bar sticky top-0 z-50 flex h-[3.25rem] shrink-0 items-center gap-3 px-4 sm:px-5">
       <button
+        ref={menuButtonRef}
         type="button"
-        aria-label="Toggle navigation"
+        aria-label={navOverlayOpen ? "Close navigation" : "Open navigation"}
+        aria-expanded={isViewerPage ? navOverlayOpen : undefined}
         onClick={onMenuClick}
-        className={iconButtonClass}
+        className={cn(iconButtonClass, navOverlayOpen && isViewerPage && "bg-white/10")}
       >
         <Menu className="h-5 w-5" />
       </button>
@@ -88,6 +103,27 @@ export default function AppTopBar({ onMenuClick }: AppTopBarProps) {
       )}
 
       <div className="flex items-center gap-0.5 sm:gap-1">
+        {isViewerPage ? (
+          <button
+            ref={commentsTriggerRef}
+            type="button"
+            aria-label={commentsOverlayOpen ? "Close comments" : "Open comments"}
+            aria-expanded={commentsOverlayOpen}
+            onClick={toggleCommentsOverlay}
+            className={cn(
+              iconButtonClass,
+              "relative",
+              commentsOverlayOpen && "bg-white/10",
+            )}
+          >
+            <MessageSquare className="h-[18px] w-[18px]" strokeWidth={1.75} />
+            {viewerCommentsCount > 0 ? (
+              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#19c2ad] px-1 text-[10px] font-semibold text-black">
+                {viewerCommentsCount > 99 ? "99+" : viewerCommentsCount}
+              </span>
+            ) : null}
+          </button>
+        ) : null}
         <TrainingMenu />
         <ActivityMenu />
         <NotificationBell />
