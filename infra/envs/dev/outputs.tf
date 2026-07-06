@@ -69,3 +69,8 @@ output "vpc_id" {
   description = "ID of the VPC where dev resources are deployed"
   value       = module.static_site.vpc_id
 }
+
+output "presence_ws_endpoint" {
+  description = "Dev presence WebSocket API wss:// endpoint for NEXT_PUBLIC_PRESENCE_WS_URL"
+  value       = module.static_site.presence_ws_endpoint
+}

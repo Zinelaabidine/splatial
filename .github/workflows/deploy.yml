@@ -35,6 +35,7 @@ jobs:
       frontend: ${{ steps.filter.outputs.frontend }}
       backend: ${{ steps.filter.outputs.backend }}
       infra: ${{ steps.filter.outputs.infra }}
+      infra_tf: ${{ steps.filter.outputs.infra_tf }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -53,6 +54,9 @@ jobs:
             infra:
               - 'infra/**'
               - '.github/workflows/deploy.yml'
+            # HCL-only changes — workflow edits alone must not trigger a full apply.
+            infra_tf:
+              - 'infra/**'
   ci:
     name: lint and test
     runs-on: ubuntu-latest
@@ -81,13 +85,13 @@ jobs:
       #   working-directory: frontend
       #   run: npm test
       - name: terraform setup
-        if: needs.changes.outputs.infra == 'true'
+        if: needs.changes.outputs.infra_tf == 'true'
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: 1.9.0
+          terraform_version: 1.10.0
           terraform_wrapper: false
       - name: Terraform Format Check
-        if: needs.changes.outputs.infra == 'true'
+        if: needs.changes.outputs.infra_tf == 'true'
         run: terraform fmt -check -recursive
         working-directory: infra
   deploy:
@@ -124,10 +128,25 @@ jobs:
       - name: Show AWS identity
         run: aws sts get-caller-identity
       - name: Setup Terraform
+        if: >
+          needs.changes.outputs.infra_tf == 'true' ||
+          needs.changes.outputs.backend == 'true' ||
+          needs.changes.outputs.frontend == 'true'
         uses: hashicorp/setup-terraform@v3
         with:
+          terraform_version: 1.10.0
           terraform_wrapper: false
+      - name: Install backend Lambda dependencies
+        if: >
+          needs.changes.outputs.infra_tf == 'true' ||
+          needs.changes.outputs.backend == 'true'
+        working-directory: backend
+        run: npm ci --omit=dev
       - name: Terraform Init
+        if: >
+          needs.changes.outputs.infra_tf == 'true' ||
+          needs.changes.outputs.backend == 'true' ||
+          needs.changes.outputs.frontend == 'true'
         working-directory: ${{ steps.set-env.outputs.tf_dir }}
         run: terraform init
       # Deploy-role policy updates do not affect the already-assumed OIDC session.
@@ -135,7 +154,7 @@ jobs:
       # splatial-*-github-deploy-* managed policy), refresh credentials, then
       # apply the remaining deploy IAM policies.
       - name: Terraform Apply deploy compute IAM policy
-        if: needs.changes.outputs.infra == 'true'
+        if: needs.changes.outputs.infra_tf == 'true'
         working-directory: ${{ steps.set-env.outputs.tf_dir }}
         run: |
           # -refresh=false: these targets only update IAM policy JSON from HCL/state
@@ -145,13 +164,13 @@ jobs:
             -target=module.static_site.aws_iam_role_policy_attachment.github_deploy_compute \
             -target=module.static_site.time_sleep.compute_iam_propagation
       - name: Refresh AWS credentials after compute IAM policy update
-        if: needs.changes.outputs.infra == 'true'
+        if: needs.changes.outputs.infra_tf == 'true'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::886601940523:role/splatial-${{ github.ref_name == 'main' && 'prod' || github.ref_name }}-github-deploy-role
           aws-region: ${{ env.AWS_REGION }}
       - name: Terraform Apply deploy IAM policies
-        if: needs.changes.outputs.infra == 'true'
+        if: needs.changes.outputs.infra_tf == 'true'
         working-directory: ${{ steps.set-env.outputs.tf_dir }}
         run: |
           DEPLOY_IAM_TARGETS=(
@@ -176,14 +195,14 @@ jobs:
           )
           terraform apply -refresh=false -auto-approve "${DEPLOY_IAM_TARGETS[@]}"
       - name: Refresh AWS credentials after IAM policy update
-        if: needs.changes.outputs.infra == 'true'
+        if: needs.changes.outputs.infra_tf == 'true'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::886601940523:role/splatial-${{ github.ref_name == 'main' && 'prod' || github.ref_name }}-github-deploy-role
           aws-region: ${{ env.AWS_REGION }}
       - name: Terraform Apply
         if: >
-          needs.changes.outputs.infra == 'true' ||
+          needs.changes.outputs.infra_tf == 'true' ||
           needs.changes.outputs.backend == 'true'
         working-directory: ${{ steps.set-env.outputs.tf_dir }}
         run: |
@@ -191,7 +210,20 @@ jobs:
           # (bootstrap.yml workflow).  This workflow only attaches application-
           # specific IAM policies to the pre-existing role; it never modifies
           # the trust chain that allows it to run in the first place.
-          terraform apply -auto-approve
+          #
+          # Backend-only: skip the 226-resource refresh (archive_file re-zips
+          # backend/ and EC2 refresh often stalls on GitHub runners). HCL/state
+          # hashes are enough to detect Lambda package changes.
+          # Infra HCL changes: full refresh + plan file for a consistent apply.
+          set -euo pipefail
+          if [ "${{ needs.changes.outputs.infra_tf }}" = "true" ]; then
+            echo "Planning infrastructure changes (full refresh)..."
+            terraform plan -out=tfplan -input=false -no-color
+            terraform apply -auto-approve tfplan
+          else
+            echo "Applying backend Lambda changes (no refresh)..."
+            terraform apply -refresh=false -auto-approve -no-color
+          fi
       - name: Read Terraform outputs
         if: needs.changes.outputs.frontend == 'true'
         id: tf
