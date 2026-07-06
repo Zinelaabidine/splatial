@@ -3,10 +3,10 @@ resource "aws_s3_bucket" "raw_scenes" {
 
   bucket = "${local.name_prefix}-raw-scenes"
 
-  # Wait for the deploy-role policy update AND the IAM propagation delay before
-  # attempting to create this bucket. See time_sleep.iam_propagation in
-  # iam-github-oidc.tf for the rationale.
-  depends_on = [time_sleep.iam_propagation]
+  # Wait for the deploy-role storage policy update AND the IAM propagation delay
+  # before attempting to create this bucket. See time_sleep.storage_iam_propagation
+  # in iam-github-oidc.tf for the rationale.
+  depends_on = [time_sleep.storage_iam_propagation]
 }
 
 resource "aws_s3_bucket_public_access_block" "raw_scenes" {

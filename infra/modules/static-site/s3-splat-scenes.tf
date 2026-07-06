@@ -7,7 +7,7 @@ resource "aws_s3_bucket" "splat_scenes" {
 
   bucket = "${local.name_prefix}-splat-scenes"
 
-  depends_on = [time_sleep.iam_propagation]
+  depends_on = [time_sleep.storage_iam_propagation]
 }
 
 resource "aws_s3_bucket_public_access_block" "splat_scenes" {

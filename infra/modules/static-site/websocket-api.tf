@@ -65,11 +65,10 @@ resource "aws_apigatewayv2_authorizer" "presence_ws" {
 
   api_id = aws_apigatewayv2_api.presence_ws.id
 
-  name                              = "${var.name}-presence-ws-authorizer"
-  authorizer_type                   = "REQUEST"
-  authorizer_uri                    = aws_lambda_function.presence_authorizer.invoke_arn
-  identity_sources                  = ["route.request.querystring.token"]
-  authorizer_payload_format_version = "1.0"
+  name             = "${var.name}-presence-ws-authorizer"
+  authorizer_type  = "REQUEST"
+  authorizer_uri   = aws_lambda_function.presence_authorizer.invoke_arn
+  identity_sources = ["route.request.querystring.token"]
 }
 
 resource "aws_iam_role" "presence_authorizer_exec" {

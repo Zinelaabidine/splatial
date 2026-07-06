@@ -131,8 +131,23 @@ jobs:
         working-directory: ${{ steps.set-env.outputs.tf_dir }}
         run: terraform init
       # Deploy-role policy updates do not affect the already-assumed OIDC session.
-      # Apply IAM policies first, then re-assume the role so later API calls (e.g.
-      # autoscaling:EnableMetricsCollection) see the updated permissions.
+      # Apply the compute policy first (it authorizes CreatePolicy for any new
+      # splatial-*-github-deploy-* managed policy), refresh credentials, then
+      # apply the remaining deploy IAM policies.
+      - name: Terraform Apply deploy compute IAM policy
+        if: needs.changes.outputs.infra == 'true'
+        working-directory: ${{ steps.set-env.outputs.tf_dir }}
+        run: |
+          terraform apply -auto-approve \
+            -target=module.static_site.aws_iam_policy.github_deploy_compute_policy \
+            -target=module.static_site.aws_iam_role_policy_attachment.github_deploy_compute \
+            -target=module.static_site.time_sleep.compute_iam_propagation
+      - name: Refresh AWS credentials after compute IAM policy update
+        if: needs.changes.outputs.infra == 'true'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::886601940523:role/splatial-${{ github.ref_name == 'main' && 'prod' || github.ref_name }}-github-deploy-role
+          aws-region: ${{ env.AWS_REGION }}
       - name: Terraform Apply deploy IAM policies
         if: needs.changes.outputs.infra == 'true'
         working-directory: ${{ steps.set-env.outputs.tf_dir }}
@@ -141,6 +156,9 @@ jobs:
             -target=module.static_site.aws_iam_policy.github_deploy_core_policy
             -target=module.static_site.aws_iam_role_policy_attachment.github_deploy_core
             -target=module.static_site.time_sleep.iam_propagation
+            -target=module.static_site.aws_iam_policy.github_deploy_storage_policy
+            -target=module.static_site.aws_iam_role_policy_attachment.github_deploy_storage
+            -target=module.static_site.time_sleep.storage_iam_propagation
             -target=module.static_site.aws_iam_policy.github_deploy_compute_policy
             -target=module.static_site.aws_iam_role_policy_attachment.github_deploy_compute
             -target=module.static_site.time_sleep.compute_iam_propagation

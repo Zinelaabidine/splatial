@@ -67,7 +67,147 @@ data "aws_iam_policy_document" "github_deploy_policy" {
     ]
   }
 
-  # ─── S3 ───────────────────────────────────────────────────────────────────────
+  # ─── API Gateway v2 ───────────────────────────────────────────────────────────
+
+  statement {
+    sid    = "APIGatewayManage"
+    effect = "Allow"
+    actions = [
+      "apigateway:GET",
+      "apigateway:POST",
+      "apigateway:PUT",
+      "apigateway:PATCH",
+      "apigateway:DELETE",
+      "apigateway:TagResource",
+      "apigateway:UntagResource",
+    ]
+    resources = [
+      "arn:aws:apigateway:${var.aws_region}::/apis",
+      "arn:aws:apigateway:${var.aws_region}::/apis/*",
+      "arn:aws:apigateway:${var.aws_region}::/account",
+    ]
+  }
+
+  statement {
+    sid    = "APIGatewayDomainNamesManage"
+    effect = "Allow"
+    actions = [
+      "apigateway:GET",
+      "apigateway:POST",
+      "apigateway:PUT",
+      "apigateway:PATCH",
+      "apigateway:DELETE",
+      "apigateway:TagResource",
+      "apigateway:UntagResource",
+    ]
+    resources = [
+      "arn:aws:apigateway:${var.aws_region}::/domainnames",
+      "arn:aws:apigateway:${var.aws_region}::/domainnames/*",
+    ]
+  }
+
+  # ─── IAM ──────────────────────────────────────────────────────────────────────
+
+  # ListOpenIDConnectProviders is a list API that AWS requires on "*".
+  statement {
+    sid    = "IAMListOIDCGlobal"
+    effect = "Allow"
+    actions = [
+      "iam:ListOpenIDConnectProviders",
+    ]
+    resources = ["*"]
+  }
+
+  # Read the pre-existing GitHub Actions OIDC provider (data source only).
+  statement {
+    sid    = "IAMOIDCProviderRead"
+    effect = "Allow"
+    actions = [
+      "iam:GetOpenIDConnectProvider",
+    ]
+    resources = [
+      "arn:aws:iam::886601940523:oidc-provider/token.actions.githubusercontent.com",
+    ]
+  }
+
+  # Scoped to project-owned IAM roles. Constructed ARNs cover roles that may not
+  # exist yet on first apply (or legacy roles mid-teardown).
+  statement {
+    sid    = "IAMProjectRolesManage"
+    effect = "Allow"
+    actions = [
+      "iam:GetRole",
+      "iam:CreateRole",
+      "iam:DeleteRole",
+      "iam:UpdateRole",
+      "iam:PutRolePolicy",
+      "iam:DeleteRolePolicy",
+      "iam:GetRolePolicy",
+      "iam:ListRolePolicies",
+      "iam:AttachRolePolicy",
+      "iam:DetachRolePolicy",
+      "iam:ListAttachedRolePolicies",
+      "iam:ListInstanceProfilesForRole",
+      "iam:TagRole",
+      "iam:UntagRole",
+      "iam:ListRoleTags",
+    ]
+    resources = concat(
+      [
+        "arn:aws:iam::886601940523:role/${local.name_prefix}-github-deploy-role",
+        "arn:aws:iam::886601940523:role/splatial-local-dev-role",
+        # Legacy helloFromLambda scaffold exec role (tear-down only; role removed from config).
+        "arn:aws:iam::886601940523:role/${var.name}-lambda-exec-role",
+        # Constructed ARN for the upload Lambda execution role (does not exist yet).
+        "arn:aws:iam::886601940523:role/${var.name}-upload-lambda-exec-role",
+        # Constructed ARN for the Google Drive import Lambda execution role.
+        "arn:aws:iam::886601940523:role/${var.name}-gdrive-import-lambda-exec-role",
+        # Constructed ARNs for the presence WebSocket Lambdas (websocket-api.tf).
+        "arn:aws:iam::886601940523:role/${var.name}-presence-authorizer-exec-role",
+        "arn:aws:iam::886601940523:role/${var.name}-presence-lambda-exec-role",
+        # Account-wide API Gateway CloudWatch role (api-gateway-account.tf; dev only).
+        "arn:aws:iam::886601940523:role/splatial-apigateway-cloudwatch-role",
+        # Constructed ARN for the GPU worker instance role (does not exist yet).
+        "arn:aws:iam::886601940523:role/${local.name_prefix}-splat-worker-instance-role",
+      ],
+      var.enable_ami_bake_resources ? [
+        # Global bake workflow role (bootstrap) — dev state attaches its inline policy.
+        "arn:aws:iam::886601940523:role/splatial-github-ami-bake-role",
+        # Minimal SSM-only builder instance role (iam-github-oidc-bake.tf).
+        "arn:aws:iam::886601940523:role/${local.name_prefix}-ami-bake-instance-role",
+      ] : [],
+    )
+  }
+
+  # PassRole is constrained to Lambda only via the iam:PassedToService condition,
+  # preventing the execution role from being passed to any other AWS service.
+  statement {
+    sid    = "IAMPassRoleToLambda"
+    effect = "Allow"
+    actions = [
+      "iam:PassRole",
+    ]
+    resources = [
+      # Constructed ARN for the upload Lambda execution role (does not exist yet).
+      "arn:aws:iam::886601940523:role/${var.name}-upload-lambda-exec-role",
+      # Constructed ARN for the Google Drive import Lambda execution role.
+      "arn:aws:iam::886601940523:role/${var.name}-gdrive-import-lambda-exec-role",
+      # Constructed ARNs for the presence WebSocket Lambdas (websocket-api.tf).
+      "arn:aws:iam::886601940523:role/${var.name}-presence-authorizer-exec-role",
+      "arn:aws:iam::886601940523:role/${var.name}-presence-lambda-exec-role",
+    ]
+    condition {
+      test     = "StringEquals"
+      variable = "iam:PassedToService"
+      values   = ["lambda.amazonaws.com"]
+    }
+  }
+
+}
+
+# ── S3 / Terraform state permissions (split out to stay under 6144-byte policy limit) ──
+
+data "aws_iam_policy_document" "github_deploy_storage_policy" {
 
   statement {
     sid    = "S3ListAllBuckets"
@@ -225,145 +365,7 @@ data "aws_iam_policy_document" "github_deploy_policy" {
       "arn:aws:s3:::openspacenexus-terraform-state/*",
     ]
   }
-
-  # ─── API Gateway v2 ───────────────────────────────────────────────────────────
-
-  statement {
-    sid    = "APIGatewayManage"
-    effect = "Allow"
-    actions = [
-      "apigateway:GET",
-      "apigateway:POST",
-      "apigateway:PUT",
-      "apigateway:PATCH",
-      "apigateway:DELETE",
-      "apigateway:TagResource",
-      "apigateway:UntagResource",
-    ]
-    resources = [
-      "arn:aws:apigateway:${var.aws_region}::/apis",
-      "arn:aws:apigateway:${var.aws_region}::/apis/*",
-      "arn:aws:apigateway:${var.aws_region}::/account",
-    ]
-  }
-
-  statement {
-    sid    = "APIGatewayDomainNamesManage"
-    effect = "Allow"
-    actions = [
-      "apigateway:GET",
-      "apigateway:POST",
-      "apigateway:PUT",
-      "apigateway:PATCH",
-      "apigateway:DELETE",
-      "apigateway:TagResource",
-      "apigateway:UntagResource",
-    ]
-    resources = [
-      "arn:aws:apigateway:${var.aws_region}::/domainnames",
-      "arn:aws:apigateway:${var.aws_region}::/domainnames/*",
-    ]
-  }
-
-  # ─── IAM ──────────────────────────────────────────────────────────────────────
-
-  # ListOpenIDConnectProviders is a list API that AWS requires on "*".
-  statement {
-    sid    = "IAMListOIDCGlobal"
-    effect = "Allow"
-    actions = [
-      "iam:ListOpenIDConnectProviders",
-    ]
-    resources = ["*"]
-  }
-
-  # Read the pre-existing GitHub Actions OIDC provider (data source only).
-  statement {
-    sid    = "IAMOIDCProviderRead"
-    effect = "Allow"
-    actions = [
-      "iam:GetOpenIDConnectProvider",
-    ]
-    resources = [
-      "arn:aws:iam::886601940523:oidc-provider/token.actions.githubusercontent.com",
-    ]
-  }
-
-  # Scoped to project-owned IAM roles. Constructed ARNs cover roles that may not
-  # exist yet on first apply (or legacy roles mid-teardown).
-  statement {
-    sid    = "IAMProjectRolesManage"
-    effect = "Allow"
-    actions = [
-      "iam:GetRole",
-      "iam:CreateRole",
-      "iam:DeleteRole",
-      "iam:UpdateRole",
-      "iam:PutRolePolicy",
-      "iam:DeleteRolePolicy",
-      "iam:GetRolePolicy",
-      "iam:ListRolePolicies",
-      "iam:AttachRolePolicy",
-      "iam:DetachRolePolicy",
-      "iam:ListAttachedRolePolicies",
-      "iam:ListInstanceProfilesForRole",
-      "iam:TagRole",
-      "iam:UntagRole",
-      "iam:ListRoleTags",
-    ]
-    resources = concat(
-      [
-        "arn:aws:iam::886601940523:role/${local.name_prefix}-github-deploy-role",
-        "arn:aws:iam::886601940523:role/splatial-local-dev-role",
-        # Legacy helloFromLambda scaffold exec role (tear-down only; role removed from config).
-        "arn:aws:iam::886601940523:role/${var.name}-lambda-exec-role",
-        # Constructed ARN for the upload Lambda execution role (does not exist yet).
-        "arn:aws:iam::886601940523:role/${var.name}-upload-lambda-exec-role",
-        # Constructed ARN for the Google Drive import Lambda execution role.
-        "arn:aws:iam::886601940523:role/${var.name}-gdrive-import-lambda-exec-role",
-        # Constructed ARNs for the presence WebSocket Lambdas (websocket-api.tf).
-        "arn:aws:iam::886601940523:role/${var.name}-presence-authorizer-exec-role",
-        "arn:aws:iam::886601940523:role/${var.name}-presence-lambda-exec-role",
-        # Account-wide API Gateway CloudWatch role (api-gateway-account.tf; dev only).
-        "arn:aws:iam::886601940523:role/splatial-apigateway-cloudwatch-role",
-        # Constructed ARN for the GPU worker instance role (does not exist yet).
-        "arn:aws:iam::886601940523:role/${local.name_prefix}-splat-worker-instance-role",
-      ],
-      var.enable_ami_bake_resources ? [
-        # Global bake workflow role (bootstrap) — dev state attaches its inline policy.
-        "arn:aws:iam::886601940523:role/splatial-github-ami-bake-role",
-        # Minimal SSM-only builder instance role (iam-github-oidc-bake.tf).
-        "arn:aws:iam::886601940523:role/${local.name_prefix}-ami-bake-instance-role",
-      ] : [],
-    )
-  }
-
-  # PassRole is constrained to Lambda only via the iam:PassedToService condition,
-  # preventing the execution role from being passed to any other AWS service.
-  statement {
-    sid    = "IAMPassRoleToLambda"
-    effect = "Allow"
-    actions = [
-      "iam:PassRole",
-    ]
-    resources = [
-      # Constructed ARN for the upload Lambda execution role (does not exist yet).
-      "arn:aws:iam::886601940523:role/${var.name}-upload-lambda-exec-role",
-      # Constructed ARN for the Google Drive import Lambda execution role.
-      "arn:aws:iam::886601940523:role/${var.name}-gdrive-import-lambda-exec-role",
-      # Constructed ARNs for the presence WebSocket Lambdas (websocket-api.tf).
-      "arn:aws:iam::886601940523:role/${var.name}-presence-authorizer-exec-role",
-      "arn:aws:iam::886601940523:role/${var.name}-presence-lambda-exec-role",
-    ]
-    condition {
-      test     = "StringEquals"
-      variable = "iam:PassedToService"
-      values   = ["lambda.amazonaws.com"]
-    }
-  }
-
 }
-
 
 # Managed policy — inline policies on splatial-local-dev-role are shared across
 # all envs and hit the 10 240-byte cumulative inline quota after two env applies.
@@ -373,6 +375,36 @@ resource "aws_iam_policy" "github_deploy_core_policy" {
   name        = "${local.name_prefix}-github-deploy-core-policy"
   description = "Core deploy permissions (Cognito, S3, API Gateway, IAM) for GitHub and local-dev roles"
   policy      = data.aws_iam_policy_document.github_deploy_policy.json
+}
+
+resource "aws_iam_policy" "github_deploy_storage_policy" {
+  provider = aws.this
+
+  name        = "${local.name_prefix}-github-deploy-storage-policy"
+  description = "S3 and Terraform state backend permissions for GitHub and local-dev roles"
+  policy      = data.aws_iam_policy_document.github_deploy_storage_policy.json
+}
+
+resource "aws_iam_role_policy_attachment" "github_deploy_storage" {
+  role       = data.aws_iam_role.github_oidc_deploy_role.name
+  policy_arn = aws_iam_policy.github_deploy_storage_policy.arn
+}
+
+resource "aws_iam_role_policy_attachment" "local_dev_storage" {
+  count = var.attach_deploy_policies_to_local_dev_role ? 1 : 0
+
+  role       = data.aws_iam_role.local_dev_role.name
+  policy_arn = aws_iam_policy.github_deploy_storage_policy.arn
+}
+
+resource "time_sleep" "storage_iam_propagation" {
+  create_duration = "15s"
+
+  triggers = {
+    storage_policy_hash = sha256(aws_iam_policy.github_deploy_storage_policy.policy)
+  }
+
+  depends_on = [aws_iam_role_policy_attachment.github_deploy_storage]
 }
 
 resource "aws_iam_role_policy_attachment" "github_deploy_core" {
@@ -606,11 +638,10 @@ data "aws_iam_policy_document" "github_deploy_compute_policy" {
     resources = [
       "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore",
       "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy",
-      # Terraform needs to read these customer-managed policies to manage them.
-      "arn:aws:iam::886601940523:policy/${local.name_prefix}-github-deploy-core-policy",
-      "arn:aws:iam::886601940523:policy/${local.name_prefix}-github-deploy-compute-policy",
-      "arn:aws:iam::886601940523:policy/${local.name_prefix}-github-deploy-network-policy",
-      "arn:aws:iam::886601940523:policy/${local.name_prefix}-github-deploy-cdn-policy",
+      # Wildcard covers all env-scoped deploy managed policies (core, storage,
+      # compute, network, cdn) so a new split policy can be created without
+      # first updating this document to list its ARN.
+      "arn:aws:iam::886601940523:policy/${local.name_prefix}-github-deploy-*",
     ]
   }
 
@@ -625,10 +656,7 @@ data "aws_iam_policy_document" "github_deploy_compute_policy" {
       "iam:SetDefaultPolicyVersion",
     ]
     resources = [
-      "arn:aws:iam::886601940523:policy/${local.name_prefix}-github-deploy-core-policy",
-      "arn:aws:iam::886601940523:policy/${local.name_prefix}-github-deploy-compute-policy",
-      "arn:aws:iam::886601940523:policy/${local.name_prefix}-github-deploy-network-policy",
-      "arn:aws:iam::886601940523:policy/${local.name_prefix}-github-deploy-cdn-policy",
+      "arn:aws:iam::886601940523:policy/${local.name_prefix}-github-deploy-*",
     ]
   }
 
