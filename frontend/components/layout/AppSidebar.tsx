@@ -31,8 +31,6 @@ type NavItem = {
   match: (path: string) => boolean;
 };
 
-// Training and Activity live in the top bar now (next to notifications and
-// the account menu) as their own popovers — this list is just destinations.
 const NAV: NavItem[] = [
   {
     id: "home",
@@ -73,14 +71,14 @@ const NAV: NavItem[] = [
 
 const navRowClassName = (isActive: boolean, collapsed: boolean) =>
   cn(
-    "group relative flex items-center gap-3 py-2 text-sm transition-colors",
+    "group relative flex items-center gap-3 py-2.5 text-sm transition-colors",
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 focus-visible:ring-offset-0",
-    isActive ? "font-semibold text-white" : "font-normal text-[#a1a1aa] hover:bg-white/[0.06]",
+    isActive
+      ? "font-semibold text-white"
+      : "font-medium text-[#a8a8b2] hover:bg-white/[0.05] hover:text-[#e4e4e8]",
     collapsed
       ? "justify-center rounded-xl px-0"
-      : // Square on the left, rounded where the fill meets the sidebar's
-        // right inner edge — the flush "selected tab" look, not a floating pill.
-        "rounded-l-none rounded-r-full pl-3 pr-4",
+      : "rounded-l-none rounded-r-full pl-3.5 pr-4",
     isActive && "sw-nav-active",
   );
 
@@ -118,10 +116,10 @@ export default function AppSidebar({ collapsed = false, onNavigate }: AppSidebar
         <Icon
           aria-hidden
           className={cn(
-            "h-5 w-5 shrink-0 transition-all duration-200",
-            isActive ? "text-white" : "text-[#84848c] group-hover:text-[#c5c5cb]",
+            "h-[18px] w-[18px] shrink-0 transition-colors duration-200",
+            isActive ? "text-white" : "text-[#8a8a94] group-hover:text-[#d0d0d8]",
           )}
-          strokeWidth={isActive ? 2 : 1.5}
+          strokeWidth={isActive ? 2.25 : 1.75}
         />
         {!collapsed && <span className="min-w-0 flex-1 truncate">{label}</span>}
       </Link>
@@ -132,34 +130,35 @@ export default function AppSidebar({ collapsed = false, onNavigate }: AppSidebar
     <aside
       aria-label="Main navigation"
       className={cn(
-        "sw-sidebar-panel relative z-10 flex h-full shrink-0 flex-col overflow-y-auto overflow-x-hidden py-4 transition-[width] duration-200 ease-out",
-        collapsed ? "w-[68px] px-2" : "w-[240px] pl-3",
+        "sw-sidebar-panel relative z-10 flex h-full shrink-0 flex-col overflow-y-auto overflow-x-hidden py-5 transition-[width] duration-200 ease-out",
+        collapsed ? "w-[68px] px-2" : "w-[248px] pl-3",
       )}
     >
       <SplatworksLogo
         variant="dark"
         compact={collapsed}
-        className={cn("relative z-[1] mb-4", collapsed ? "px-0" : "px-1 pr-3")}
+        className={cn("relative z-[1] mb-5", collapsed ? "px-0" : "px-1 pr-3")}
       />
 
-      {/* Primary CTA — pinned to the top, "Compose" style: high-contrast,
-          pill-shaped, with a lifted shadow so it reads as the one action
-          that matters most. */}
+      {!collapsed && (
+        <div className="relative z-[1] mb-4 mr-3 h-px bg-white/8" aria-hidden />
+      )}
+
       <button
         type="button"
         onClick={() => router.push("/scenes/create")}
         title={collapsed ? "New scene" : undefined}
         aria-label="New scene"
         className={cn(
-          "sw-new-scene relative z-[1] mb-4 flex h-11 items-center justify-center gap-2 rounded-full text-sm font-semibold text-white transition-[filter,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 focus-visible:ring-offset-0",
-          collapsed ? "w-11 self-center" : "w-full mr-3",
+          "sw-new-scene relative z-[1] mb-5 flex h-10 items-center justify-center gap-2 rounded-full text-[13px] font-semibold tracking-[-0.01em] transition-[filter,box-shadow,transform] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#19c2ad]/45 focus-visible:ring-offset-0 active:scale-[0.98]",
+          collapsed ? "w-10 self-center" : "w-full mr-3",
         )}
       >
         <Plus className="relative z-[1] h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
         {!collapsed && <span className="relative z-[1]">New scene</span>}
       </button>
 
-      <nav aria-label="Primary" className="relative z-[1] flex flex-col gap-0.5">
+      <nav aria-label="Primary" className="relative z-[1] flex flex-col gap-1">
         {navItems.map(renderItem)}
       </nav>
     </aside>

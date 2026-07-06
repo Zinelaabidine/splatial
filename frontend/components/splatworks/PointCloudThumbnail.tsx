@@ -3,8 +3,8 @@ import type { SplatPreviewTint } from "@/types/splatworks";
 
 type PointCloudThumbnailProps = {
   preview: SplatPreviewTint;
-  /** Height of the viewer area. */
-  height?: number;
+  /** Height of the viewer area. Pass a number for a fixed px height, or "100%" to fill the parent (parent must have a defined height). */
+  height?: number | string;
   /** Enable slow rotation (Splats gallery). */
   spin?: boolean;
   /** Dark base for light-dashboard ready tiles. */

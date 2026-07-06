@@ -6,12 +6,14 @@ type ReactionTotalBadgeProps = {
   reactionsTotal?: number;
   reactionCounts?: ReactionCounts;
   className?: string;
+  chip?: boolean;
 };
 
 export default function ReactionTotalBadge({
   reactionsTotal = 0,
   reactionCounts,
   className,
+  chip = false,
 }: ReactionTotalBadgeProps) {
   if (reactionsTotal <= 0) return null;
 
@@ -20,7 +22,9 @@ export default function ReactionTotalBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 font-sw-mono text-[11px] text-[#b0b0b0]",
+        chip
+          ? "sw-stat-chip"
+          : "inline-flex items-center gap-1 font-sw-mono text-[11px] text-[#c0c0c8]",
         className,
       )}
       aria-label={`${reactionsTotal} reactions`}

@@ -875,10 +875,12 @@ body {
    1px borders, monochrome status accents, near-zero decorative motion.
    Class names are kept stable so components need no markup changes.        */
 
-/* Flat graphite canvas — no nebula, no drifting light, no noise. */
+/* Deep charcoal canvas — subtle radial lift, not pure black. */
 .sw-field {
-  background-color: #0a0a0b;
-  background-image: none;
+  background-color: #0c0c0e;
+  background-image:
+    radial-gradient(ellipse 90% 60% at 50% -15%, rgba(255, 255, 255, 0.035), transparent 55%),
+    radial-gradient(ellipse 50% 40% at 100% 100%, rgba(25, 194, 173, 0.04), transparent 50%);
 }
 
 /* Decorative atmosphere layers are retired in the graphite theme. */
@@ -905,10 +907,12 @@ body {
   box-shadow: none;
 }
 
-/* Top bar — same flat panel, bottom border only. */
+/* Top bar — restrained glass framing for the shell chrome only. */
 .sw-glass-bar {
-  background: rgba(10, 10, 12, 0.97);
+  background: rgba(12, 12, 14, 0.82);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 }
 
 /* Scene card — dense, quiet container; the thumbnail carries the weight. */
@@ -917,13 +921,17 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: none;
   transition:
-    border-color 150ms ease,
-    background-color 150ms ease;
+    border-color 180ms ease,
+    background-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
 }
 
 .sw-glass-card-hover:hover {
-  border-color: rgba(255, 255, 255, 0.2);
-  background: #17171a;
+  border-color: rgba(255, 255, 255, 0.22);
+  background: #1a1a1e;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.32);
+  transform: translateY(-2px);
 }
 
 /* FAILED card — a single steady outline, not a pulsing color wash. */
@@ -936,11 +944,9 @@ body {
   position: relative;
 }
 
-/* Sidebar drawer — Gmail-style: flush against the top bar and the left
-   screen edge, not a floating card. Fill only, with a single hairline
-   on the right to separate it from the content area. */
+/* Sidebar drawer — flush against the top bar, separated by a hairline. */
 .sw-sidebar-panel {
-  background: #131316;
+  background: #111114;
   border-right: 1px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -960,30 +966,40 @@ body {
    floating "Compose" button, not just another row in the list. */
 .sw-new-scene {
   position: relative;
-  background: #f4f4f5;
-  border: 1px solid transparent;
+  background: linear-gradient(180deg, #f8f8f9 0%, #ececee 100%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow:
-    0 4px 10px rgba(0, 0, 0, 0.35),
-    0 1px 2px rgba(0, 0, 0, 0.3);
-  color: #0a0a0b;
-  transition: background-color 150ms ease, box-shadow 150ms ease;
+    0 2px 8px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  color: #0c0c0e;
+  transition: background-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
 }
 
 .sw-new-scene:hover {
-  background: #e4e4e7;
+  background: linear-gradient(180deg, #ffffff 0%, #e8e8ec 100%);
   filter: none;
   box-shadow:
-    0 6px 14px rgba(0, 0, 0, 0.4),
-    0 1px 2px rgba(0, 0, 0, 0.3);
+    0 4px 12px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }
 
-/* Active nav item — Gmail-style flush pill: a solid fill that runs the
-   full row and meets the sidebar's inner edge, rounded only on that
-   trailing edge (see rounded-l-none/rounded-r-full in AppSidebar). */
+/* Active nav item — flush pill with a leading accent bar. */
 .sw-nav-active {
   position: relative;
-  background: rgba(255, 255, 255, 0.1);
-  box-shadow: none;
+  background: rgba(255, 255, 255, 0.11);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.sw-nav-active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(180deg, #19c2ad, rgba(25, 194, 173, 0.45));
 }
 
 /* Active nav icon — plain white, no drop-shadow glow. */
@@ -1024,6 +1040,81 @@ body {
 .sw-control {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Dashboard toolbar — grouped filter/sort cluster. */
+.sw-toolbar-cluster {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.025);
+  padding: 0.2rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+/* Social stat chip — readable mono pill on cards. */
+.sw-stat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 0.2rem 0.55rem;
+  font-family: var(--font-jetbrains), ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 500;
+  color: #c8c8d0;
+  line-height: 1;
+}
+
+/* Featured scene hero — editorial surface with subtle depth. */
+.sw-featured-card {
+  background: #141416;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.28);
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.sw-featured-card:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.34);
+  transform: translateY(-1px);
+}
+
+/* Card body — lifted from thumbnail for metadata separation. */
+.sw-card-body {
+  background: #151518;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Main content surface — subtle panel lift from page canvas. */
+.sw-content-surface {
+  background: rgba(255, 255, 255, 0.015);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Dashboard stat pill in the page header strip. */
+.sw-dash-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 0.3rem 0.65rem;
+  font-size: 11px;
+  color: #b0b0ba;
+}
+
+.sw-dash-stat strong {
+  font-weight: 600;
+  color: #f4f4f5;
 }
 
 /* Profile card — flat block, quiet border states only. */

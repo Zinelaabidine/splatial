@@ -17,8 +17,10 @@ export function SceneVisibilityBadge({ visibility, className }: SceneVisibilityB
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#9a9aa2] ring-1 ring-white/10",
-        isPublic ? "bg-white/[0.06]" : "bg-white/[0.03]",
+        "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ring-1",
+        isPublic
+          ? "bg-emerald-500/15 text-emerald-200 ring-emerald-400/25"
+          : "bg-white/[0.06] text-[#c8c8d0] ring-white/12",
         className,
       )}
     >

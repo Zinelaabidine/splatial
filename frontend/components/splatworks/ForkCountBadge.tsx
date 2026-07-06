@@ -3,18 +3,22 @@ import { cn } from "@/lib/utils";
 type ForkCountBadgeProps = {
   forksCount?: number;
   className?: string;
+  chip?: boolean;
 };
 
 export default function ForkCountBadge({
   forksCount = 0,
   className,
+  chip = false,
 }: ForkCountBadgeProps) {
   if (forksCount <= 0) return null;
 
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 font-sw-mono text-[11px] text-[#b0b0b0]",
+        chip
+          ? "sw-stat-chip"
+          : "inline-flex items-center gap-1 font-sw-mono text-[11px] text-[#c0c0c8]",
         className,
       )}
       aria-label={`${forksCount} remixes`}

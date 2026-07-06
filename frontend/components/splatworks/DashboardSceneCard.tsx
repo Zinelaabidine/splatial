@@ -1,15 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { MoreVertical, Pencil, RefreshCw, Send, Settings2, Trash2, XCircle } from "lucide-react";
+import { useState } from "react";
+import { RefreshCw, Send, Settings2, XCircle } from "lucide-react";
 
+import SceneCardMenu from "@/components/splatworks/dashboard/SceneCardMenu";
+import SceneCreatorRow from "@/components/splatworks/dashboard/SceneCreatorRow";
+import SceneStatChips from "@/components/splatworks/dashboard/SceneStatChips";
 import PointCloudThumbnail from "@/components/splatworks/PointCloudThumbnail";
-import CommentCountBadge from "@/components/splatworks/CommentCountBadge";
-import ForkCountBadge from "@/components/splatworks/ForkCountBadge";
-import ReactionTotalBadge from "@/components/splatworks/ReactionTotalBadge";
 import StatusDot, { STATUS_LABELS } from "@/components/splatworks/StatusDot";
 import SceneTaxonomyDisplay from "@/components/features/scenes/SceneTaxonomyDisplay";
-import { SceneVisibilityBadge, SceneVisibilityToggle } from "@/components/features/scenes/SceneVisibilityControl";
+import { SceneVisibilityBadge } from "@/components/features/scenes/SceneVisibilityControl";
 import AdvancedSettingsPanel from "@/components/upload/AdvancedSettingsPanel";
 import { Button } from "@/components/ui/button";
 import { formatProgressSubPhase } from "@/lib/scenes/progressLabels";
@@ -19,33 +19,15 @@ import type { SubmitJobOptions } from "@/services/jobsService";
 import type { ColmapConfig, SceneVisibility, TrainConfig } from "@/types/api";
 import type { DashboardScene, SceneStatus } from "@/types/splatworks";
 
-// One flat graphite tile for every non-viewable status — the small status
-// dot and label carry the meaning, not a colored background wash.
 const DARK_STATUS: Record<
   SceneStatus,
   { tile: string; text: string; pulse?: boolean }
 > = {
-  draft: {
-    tile: "#141416",
-    text: "#a1a1aa",
-  },
-  queued: {
-    tile: "#141416",
-    text: "#d4a24c",
-  },
-  training: {
-    tile: "#141416",
-    text: "#e4e4e7",
-    pulse: true,
-  },
-  completed: {
-    tile: "#141416",
-    text: "#8fd6ab",
-  },
-  failed: {
-    tile: "#141416",
-    text: "#e0918f",
-  },
+  draft: { tile: "#18181c", text: "#b8b8c2" },
+  queued: { tile: "#18181c", text: "#d4a24c" },
+  training: { tile: "#18181c", text: "#e8e8ec", pulse: true },
+  completed: { tile: "#18181c", text: "#8fd6ab" },
+  failed: { tile: "#18181c", text: "#e0918f" },
 };
 
 type DashboardSceneCardProps = {
@@ -59,6 +41,8 @@ type DashboardSceneCardProps = {
   submitting?: boolean;
   cancelling?: boolean;
   visibilityUpdating?: boolean;
+  /** Tighter card for bento side-stack. */
+  density?: "default" | "compact";
 };
 
 function canSubmitScene(scene: DashboardScene): boolean {
@@ -80,14 +64,14 @@ export default function DashboardSceneCard({
   submitting = false,
   cancelling = false,
   visibilityUpdating = false,
+  density = "default",
 }: DashboardSceneCardProps) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
   const styles = DARK_STATUS[scene.status];
   const visibility = scene.visibility ?? "PRIVATE";
   const isViewable = scene.status === "completed";
   const showSubmit = canSubmitScene(scene);
   const showCancel = isActiveGpuJobStatus(scene.apiStatus);
+  const isCompact = density === "compact";
 
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [trainConfig, setTrainConfig] = useState<TrainConfig>({});
@@ -103,16 +87,7 @@ export default function DashboardSceneCard({
     );
   };
 
-  useEffect(() => {
-    if (!menuOpen) return;
-    const handleClick = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [menuOpen]);
+  const showProcessingFooter = showCancel || showSubmit;
 
   return (
     <article
@@ -130,193 +105,180 @@ export default function DashboardSceneCard({
           : undefined
       }
       className={cn(
-        "sw-glass-card group relative rounded-2xl",
+        "sw-glass-card group relative flex flex-col overflow-hidden rounded-xl",
         scene.status === "failed" && "sw-glass-card-failed",
         isViewable && "sw-glass-card-hover cursor-pointer",
-        menuOpen && "z-50",
       )}
     >
-      {scene.status === "completed" && scene.thumbnailUrl ? (
-        <>
-          {/* Presigned S3 URLs — not compatible with next/image */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-          src={scene.thumbnailUrl}
-          alt=""
-          className="h-[200px] w-full rounded-t-2xl object-cover"
-        />
-        </>
-      ) : scene.status === "completed" && scene.preview ? (
-        <PointCloudThumbnail
-          preview={scene.preview}
-          height={200}
-          variant="dark-card"
-          className="rounded-t-2xl"
-        />
-      ) : (
-        <StatusTile
-          scene={scene}
-          tileBg={styles.tile}
-          textColor={styles.text}
-          pulse={styles.pulse}
-        />
-      )}
+      <div
+        className={cn(
+          "relative w-full overflow-hidden",
+          isCompact ? "aspect-[5/4]" : "aspect-[4/3]",
+        )}
+      >
+        {scene.status === "completed" && scene.thumbnailUrl ? (
+          <>
+            {/* Presigned S3 URLs — not compatible with next/image */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={scene.thumbnailUrl}
+              alt=""
+              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+            />
+          </>
+        ) : scene.status === "completed" && scene.preview ? (
+          <PointCloudThumbnail
+            preview={scene.preview}
+            height={isCompact ? 160 : 200}
+            variant="dark-card"
+            className="h-full w-full"
+          />
+        ) : (
+          <StatusTile
+            scene={scene}
+            tileBg={styles.tile}
+            textColor={styles.text}
+            pulse={styles.pulse}
+            compact={isCompact}
+          />
+        )}
 
-      <div className="rounded-b-2xl px-3 py-2.5">
-        <div className="flex items-center gap-2">
-          <h3 className="min-w-0 flex-1 truncate text-[13.5px] font-medium text-white">
-            {scene.title}
-          </h3>
-          <SceneVisibilityBadge visibility={visibility} />
-          <div
-            ref={menuRef}
-            className="relative shrink-0"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              type="button"
-              aria-label="More actions"
-              aria-expanded={menuOpen}
-              onClick={(e) => {
-                e.stopPropagation();
-                setMenuOpen((open) => !open);
-              }}
-              className={cn(
-                "rounded-md p-1 text-[#9a9aa2] transition-colors hover:bg-white/10 hover:text-white",
-                menuOpen ? "bg-white/10 text-white opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
-              )}
-            >
-              <MoreVertical className="h-3.5 w-3.5" />
-            </button>
-            {menuOpen && (
-              <div
-                role="menu"
-                className="sw-glass absolute bottom-full right-0 z-50 mb-2 min-w-[140px] overflow-hidden rounded-lg py-1"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {scene.status === "completed" && (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setMenuOpen(false);
-                      onEditScene?.(scene);
-                    }}
-                    className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] font-medium text-[#e4e4e7] transition-colors hover:bg-white/10"
-                  >
-                    <Pencil className="h-3.5 w-3.5" strokeWidth={1.5} />
-                    Edit
-                  </button>
+        <SceneVisibilityBadge
+          visibility={visibility}
+          className="absolute left-2 top-2 border-white/10 bg-black/50 text-[9px] backdrop-blur-sm"
+        />
+
+        {scene.status !== "completed" && (
+          <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full border border-white/10 bg-black/50 px-1.5 py-0.5 font-sw-mono text-[9px] font-medium uppercase tracking-wide text-[#d8d8e0] backdrop-blur-sm">
+            <StatusDot status={scene.status} pulse={styles.pulse} className="h-1.5 w-1.5" />
+            {scene.apiStatus === "UPLOADED"
+              ? "Ready"
+              : scene.apiStatus === "PENDING_UPLOAD"
+                ? "Importing"
+                : scene.apiStatus === "CANCELLED"
+                  ? "Cancelled"
+                  : STATUS_LABELS[scene.status]}
+          </span>
+        )}
+      </div>
+
+      <div className="sw-card-body flex flex-1 flex-col px-3 py-2.5">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <h3
+                className={cn(
+                  "min-w-0 flex-1 truncate font-semibold text-white",
+                  isCompact ? "text-[13px]" : "text-[14px]",
                 )}
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setMenuOpen(false);
-                    onDeleteScene?.(scene);
-                  }}
-                  className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] font-medium text-[#e0918f] transition-colors hover:bg-white/10"
-                >
-                  <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
-                  Delete
-                </button>
-              </div>
-            )}
+              >
+                {scene.title}
+              </h3>
+            </div>
+            <div className="mt-1 flex items-center justify-between gap-2">
+              <SceneCreatorRow inline />
+              <SceneCardMenu
+                showEdit={scene.status === "completed"}
+                visibility={visibility}
+                visibilityUpdating={visibilityUpdating}
+                onEdit={() => onEditScene?.(scene)}
+                onDelete={() => onDeleteScene?.(scene)}
+                onVisibilityChange={
+                  onVisibilityChange
+                    ? (next) => onVisibilityChange(scene, next)
+                    : undefined
+                }
+                buttonClassName="opacity-70 group-hover:opacity-100"
+              />
+            </div>
           </div>
         </div>
-        <div className="mt-1 flex items-center gap-2 text-[11px] text-[#84848c]">
-          <span>{scene.caption}</span>
-          {(scene.forksCount != null && scene.forksCount > 0) ||
-          (scene.commentsCount != null && scene.commentsCount > 0) ||
-          (scene.reactionsTotal != null && scene.reactionsTotal > 0) ? (
-            <span className="flex items-center gap-2">
-              <span className="text-[#4a4a52]">·</span>
-              <ForkCountBadge forksCount={scene.forksCount} />
-              <CommentCountBadge commentsCount={scene.commentsCount} />
-              <ReactionTotalBadge
-                reactionsTotal={scene.reactionsTotal}
-                reactionCounts={scene.reactionCounts}
-              />
-            </span>
-          ) : null}
+
+        <div className="mt-2 flex items-end justify-between gap-2">
+          <p className="min-w-0 truncate font-sw-mono text-[10px] text-[#a8a8b2]">
+            {scene.caption}
+          </p>
         </div>
-        <SceneTaxonomyDisplay
-          category={scene.category}
-          tags={scene.tags}
+
+        <SceneStatChips
+          forksCount={scene.forksCount}
+          commentsCount={scene.commentsCount}
+          reactionsTotal={scene.reactionsTotal}
+          reactionCounts={scene.reactionCounts}
           className="mt-1.5"
         />
-        <div
-          className="mt-2.5"
-          onClick={(e) => e.stopPropagation()}
-          onKeyDown={(e) => e.stopPropagation()}
-        >
-          <SceneVisibilityToggle
-            compact
-            visibility={visibility}
-            disabled={visibilityUpdating}
-            onToggle={(nextVisibility) => onVisibilityChange?.(scene, nextVisibility)}
+
+        {!isCompact && (
+          <SceneTaxonomyDisplay
+            category={scene.category}
+            tags={scene.tags}
+            className="mt-1.5"
           />
-        </div>
-        {showCancel && (
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={cancelling}
-            onClick={(e) => {
-              e.stopPropagation();
-              onCancelScene?.(scene);
-            }}
-            className="mt-2.5 w-full rounded-md border-white/12 bg-white/[0.04] text-[#e4e4e7] hover:bg-white/10 hover:text-white"
-          >
-            <XCircle data-icon="inline-start" />
-            {cancelling ? "Cancelling…" : "Cancel processing"}
-          </Button>
         )}
-        {showSubmit && (
-          <div className="mt-2.5" onClick={(e) => e.stopPropagation()}>
-            <div className="flex gap-1.5">
-              <Button
-                size="sm"
-                disabled={submitting}
-                onClick={handleSubmitClick}
-                className={cn(
-                  "flex-1 rounded-md border text-[13px] font-medium",
-                  scene.apiStatus === "FAILED"
-                    ? "border-white/12 bg-white/[0.04] text-[#e0918f] hover:bg-white/10"
-                    : "border-transparent bg-[#f4f4f5] text-[#0a0a0b] hover:bg-[#e4e4e7]",
-                )}
-              >
-                <Send data-icon="inline-start" />
-                {submitting
-                  ? "Submitting…"
-                  : scene.apiStatus === "FAILED"
-                    ? "Retry training"
-                    : "Submit for processing"}
-              </Button>
+
+        {showProcessingFooter && (
+          <div
+            className="mt-2.5 space-y-2 border-t border-white/8 pt-2.5"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            {showCancel && (
               <Button
                 size="sm"
                 variant="outline"
-                aria-expanded={showAdvanced}
-                aria-label="Advanced training settings"
-                onClick={() => setShowAdvanced((v) => !v)}
-                className={cn(
-                  "rounded-md border-white/12 bg-white/[0.04] text-[#9a9aa2] hover:bg-white/10 hover:text-white",
-                  showAdvanced && "bg-white/10 text-white",
-                )}
+                disabled={cancelling}
+                onClick={() => onCancelScene?.(scene)}
+                className="h-7 w-full rounded-md border-white/12 bg-white/[0.03] text-xs text-[#d8d8e0] hover:bg-white/10 hover:text-white"
               >
-                <Settings2 />
+                <XCircle data-icon="inline-start" />
+                {cancelling ? "Cancelling…" : "Cancel"}
               </Button>
-            </div>
-            {showAdvanced && (
-              <div className="sw-glass mt-2 rounded-lg p-2">
-                <AdvancedSettingsPanel
-                  trainConfig={trainConfig}
-                  colmapConfig={colmapConfig}
-                  onTrainConfigChange={setTrainConfig}
-                  onColmapConfigChange={setColmapConfig}
-                />
+            )}
+            {showSubmit && (
+              <div>
+                <div className="flex gap-1.5">
+                  <Button
+                    size="sm"
+                    disabled={submitting}
+                    onClick={handleSubmitClick}
+                    className={cn(
+                      "h-7 flex-1 rounded-md border text-xs font-medium",
+                      scene.apiStatus === "FAILED"
+                        ? "border-white/12 bg-white/[0.04] text-[#e0918f] hover:bg-white/10"
+                        : "border-transparent bg-[#f4f4f5] text-[#0c0c0e] hover:bg-[#e4e4e7]",
+                    )}
+                  >
+                    <Send data-icon="inline-start" />
+                    {submitting
+                      ? "Submitting…"
+                      : scene.apiStatus === "FAILED"
+                        ? "Retry"
+                        : "Submit"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    aria-expanded={showAdvanced}
+                    aria-label="Advanced training settings"
+                    onClick={() => setShowAdvanced((v) => !v)}
+                    className={cn(
+                      "h-7 rounded-md border-white/12 bg-white/[0.03] text-[#a8a8b2] hover:bg-white/10 hover:text-white",
+                      showAdvanced && "bg-white/10 text-white",
+                    )}
+                  >
+                    <Settings2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                {showAdvanced && (
+                  <div className="sw-glass mt-2 rounded-lg p-2">
+                    <AdvancedSettingsPanel
+                      trainConfig={trainConfig}
+                      colmapConfig={colmapConfig}
+                      onTrainConfigChange={setTrainConfig}
+                      onColmapConfigChange={setColmapConfig}
+                    />
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -331,57 +293,44 @@ function StatusTile({
   tileBg,
   textColor,
   pulse,
+  compact,
 }: {
   scene: DashboardScene;
   tileBg: string;
   textColor: string;
   pulse?: boolean;
+  compact?: boolean;
 }) {
   return (
     <div
-      className="flex h-[200px] flex-col items-center justify-center rounded-t-2xl px-5 text-center"
+      className="flex h-full flex-col items-center justify-center px-4 text-center"
       style={{ background: tileBg }}
     >
-      <span
-        className="inline-flex items-center gap-1.5 font-sw-mono text-[10px] font-medium uppercase tracking-wider text-[#84848c]"
-      >
-        <StatusDot status={scene.status} pulse={pulse} className="h-1.5 w-1.5" />
-        {scene.apiStatus === "UPLOADED"
-          ? "Ready to submit"
-          : scene.apiStatus === "PENDING_UPLOAD"
-            ? "Importing"
-            : scene.apiStatus === "CANCELLED"
-              ? "Cancelled"
-              : STATUS_LABELS[scene.status]}
-      </span>
-
       {scene.status === "training" && scene.progressPercent != null && (
         <>
           {scene.progressSubPhase && (
-            <p className="mb-2 max-w-full truncate font-sw-mono text-[10px] uppercase tracking-wide text-[#84848c]">
+            <p className="mb-1.5 max-w-full truncate font-sw-mono text-[9px] uppercase tracking-wide text-[#a8a8b2]">
               {formatProgressSubPhase(scene.progressSubPhase)}
             </p>
           )}
           <div
-            className="my-2.5 font-sw-mono text-xl font-semibold leading-none"
+            className={cn(
+              "font-sw-mono font-semibold leading-none",
+              compact ? "text-xl" : "text-2xl",
+            )}
             style={{ color: textColor }}
           >
             {scene.progressPercent}%
           </div>
-          <div className="h-[3px] w-full max-w-[140px] overflow-hidden rounded-full bg-white/10">
+          <div className="mt-2 h-1 w-full max-w-[120px] overflow-hidden rounded-full bg-white/10">
             <div
-              className="h-full rounded-full bg-white/70"
+              className="h-full rounded-full bg-white/75"
               style={{ width: `${scene.progressPercent}%` }}
             />
           </div>
           {scene.eta && (
-            <p className="mt-2 font-sw-mono text-[11px] text-[#84848c]">
-              ~{scene.eta} remaining
-            </p>
-          )}
-          {scene.workerVersion && (
-            <p className="mt-1 font-sw-mono text-[10px] uppercase tracking-wide text-[#5a5a62]">
-              Worker v{scene.workerVersion}
+            <p className="mt-1.5 font-sw-mono text-[10px] text-[#a8a8b2]">
+              ~{scene.eta} left
             </p>
           )}
         </>
@@ -390,12 +339,15 @@ function StatusTile({
       {scene.status === "queued" && scene.queuePosition != null && (
         <>
           <div
-            className="mb-1 mt-2.5 font-sw-mono text-xl font-semibold leading-none"
+            className={cn(
+              "font-sw-mono font-semibold leading-none",
+              compact ? "text-xl" : "text-2xl",
+            )}
             style={{ color: textColor }}
           >
             #{scene.queuePosition}
           </div>
-          <div className="font-sw-mono text-[11px] text-[#84848c]">
+          <div className="mt-1 font-sw-mono text-[10px] text-[#a8a8b2]">
             in queue · {scene.queueEta}
           </div>
         </>
@@ -404,32 +356,28 @@ function StatusTile({
       {scene.status === "draft" && scene.uploadedImageCount != null && (
         <>
           <div
-            className="mb-1 mt-2.5 font-sw-mono text-xl font-semibold leading-none"
+            className={cn(
+              "font-sw-mono font-semibold leading-none",
+              compact ? "text-xl" : "text-2xl",
+            )}
             style={{ color: textColor }}
           >
             {scene.uploadedImageCount}
           </div>
-          <div className="font-sw-mono text-[11px] text-[#84848c]">images uploaded</div>
+          <div className="mt-1 font-sw-mono text-[10px] text-[#a8a8b2]">images</div>
         </>
       )}
 
       {scene.status === "failed" && scene.errorMessage && (
-        <>
-          <div className="my-2.5 max-w-[180px] font-sw-mono text-[11px] leading-snug text-[#a1a1aa]">
-            {scene.errorMessage}
-          </div>
-          {scene.failedAtIter && (
-            <div className="font-sw-mono text-[11px] text-[#84848c]">
-              at iter {scene.failedAtIter}
-            </div>
-          )}
-        </>
+        <div className="max-w-[160px] font-sw-mono text-[10px] leading-snug text-[#c0c0c8]">
+          {scene.errorMessage}
+        </div>
       )}
 
       {scene.status === "failed" && (
-        <div className="mt-2.5 flex items-center gap-1.5 font-sw-mono text-[11px] text-[#84848c]">
+        <div className="mt-1.5 flex items-center gap-1 font-sw-mono text-[10px] text-[#a8a8b2]">
           <RefreshCw className="h-3 w-3" strokeWidth={1.5} />
-          Click Retry below to resubmit
+          Retry below
         </div>
       )}
     </div>

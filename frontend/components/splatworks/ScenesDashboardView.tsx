@@ -1,25 +1,22 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { ChevronDown, LayoutGrid, List } from "lucide-react";
+import { useEffect, useMemo, useRef } from "react";
 
 import DeleteSceneModal from "@/components/features/scenes/DeleteSceneModal";
 import EditSceneModal from "@/components/features/scenes/EditSceneModal";
 import DashboardSceneCard from "@/components/splatworks/DashboardSceneCard";
 import DashboardSceneListRow from "@/components/splatworks/DashboardSceneListRow";
 import SceneCardSkeleton from "@/components/splatworks/SceneCardSkeleton";
-import { STATUS_LABELS } from "@/components/splatworks/StatusDot";
+import DashboardToolbar from "@/components/splatworks/dashboard/DashboardToolbar";
 import { usePageSearch } from "@/components/layout/AppShellContext";
-import { useScenesDashboardGrid, STATUS_FILTER_OPTIONS, type StatusFilter } from "@/hooks/scenes/useScenesDashboardGrid";
-import { SORT_LABELS } from "@/lib/scenes/sceneMappers";
-import { cn } from "@/lib/utils";
+import {
+  useScenesDashboardGrid,
+  STATUS_FILTER_OPTIONS,
+  type StatusFilter,
+} from "@/hooks/scenes/useScenesDashboardGrid";
+import { computeDashboardStats } from "@/lib/scenes/featuredScene";
 import type { DashboardScene } from "@/types/splatworks";
-import type { MockScene, SceneCardState, SortOption } from "@/types/dashboard";
-
-const STATUS_FILTER_LABELS: Record<StatusFilter, string> = {
-  all: "All",
-  ...STATUS_LABELS,
-};
+import type { MockScene, SceneCardState } from "@/types/dashboard";
 
 function dashboardSceneToModalScene(scene: DashboardScene): MockScene {
   const state: SceneCardState =
@@ -48,6 +45,9 @@ function dashboardSceneToModalScene(scene: DashboardScene): MockScene {
     lastModified: date,
   };
 }
+
+const GRID_CLASS =
+  "grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-5";
 
 export default function ScenesDashboardView() {
   const { search } = usePageSearch("Search scenes");
@@ -114,123 +114,101 @@ export default function ScenesDashboardView() {
     return () => document.removeEventListener("mousedown", handler);
   }, [sortOpen, statusOpen, setSortOpen, setStatusOpen]);
 
+  const stats = useMemo(() => computeDashboardStats(scenes), [scenes]);
+
   const emptyMessage = search.trim()
     ? "No scenes match your search."
     : statusFilter !== "all"
       ? "No scenes match this status."
       : "No scenes yet. Create one to get started.";
 
-  const gridClassName = "grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6";
+  const cardProps = (scene: DashboardScene, density: "default" | "compact" = "default") => ({
+    scene,
+    density,
+    onClick: openScene,
+    onSubmitScene: submitScene,
+    onCancelScene: cancelScene,
+    onDeleteScene: remove,
+    onEditScene: edit,
+    onVisibilityChange: (
+      s: DashboardScene,
+      visibility: Parameters<typeof toggleSceneVisibility>[1],
+    ) => {
+      void toggleSceneVisibility(s, visibility);
+    },
+    submitting: submittingId === scene.sceneId,
+    cancelling: cancellingId === scene.sceneId,
+    visibilityUpdating: visibilityUpdatingId === (scene.sceneId ?? scene.id),
+  });
 
   return (
-    <div className="mx-auto w-full max-w-[1600px]">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-lg font-semibold tracking-tight text-white sm:text-xl">
-          Scenes
-          {!loading && totalCount > 0 ? (
-            <span className="ml-1.5 text-[#84848c]">({totalCount})</span>
-          ) : null}
-        </h1>
+    <div className="sw-content-surface w-full rounded-2xl px-4 py-5 sm:px-5">
+      <header className="mb-5 border-b border-white/6 pb-5">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
+              Your Scenes
+            </h1>
+            <p className="mt-1 text-sm text-[#a8a8b2]">
+              Browse, manage, and publish your Gaussian Splatting work.
+            </p>
 
-        <div className="flex items-center gap-2">
-          <div ref={statusRef} className="relative">
-            <button
-              type="button"
-              onClick={() => setStatusOpen((o) => !o)}
-              className="flex h-8 items-center gap-1.5 rounded-md border border-white/10 bg-white/[0.04] px-2.5 text-[13px] text-[#e4e4e7] hover:bg-white/10"
-            >
-              Status: {STATUS_FILTER_LABELS[statusFilter]}
-              <ChevronDown className="h-3.5 w-3.5 text-[#84848c]" />
-            </button>
-            {statusOpen && (
-              <div className="sw-glass absolute right-0 top-full z-10 mt-1.5 min-w-[140px] overflow-hidden rounded-lg py-1">
-                {STATUS_FILTER_OPTIONS.map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    onClick={() => {
-                      setStatusFilter(option);
-                      setStatusOpen(false);
-                    }}
-                    className={cn(
-                      "block w-full px-3 py-2 text-left text-[13px] transition-colors hover:bg-white/10",
-                      option === statusFilter ? "text-white" : "text-[#c7c7cf]",
-                    )}
-                  >
-                    {STATUS_FILTER_LABELS[option]}
-                  </button>
-                ))}
+            {!loading && totalCount > 0 && (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <span className="sw-dash-stat">
+                  <strong>{stats.total}</strong> scenes
+                </span>
+                {stats.ready > 0 && (
+                  <span className="sw-dash-stat">
+                    <strong>{stats.ready}</strong> ready
+                  </span>
+                )}
+                {stats.trainingNow > 0 && (
+                  <span className="sw-dash-stat">
+                    <strong>{stats.trainingNow}</strong> in progress
+                  </span>
+                )}
+                {stats.publicCount > 0 && (
+                  <span className="sw-dash-stat">
+                    <strong>{stats.publicCount}</strong> public
+                  </span>
+                )}
               </div>
             )}
           </div>
 
-          <div ref={sortRef} className="relative">
-            <button
-              type="button"
-              onClick={() => setSortOpen((o) => !o)}
-              className="flex h-8 items-center gap-1.5 rounded-md border border-white/10 bg-white/[0.04] px-2.5 text-[13px] text-[#e4e4e7] hover:bg-white/10"
-            >
-              Sort: {SORT_LABELS[sortBy]}
-              <ChevronDown className="h-3.5 w-3.5 text-[#84848c]" />
-            </button>
-            {sortOpen && (
-              <div className="sw-glass absolute right-0 top-full z-10 mt-1.5 min-w-[120px] overflow-hidden rounded-lg py-1">
-                {sortOptions.map((option: SortOption) => (
-                  <button
-                    key={option}
-                    type="button"
-                    onClick={() => {
-                      setSortBy(option);
-                      setSortOpen(false);
-                    }}
-                    className={cn(
-                      "block w-full px-3 py-2 text-left text-[13px] transition-colors hover:bg-white/10",
-                      option === sortBy ? "text-white" : "text-[#c7c7cf]",
-                    )}
-                  >
-                    {SORT_LABELS[option]}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="flex h-8 items-center rounded-md border border-white/10 bg-white/[0.04] p-0.5">
-            <button
-              type="button"
-              aria-label="Grid view"
-              aria-pressed={viewMode === "grid"}
-              onClick={() => setViewMode("grid")}
-              className={cn(
-                "flex h-7 w-7 items-center justify-center rounded",
-                viewMode === "grid" ? "bg-white text-[#0a0a0b]" : "text-[#84848c] hover:text-white",
-              )}
-            >
-              <LayoutGrid className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              aria-label="List view"
-              aria-pressed={viewMode === "list"}
-              onClick={() => setViewMode("list")}
-              className={cn(
-                "flex h-7 w-7 items-center justify-center rounded",
-                viewMode === "list" ? "bg-white text-[#0a0a0b]" : "text-[#84848c] hover:text-white",
-              )}
-            >
-              <List className="h-3.5 w-3.5" />
-            </button>
-          </div>
+          <DashboardToolbar
+            statusFilter={statusFilter}
+            statusOpen={statusOpen}
+            onStatusToggle={() => setStatusOpen((o) => !o)}
+            onStatusSelect={(filter) => {
+              setStatusFilter(filter);
+              setStatusOpen(false);
+            }}
+            statusOptions={STATUS_FILTER_OPTIONS}
+            statusRef={statusRef}
+            sortBy={sortBy}
+            sortOpen={sortOpen}
+            onSortToggle={() => setSortOpen((o) => !o)}
+            onSortSelect={(sort) => {
+              setSortBy(sort);
+              setSortOpen(false);
+            }}
+            sortOptions={sortOptions}
+            sortRef={sortRef}
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+          />
         </div>
-      </div>
+      </header>
 
       {actionMessage ? (
-        <div className="mb-4 rounded-xl border border-emerald-900/50 bg-emerald-950/40 px-5 py-4 text-sm text-emerald-200">
+        <div className="mb-4 rounded-xl border border-emerald-500/25 bg-emerald-950/35 px-5 py-4 text-sm text-emerald-100">
           {actionMessage}{" "}
           <button
             type="button"
             onClick={clearActionMessage}
-            className="font-medium underline underline-offset-2 hover:text-emerald-100"
+            className="font-medium underline underline-offset-2 hover:text-white"
           >
             Dismiss
           </button>
@@ -238,23 +216,23 @@ export default function ScenesDashboardView() {
       ) : null}
 
       {error ? (
-        <div className="rounded-xl border border-red-900/50 bg-red-950/40 px-5 py-4 text-sm text-red-300">
+        <div className="rounded-xl border border-red-500/25 bg-red-950/35 px-5 py-4 text-sm text-red-200">
           {error}{" "}
           <button
             type="button"
             onClick={() => fetchScenes()}
-            className="font-medium underline underline-offset-2 hover:text-red-200"
+            className="font-medium underline underline-offset-2 hover:text-red-100"
           >
             Retry
           </button>
         </div>
       ) : actionError ? (
-        <div className="mb-4 rounded-xl border border-red-900/50 bg-red-950/40 px-5 py-4 text-sm text-red-300">
+        <div className="mb-4 rounded-xl border border-red-500/25 bg-red-950/35 px-5 py-4 text-sm text-red-200">
           {actionError}{" "}
           <button
             type="button"
             onClick={clearActionError}
-            className="font-medium underline underline-offset-2 hover:text-red-200"
+            className="font-medium underline underline-offset-2 hover:text-red-100"
           >
             Dismiss
           </button>
@@ -262,34 +240,20 @@ export default function ScenesDashboardView() {
       ) : null}
 
       {!error && loading && scenes.length === 0 ? (
-        <div className={gridClassName}>
-          {Array.from({ length: 6 }).map((_, i) => (
+        <div className={GRID_CLASS}>
+          {Array.from({ length: 10 }).map((_, i) => (
             <SceneCardSkeleton key={i} />
           ))}
         </div>
       ) : !error && !loading && scenes.length === 0 ? (
-        <p className="py-16 text-center text-sm text-[#909090]">{emptyMessage}</p>
+        <div className="rounded-2xl border border-dashed border-white/12 bg-white/[0.02] px-6 py-16 text-center">
+          <p className="text-sm text-[#a8a8b2]">{emptyMessage}</p>
+        </div>
       ) : !error && scenes.length > 0 ? (
         viewMode === "grid" ? (
-          <div className={gridClassName}>
+          <div className={GRID_CLASS}>
             {scenes.map((scene) => (
-              <DashboardSceneCard
-                key={scene.id}
-                scene={scene}
-                onClick={openScene}
-                onSubmitScene={submitScene}
-                onCancelScene={cancelScene}
-                onDeleteScene={remove}
-                onEditScene={edit}
-                onVisibilityChange={(scene, visibility) => {
-                  void toggleSceneVisibility(scene, visibility);
-                }}
-                submitting={submittingId === scene.sceneId}
-                cancelling={cancellingId === scene.sceneId}
-                visibilityUpdating={
-                  visibilityUpdatingId === (scene.sceneId ?? scene.id)
-                }
-              />
+              <DashboardSceneCard key={scene.id} {...cardProps(scene)} />
             ))}
           </div>
         ) : (
