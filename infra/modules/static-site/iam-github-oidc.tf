@@ -243,6 +243,7 @@ data "aws_iam_policy_document" "github_deploy_policy" {
     resources = [
       "arn:aws:apigateway:${var.aws_region}::/apis",
       "arn:aws:apigateway:${var.aws_region}::/apis/*",
+      "arn:aws:apigateway:${var.aws_region}::/account",
     ]
   }
 
@@ -320,6 +321,11 @@ data "aws_iam_policy_document" "github_deploy_policy" {
         "arn:aws:iam::886601940523:role/${var.name}-upload-lambda-exec-role",
         # Constructed ARN for the Google Drive import Lambda execution role.
         "arn:aws:iam::886601940523:role/${var.name}-gdrive-import-lambda-exec-role",
+        # Constructed ARNs for the presence WebSocket Lambdas (websocket-api.tf).
+        "arn:aws:iam::886601940523:role/${var.name}-presence-authorizer-exec-role",
+        "arn:aws:iam::886601940523:role/${var.name}-presence-lambda-exec-role",
+        # Account-wide API Gateway CloudWatch role (api-gateway-account.tf; dev only).
+        "arn:aws:iam::886601940523:role/splatial-apigateway-cloudwatch-role",
         # Constructed ARN for the GPU worker instance role (does not exist yet).
         "arn:aws:iam::886601940523:role/${local.name_prefix}-splat-worker-instance-role",
       ],
@@ -345,6 +351,9 @@ data "aws_iam_policy_document" "github_deploy_policy" {
       "arn:aws:iam::886601940523:role/${var.name}-upload-lambda-exec-role",
       # Constructed ARN for the Google Drive import Lambda execution role.
       "arn:aws:iam::886601940523:role/${var.name}-gdrive-import-lambda-exec-role",
+      # Constructed ARNs for the presence WebSocket Lambdas (websocket-api.tf).
+      "arn:aws:iam::886601940523:role/${var.name}-presence-authorizer-exec-role",
+      "arn:aws:iam::886601940523:role/${var.name}-presence-lambda-exec-role",
     ]
     condition {
       test     = "StringEquals"
@@ -713,6 +722,8 @@ data "aws_iam_policy_document" "github_deploy_network_policy" {
       "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-shots",
       "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-tours",
       "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-worker-amis",
+      "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-presence-connections",
+      "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-presence-connections/index/*",
     ]
   }
 
@@ -802,6 +813,9 @@ data "aws_iam_policy_document" "github_deploy_network_policy" {
       "arn:aws:lambda:${var.aws_region}:886601940523:function:${var.name}-upload-lambda",
       # Constructed ARN for the Google Drive import Lambda.
       "arn:aws:lambda:${var.aws_region}:886601940523:function:${var.name}-gdrive-import-lambda",
+      # Constructed ARNs for the presence WebSocket Lambdas (websocket-api.tf).
+      "arn:aws:lambda:${var.aws_region}:886601940523:function:${var.name}-presence-authorizer",
+      "arn:aws:lambda:${var.aws_region}:886601940523:function:${var.name}-presence-lambda",
     ]
   }
 

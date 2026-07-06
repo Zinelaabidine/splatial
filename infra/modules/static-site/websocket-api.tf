@@ -46,7 +46,10 @@ resource "aws_apigatewayv2_stage" "presence_ws" {
     })
   }
 
-  depends_on = [aws_cloudwatch_log_group.presence_ws]
+  depends_on = [
+    aws_cloudwatch_log_group.presence_ws,
+    aws_api_gateway_account.this,
+  ]
 }
 
 # ── $connect authorizer ──────────────────────────────────────────────────────

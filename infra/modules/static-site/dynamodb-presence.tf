@@ -17,7 +17,7 @@ resource "aws_dynamodb_table" "presence_connections" {
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "connection_id"
 
-  depends_on = [time_sleep.iam_propagation]
+  depends_on = [time_sleep.network_iam_propagation]
 
   attribute {
     name = "connection_id"

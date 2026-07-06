@@ -49,6 +49,9 @@ module "static_site" {
   # in exactly one environment — see the variable description.
   enable_ami_bake_resources = true
 
+  # Account-wide API Gateway CloudWatch role — singleton per AWS account.
+  manage_api_gateway_account = true
+
 }
 
 # ---------------------------------------------------------------------------

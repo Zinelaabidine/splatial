@@ -150,6 +150,12 @@ variable "enable_ami_bake_resources" {
   default     = false
 }
 
+variable "manage_api_gateway_account" {
+  description = "Create the account-wide API Gateway CloudWatch Logs role (api-gateway-account.tf). This is a singleton per AWS account, so exactly one environment (dev) should set this true."
+  type        = bool
+  default     = false
+}
+
 variable "slack_webhook_url" {
   description = "Slack incoming webhook URL for admin ASG notifications (config changes, manual-mode-active-too-long alerts). Empty string disables Slack notifications."
   type        = string
