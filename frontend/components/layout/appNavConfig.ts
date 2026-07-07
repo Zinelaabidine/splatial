@@ -18,6 +18,38 @@ export type NavItem = {
   match: (path: string) => boolean;
 };
 
+/** Primary links shown in the top navigation bar. */
+export const TOP_BAR_NAV: NavItem[] = [
+  {
+    id: "home",
+    label: "Home",
+    href: "/scenes",
+    icon: Home,
+    match: (p) => p === "/scenes" || p.startsWith("/scenes/create"),
+  },
+  {
+    id: "explore",
+    label: "Explore",
+    href: "/explore",
+    icon: Compass,
+    match: (p) => p === "/explore",
+  },
+  {
+    id: "feed",
+    label: "Feed",
+    href: "/feed",
+    icon: Rss,
+    match: (p) => p === "/feed",
+  },
+  {
+    id: "saved",
+    label: "Saved",
+    href: "/saved",
+    icon: Bookmark,
+    match: (p) => p === "/saved",
+  },
+];
+
 export const APP_NAV: NavItem[] = [
   {
     id: "home",
