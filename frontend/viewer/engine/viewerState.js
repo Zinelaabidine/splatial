@@ -8,6 +8,44 @@ let _overrideMatrix = null;
 let _controls = null;
 let viewerStarted = false;
 
+/** @type {{ disposed: boolean, rafId: number | null, worker: Worker | null, onResize: (() => void) | null, preventDefault: ((e: Event) => void) | null, onDrop: ((e: DragEvent) => void) | null } | null} */
+let _session = null;
+
+function disposeViewerSession() {
+  if (!_session) return;
+
+  _session.disposed = true;
+
+  if (_session.rafId !== null) {
+    cancelAnimationFrame(_session.rafId);
+    _session.rafId = null;
+  }
+
+  if (_session.worker) {
+    _session.worker.terminate();
+    _session.worker = null;
+  }
+
+  if (_session.onResize) {
+    window.removeEventListener("resize", _session.onResize);
+    _session.onResize = null;
+  }
+
+  if (_session.preventDefault) {
+    document.removeEventListener("dragenter", _session.preventDefault);
+    document.removeEventListener("dragover", _session.preventDefault);
+    document.removeEventListener("dragleave", _session.preventDefault);
+    _session.preventDefault = null;
+  }
+
+  if (_session.onDrop) {
+    document.removeEventListener("drop", _session.onDrop);
+    _session.onDrop = null;
+  }
+
+  _session = null;
+}
+
 export function getViewMatrixSnapshot() {
   return viewMatrix ? viewMatrix.slice() : null;
 }
@@ -48,6 +86,7 @@ export function setViewerStarted(value) {
 }
 
 export function disposeControls() {
+  disposeViewerSession();
   if (_controls) {
     _controls.dispose();
     _controls = null;
@@ -55,6 +94,17 @@ export function disposeControls() {
 }
 
 export async function runViewer(splatUrl) {
+  disposeViewerSession();
+  const session = {
+    disposed: false,
+    rafId: null,
+    worker: null,
+    onResize: null,
+    preventDefault: null,
+    onDrop: null,
+  };
+  _session = session;
+
   const url = splatUrl;
 
   console.log("[Viewer] Fetching splat/ply from URL:", url);
@@ -83,6 +133,8 @@ export async function runViewer(splatUrl) {
     throw new Error(`Failed to fetch: ${fetchErr.message}. URL: ${url}`);
   }
 
+  if (session.disposed) return;
+
   if (req.status != 200)
     throw new Error(req.status + " Unable to load " + req.url);
 
@@ -103,6 +155,7 @@ export async function runViewer(splatUrl) {
     new URL("../../workers/splatSorter.worker.ts", import.meta.url),
     { type: "module" },
   );
+  session.worker = worker;
 
   const canvas = document.getElementById("canvas");
 
@@ -115,16 +168,19 @@ export async function runViewer(splatUrl) {
   viewMatrix = _controls.getState().viewMatrix;
 
   const resize = () => {
+    if (session.disposed || !_controls) return;
     camera = _controls.getState().camera;
     projectionMatrix = engine.resize(camera, downsample);
   };
 
+  session.onResize = resize;
   window.addEventListener("resize", resize);
   resize();
 
   let vertexCount = 0;
 
   worker.onmessage = (e) => {
+    if (session.disposed) return;
     if (e.data.buffer) {
       splatData = new Uint8Array(e.data.buffer);
       if (e.data.save) {
@@ -151,6 +207,8 @@ export async function runViewer(splatUrl) {
   _controls.setCarouselStart(carouselStart);
 
   const frame = (now) => {
+    if (session.disposed || !_controls) return;
+
     const controlState = _controls.tickFrame(now, _overrideMatrix);
     viewMatrix = controlState.viewMatrix;
     const { actualViewMatrix } = controlState;
@@ -158,25 +216,34 @@ export async function runViewer(splatUrl) {
     const viewProj = multiply4(projectionMatrix, actualViewMatrix);
     worker.postMessage({ view: viewProj });
 
+    const spinnerEl = document.getElementById("spinner");
+    const progressEl = document.getElementById("progress");
+
     if (vertexCount > 0) {
-      document.getElementById("spinner").style.display = "none";
+      if (spinnerEl) spinnerEl.style.display = "none";
       engine.drawSplats(actualViewMatrix, vertexCount);
     } else {
       engine.clear();
-      document.getElementById("spinner").style.display = "";
+      if (spinnerEl) spinnerEl.style.display = "";
       carouselStart = Date.now() + 2000;
       _controls.setCarouselStart(carouselStart);
     }
     const progress = (100 * vertexCount) / (splatData.length / rowLength);
-    if (progress < 100) {
-      document.getElementById("progress").style.width = progress + "%";
-    } else {
-      document.getElementById("progress").style.display = "none";
+    if (progressEl) {
+      if (progress < 100) {
+        progressEl.style.width = progress + "%";
+      } else {
+        progressEl.style.display = "none";
+      }
     }
-    requestAnimationFrame(frame);
+    if (!session.disposed) {
+      session.rafId = requestAnimationFrame(frame);
+    }
   };
 
   frame();
+
+  if (session.disposed) return;
 
   const isPly = (splatDataBuf) =>
     splatDataBuf[0] == 112 &&
@@ -225,22 +292,26 @@ export async function runViewer(splatUrl) {
     e.preventDefault();
     e.stopPropagation();
   };
-  document.addEventListener("dragenter", preventDefault);
-  document.addEventListener("dragover", preventDefault);
-  document.addEventListener("dragleave", preventDefault);
-  document.addEventListener("drop", (e) => {
+  const onDrop = (e) => {
     e.preventDefault();
     e.stopPropagation();
     selectFile(e.dataTransfer.files[0]);
-  });
+  };
+  session.preventDefault = preventDefault;
+  session.onDrop = onDrop;
+  document.addEventListener("dragenter", preventDefault);
+  document.addEventListener("dragover", preventDefault);
+  document.addEventListener("dragleave", preventDefault);
+  document.addEventListener("drop", onDrop);
 
   let bytesRead = 0;
   let lastVertexCount = -1;
   let stopLoading = false;
 
   while (true) {
+    if (session.disposed) break;
     const { done, value } = await reader.read();
-    if (done || stopLoading) break;
+    if (done || stopLoading || session.disposed) break;
 
     splatData.set(value, bytesRead);
     bytesRead += value.length;
