@@ -1,6 +1,11 @@
 "use client";
 
-import { Authenticator, ThemeProvider, type Theme } from "@aws-amplify/ui-react";
+import {
+  Authenticator,
+  ThemeProvider,
+  useAuthenticator,
+  type Theme,
+} from "@aws-amplify/ui-react";
 import "@aws-amplify/ui-react/styles.css";
 import { useSearchParams } from "next/navigation";
 import { Boxes } from "lucide-react";
@@ -109,31 +114,53 @@ interface AuthGateProps {
  * buttons can land on the right tab of the same Authenticator. Isolated into
  * its own component so `useSearchParams` doesn't force the whole gate out of
  * static rendering — only this leaf needs a Suspense boundary. */
-function AuthenticatorShell({ children }: AuthGateProps) {
+function AuthGateRouter({ children }: AuthGateProps) {
   const searchParams = useSearchParams();
   const initialState = searchParams.get("authTab") === "signup" ? "signUp" : "signIn";
+  const { authStatus } = useAuthenticator((ctx) => [ctx.authStatus]);
+
+  if (authStatus === "configuring") {
+    return (
+      <div className="auth-gate flex min-h-screen w-full items-center justify-center bg-[#0c0c0e] antialiased">
+        <AuthFallback />
+      </div>
+    );
+  }
+
+  if (authStatus === "authenticated") {
+    return <>{children}</>;
+  }
 
   return (
-    <Authenticator
-      initialState={initialState}
-      signUpAttributes={["email", "preferred_username"]}
-      loginMechanisms={["email"]}
-      formFields={{
-        signUp: {
-          preferred_username: {
-            label: "Username",
-            placeholder: "your_handle (a-z, 0-9, _)",
-            isRequired: true,
-            order: 2,
-          },
-          email: {
-            order: 1,
-          },
-        },
-      }}
-    >
-      {() => <>{children}</>}
-    </Authenticator>
+    <div className="auth-gate min-h-screen w-full bg-[#0c0c0e] antialiased">
+      <div className="grid min-h-screen lg:grid-cols-2">
+        <div className="flex flex-col px-5 py-6 sm:px-8">
+          <BrandMark />
+          <div className="flex flex-1 items-center justify-center py-10">
+            <Authenticator
+              initialState={initialState}
+              signUpAttributes={["email", "preferred_username"]}
+              loginMechanisms={["email"]}
+              formFields={{
+                signUp: {
+                  preferred_username: {
+                    label: "Username",
+                    placeholder: "your_handle (a-z, 0-9, _)",
+                    isRequired: true,
+                    order: 2,
+                  },
+                  email: {
+                    order: 1,
+                  },
+                },
+              }}
+            />
+          </div>
+        </div>
+
+        <LoginVisualPanel />
+      </div>
+    </div>
   );
 }
 
@@ -146,20 +173,17 @@ function AuthenticatorShell({ children }: AuthGateProps) {
 export default function AuthGate({ children }: AuthGateProps) {
   return (
     <ThemeProvider theme={minimalTheme}>
-      <div className="auth-gate min-h-screen w-full bg-[#0c0c0e] antialiased">
-        <div className="grid min-h-screen lg:grid-cols-2">
-          <div className="flex flex-col px-5 py-6 sm:px-8">
-            <BrandMark />
-            <div className="flex flex-1 items-center justify-center py-10">
-              <Suspense fallback={<AuthFallback />}>
-                <AuthenticatorShell>{children}</AuthenticatorShell>
-              </Suspense>
+      <Authenticator.Provider>
+        <Suspense
+          fallback={
+            <div className="auth-gate flex min-h-screen w-full items-center justify-center bg-[#0c0c0e] antialiased">
+              <AuthFallback />
             </div>
-          </div>
-
-          <LoginVisualPanel />
-        </div>
-      </div>
+          }
+        >
+          <AuthGateRouter>{children}</AuthGateRouter>
+        </Suspense>
+      </Authenticator.Provider>
     </ThemeProvider>
   );
 }
