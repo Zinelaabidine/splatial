@@ -6,6 +6,8 @@
 *.tfstate.*
 *.tfvars
 crash.log
+debug.log
+**/debug.log
 override.tf
 override.tf.json
 *_override.tf
@@ -20,11 +22,19 @@ override.tf.json
 /*.zip
 
 # ----------------------------------------------------------------------
+# Python
+# ----------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+
+# ----------------------------------------------------------------------
 # Frontend (Next.js & Node)
 # ----------------------------------------------------------------------
 **/node_modules/
 .next/
 out/
+frontend/redesign-preview.html
 
 # Environment variables (Prevent secret leaks)
 .env
@@ -47,6 +57,7 @@ out/
 # Old application code (to be removed after migration)
 # ----------------------------------------------------------------------
 oldApp/
+site/
 cursor_fix_prompt_scene_visibility_500.txt
 cursor_dev_plan_splat_editor.txt
 cursor_fix_prompt_visibility_500_round2.txt
