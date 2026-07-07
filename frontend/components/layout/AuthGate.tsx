@@ -9,7 +9,7 @@ import {
 import "@aws-amplify/ui-react/styles.css";
 import { useSearchParams } from "next/navigation";
 import { Boxes } from "lucide-react";
-import React, { Suspense } from "react";
+import React, { Suspense, useSyncExternalStore } from "react";
 
 import BrandMark from "@/components/marketing/BrandMark";
 
@@ -118,8 +118,17 @@ function AuthGateRouter({ children }: AuthGateProps) {
   const searchParams = useSearchParams();
   const initialState = searchParams.get("authTab") === "signup" ? "signUp" : "signIn";
   const { authStatus } = useAuthenticator((ctx) => [ctx.authStatus]);
+  const isHydrated = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
 
-  if (authStatus === "configuring") {
+  // Amplify resolves cached Cognito sessions on the client only, so authStatus
+  // is always "configuring" during SSR while the client may already be
+  // "authenticated". Defer auth-dependent UI until after hydration so the
+  // first client paint matches the server HTML.
+  if (!isHydrated || authStatus === "configuring") {
     return (
       <div className="auth-gate flex min-h-screen w-full items-center justify-center bg-[#0c0c0e] antialiased">
         <AuthFallback />
