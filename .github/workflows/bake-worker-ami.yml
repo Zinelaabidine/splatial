@@ -170,7 +170,7 @@ jobs:
             --security-group-ids "${{ steps.net.outputs.sg_id }}" \
             --iam-instance-profile "Name=${{ env.INSTANCE_PROFILE_NAME }}" \
             --metadata-options "HttpTokens=required,HttpEndpoint=enabled,HttpPutResponseHopLimit=1" \
-            --block-device-mappings 'DeviceName=/dev/xvda,Ebs={VolumeSize=100,VolumeType=gp3,DeleteOnTermination=true}' \
+            --block-device-mappings 'DeviceName=/dev/sda1,Ebs={VolumeSize=40,VolumeType=gp3,DeleteOnTermination=true}' \
             --tag-specifications "$TAGS" "$VOL_TAGS" \
             --count 1 \
             --query 'Instances[0].InstanceId' --output text)
@@ -266,6 +266,7 @@ jobs:
             --instance-id "${{ steps.launch.outputs.instance_id }}" \
             --name "${{ steps.ctx.outputs.image_name }}" \
             --description "Splatial worker AMI - ${{ inputs.label }} (base ${{ inputs.base_ami_id }}, ${{ github.sha }})" \
+            --block-device-mappings 'DeviceName=/dev/sda1,Ebs={VolumeSize=40,VolumeType=gp3,DeleteOnTermination=true}' \
             --tag-specifications "$IMAGE_TAGS" "$SNAP_TAGS" \
             --no-reboot \
             --query 'ImageId' --output text)

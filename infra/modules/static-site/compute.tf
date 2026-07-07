@@ -74,9 +74,9 @@ resource "aws_launch_template" "worker" {
   # Spot market type is set by the ASG mixed_instances_policy (price-capacity-optimized).
 
   block_device_mappings {
-    device_name = "/dev/xvda"
+    device_name = "/dev/sda1"
     ebs {
-      volume_size           = 100
+      volume_size           = 40
       volume_type           = "gp3"
       delete_on_termination = true
     }

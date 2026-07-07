@@ -94,8 +94,8 @@ exports.handler = async (event) => {
         },
         BlockDeviceMappings: [
           {
-            DeviceName: "/dev/xvda",
-            Ebs: { VolumeSize: 100, VolumeType: "gp3", DeleteOnTermination: true },
+            DeviceName: "/dev/sda1",
+            Ebs: { VolumeSize: 40, VolumeType: "gp3", DeleteOnTermination: true },
           },
         ],
         UserData: buildUserData(),
