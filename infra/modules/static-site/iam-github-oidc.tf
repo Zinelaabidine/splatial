@@ -743,6 +743,7 @@ data "aws_iam_policy_document" "github_deploy_network_policy" {
       "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-follows",
       "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-follows/index/*",
       "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-reactions",
+      "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-comment-reactions",
       "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-comments",
       "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-notifications",
       "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-bookmarks",
@@ -1006,6 +1007,25 @@ data "aws_iam_policy_document" "github_deploy_cdn_policy" {
     # cannot be used for CreateDistribution.
     resources = [
       "arn:aws:cloudfront::886601940523:distribution/*",
+    ]
+  }
+
+  # ─── SES (transactional email — ses.tf) ────────────────────────────────────
+
+  statement {
+    sid    = "SESDomainIdentityManage"
+    effect = "Allow"
+    actions = [
+      "ses:VerifyDomainIdentity",
+      "ses:DeleteIdentity",
+      "ses:GetIdentityVerificationAttributes",
+      "ses:VerifyDomainDkim",
+      "ses:GetIdentityDkimAttributes",
+      "ses:SetIdentityMailFromDomain",
+      "ses:GetIdentityMailFromDomainAttributes",
+    ]
+    resources = [
+      "arn:aws:ses:${var.aws_region}:886601940523:identity/${var.domain_name}",
     ]
   }
 
