@@ -1,5 +1,5 @@
-import LandingPage from "@/components/marketing/LandingPage";
+import LandingPageGate from "@/components/marketing/LandingPageGate";
 
 export default function RootPage() {
-  return <LandingPage />;
+  return <LandingPageGate />;
 }

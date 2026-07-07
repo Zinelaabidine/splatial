@@ -15,7 +15,7 @@ const SORT_LABELS = {
 } as const;
 
 export default function SplatsGalleryView() {
-  const { search } = usePageSearch("Search splats");
+  const { search } = usePageSearch("Search");
   const gallery = useSplatsGallery(search);
   const sortRef = useRef<HTMLDivElement>(null);
 

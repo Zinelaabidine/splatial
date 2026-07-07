@@ -71,7 +71,8 @@ export default function LandingPage() {
             <p className="mt-5 max-w-lg text-base leading-relaxed text-[#a4a4ae] sm:text-lg">
               Splatial is the cloud-native Gaussian splatting platform. Upload
               photos, get a photorealistic volumetric scene back, and share
-              it anywhere &mdash; no GPU or 3D experience required.
+              it anywhere &mdash; powered by our cloud GPUs, so no local
+              hardware is required.
             </p>
 
             <div className="mt-8 flex flex-wrap items-center gap-3">

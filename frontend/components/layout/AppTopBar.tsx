@@ -22,6 +22,9 @@ import { cn } from "@/lib/utils";
 const iconButtonClass =
   "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-neutral-300 transition-colors hover:bg-neutral-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-600";
 
+const TOP_NAV_ITEM_CLASS =
+  "inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[13px] font-medium leading-none whitespace-nowrap transition-colors";
+
 function NavLink({
   item,
   pathname,
@@ -42,7 +45,7 @@ function NavLink({
       onClick={onNavigate}
       aria-current={isActive ? "page" : undefined}
       className={cn(
-        "flex items-center gap-2 rounded-full px-3 py-1.5 text-[13px] font-medium whitespace-nowrap transition-colors",
+        TOP_NAV_ITEM_CLASS,
         isActive
           ? "bg-neutral-800 font-semibold text-white"
           : "text-neutral-400 hover:bg-neutral-800/60 hover:text-white",
@@ -132,9 +135,9 @@ export default function AppTopBar() {
 
   return (
     <header className="sticky top-0 z-50 h-16 w-full shrink-0 border-b border-neutral-800 bg-neutral-900">
-      <div className="flex h-full items-center justify-between gap-3 px-4 sm:gap-4 sm:px-5">
-        {/* Left — brand + primary navigation */}
-        <div className="flex min-w-0 items-center gap-3 lg:gap-5">
+      <div className="relative flex h-full items-center gap-3 px-4 sm:gap-4 sm:px-5">
+        {/* Left — brand */}
+        <div className="flex min-w-0 flex-1 items-center gap-3 lg:gap-5">
           <button
             type="button"
             aria-label={mobileNavOpen ? "Close navigation" : "Open navigation"}
@@ -152,41 +155,43 @@ export default function AppTopBar() {
           <Link href="/scenes" className="shrink-0" aria-label="Splatworks home">
             <SplatworksLogo variant="dark" />
           </Link>
-
-          <nav
-            aria-label="Primary"
-            className="hidden items-center gap-0.5 lg:flex"
-          >
-            {navItems.map((item) => (
-              <NavLink key={item.id} item={item} pathname={pathname} />
-            ))}
-          </nav>
         </div>
 
-        {/* Center — inline search */}
-        {showSearch ? (
-          <div className="hidden min-w-0 flex-1 justify-center sm:flex">
+        {/* Center — primary navigation */}
+        <nav
+          aria-label="Primary"
+          className="pointer-events-none absolute left-1/2 hidden -translate-x-1/2 items-center gap-0.5 lg:pointer-events-auto lg:flex"
+        >
+          {navItems.map((item) => (
+            <NavLink key={item.id} item={item} pathname={pathname} />
+          ))}
+        </nav>
+
+        {/* Right — search, CTA, utilities, account */}
+        <div className="flex min-w-0 flex-1 items-center justify-end gap-1 sm:gap-1.5">
+          {showSearch ? (
             <TopBarSearch
               value={search}
               onChange={setSearch}
-              placeholder={searchPlaceholder || "Search scenes..."}
-              className="max-w-md"
+              placeholder={searchPlaceholder || "Search"}
+              className="hidden h-8 w-28 sm:flex sm:w-36 md:w-40"
             />
-          </div>
-        ) : (
-          <div className="hidden flex-1 sm:block" aria-hidden />
-        )}
+          ) : null}
 
-        {/* Right — CTA, utilities, account */}
-        <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
-          <button
-            type="button"
-            onClick={() => router.push("/scenes/create")}
-            className="hidden h-9 items-center gap-1.5 rounded-lg bg-teal-500 px-3.5 text-[13px] font-semibold text-black transition-colors hover:bg-teal-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/50 active:scale-[0.98] sm:flex"
+          <Link
+            href="/scenes/create"
+            className={cn(
+              TOP_NAV_ITEM_CLASS,
+              "hidden text-teal-400 hover:bg-neutral-800/60 hover:text-teal-300 sm:inline-flex",
+            )}
           >
-            <Plus className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
+            <Plus
+              className="h-4 w-4 shrink-0 text-teal-400"
+              strokeWidth={1.75}
+              aria-hidden
+            />
             <span>New Scene</span>
-          </button>
+          </Link>
 
           <button
             type="button"
@@ -242,7 +247,7 @@ export default function AppTopBar() {
               <TopBarSearch
                 value={search}
                 onChange={setSearch}
-                placeholder={searchPlaceholder || "Search scenes..."}
+                placeholder={searchPlaceholder || "Search"}
                 className="mb-1 sm:hidden"
               />
             ) : null}
@@ -255,17 +260,21 @@ export default function AppTopBar() {
                 className="w-full px-3.5 py-2.5"
               />
             ))}
-            <button
-              type="button"
-              onClick={() => {
-                closeMobileNav();
-                router.push("/scenes/create");
-              }}
-              className="mt-1 flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-teal-500 text-[13px] font-semibold text-black transition-colors hover:bg-teal-400"
+            <Link
+              href="/scenes/create"
+              onClick={closeMobileNav}
+              className={cn(
+                TOP_NAV_ITEM_CLASS,
+                "w-full px-3.5 py-2.5 text-teal-400 hover:bg-neutral-800/60 hover:text-teal-300",
+              )}
             >
-              <Plus className="h-4 w-4" strokeWidth={2.5} aria-hidden />
-              New Scene
-            </button>
+              <Plus
+                className="h-4 w-4 shrink-0 text-teal-400"
+                strokeWidth={1.75}
+                aria-hidden
+              />
+              <span>New Scene</span>
+            </Link>
           </nav>
         </>
       ) : null}
