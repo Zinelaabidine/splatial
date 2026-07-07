@@ -99,13 +99,6 @@ export default function LegacySplatViewer({
 
       <canvas id="canvas" />
 
-      <div id="quality">
-        <span id="fps" />
-      </div>
-      <div id="caminfo">
-        <span id="camid" />
-      </div>
-
       <CameraTrajectoryProvider>
         {activePanel === "trajectory" ? (
           <div className="dock-panel-anchor">

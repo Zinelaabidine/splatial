@@ -8,7 +8,6 @@ import ReactionBar from "@/components/viewer/ReactionBar";
 import RemixAttribution from "@/components/viewer/RemixAttribution";
 import RemixButton from "@/components/viewer/RemixButton";
 import RemixSuccessBanner from "@/components/viewer/RemixSuccessBanner";
-import SceneInfoCard from "@/components/viewer/SceneInfoCard";
 import ShareButton from "@/components/viewer/ShareButton";
 import type { ReactionSummary } from "@/types/api";
 
@@ -94,18 +93,6 @@ export default function GaussianViewerView({
       <Suspense fallback={null}>
         <RemixSuccessBanner />
       </Suspense>
-
-      {/* Scene identity — top-left. What the old viewer never showed: whose
-          scene this is and what it's called. */}
-      <div className="pointer-events-none absolute left-4 top-4 z-[var(--z-canvas-overlay)] max-w-[calc(100%-2rem)]">
-        <SceneInfoCard
-          sceneId={sceneId}
-          sceneName={sceneName}
-          ownerUsername={ownerUsername}
-          ownerDisplayName={ownerDisplayName}
-          isSceneOwner={isSceneOwner}
-        />
-      </div>
 
       {/* Engagement actions — top-right, deliberately separate from the
           Tours/Shots/Trajectory dock (bottom-center): "operate the scene"

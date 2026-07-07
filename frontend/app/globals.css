@@ -60,24 +60,23 @@ body {
 }
 
 /* -------------------------------------------------------------------------
- * Amplify Authenticator – minimalist override.
+ * Amplify Authenticator – Splatial dark override.
  *
  * The component ships with an opinionated card that announces "Amazon" via a
  * heavy header, drop shadow, and accent colors. We flatten it into a quiet
- * white card on the slate canvas.
+ * graphite card matching the `sw-glass` palette used site-wide, rendered
+ * inside the split-screen shell built in AuthGate.tsx (this block no longer
+ * owns full-viewport centering — that's the shell's job).
  * ------------------------------------------------------------------------- */
 .auth-gate [data-amplify-authenticator] {
-  --amplify-components-authenticator-router-background-color: #ffffff;
-  --amplify-components-authenticator-router-border-color: #f1f5f9;
+  --amplify-components-authenticator-router-background-color: #131316;
+  --amplify-components-authenticator-router-border-color: rgba(255, 255, 255, 0.08);
   --amplify-components-authenticator-router-border-width: 1px;
   --amplify-components-authenticator-router-box-shadow:
-    0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.06);
+    0 20px 40px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
   --amplify-components-authenticator-router-border-radius: 1rem;
 
-  display: grid;
-  place-items: center;
-  min-height: 100vh;
-  padding: 1.5rem;
+  width: 100%;
 }
 
 .auth-gate [data-amplify-authenticator] [data-amplify-container] {
@@ -94,11 +93,11 @@ body {
   font-weight: 600;
   font-size: 1.125rem;
   letter-spacing: -0.01em;
-  color: #0f172a;
+  color: #f4f4f5;
 }
 
 .auth-gate [data-amplify-authenticator] .amplify-tabs__list {
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   background: transparent;
 }
 
@@ -106,29 +105,29 @@ body {
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
-  color: #64748b;
+  color: #a4a4ae;
   font-size: 0.875rem;
   font-weight: 500;
   padding: 0.875rem 1rem;
 }
 
 .auth-gate [data-amplify-authenticator] .amplify-tabs__item[data-state="active"] {
-  color: #4f46e5;
-  border-bottom-color: #4f46e5;
+  color: #19c2ad;
+  border-bottom-color: #19c2ad;
 }
 
 .auth-gate [data-amplify-authenticator] .amplify-label,
 .auth-gate [data-amplify-authenticator] .amplify-field__show-password {
   font-size: 0.8125rem;
-  color: #475569;
+  color: #a4a4ae;
 }
 
 .auth-gate [data-amplify-authenticator] .amplify-input,
 .auth-gate [data-amplify-authenticator] .amplify-select {
   border-radius: 0.625rem;
-  border: 1px solid #e2e8f0;
-  background: #ffffff;
-  color: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #0c0c0e;
+  color: #f4f4f5;
   font-size: 0.875rem;
   padding: 0.625rem 0.75rem;
   transition: border-color 120ms ease, box-shadow 120ms ease;
@@ -137,38 +136,39 @@ body {
 .auth-gate [data-amplify-authenticator] .amplify-input:focus,
 .auth-gate [data-amplify-authenticator] .amplify-select:focus {
   outline: none;
-  border-color: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18);
+  border-color: #19c2ad;
+  box-shadow: 0 0 0 3px rgba(25, 194, 173, 0.18);
 }
 
 .auth-gate [data-amplify-authenticator] .amplify-button--primary {
-  background: #4f46e5;
+  background: #19c2ad;
+  color: #08110f;
   border: none;
   border-radius: 0.625rem;
-  font-weight: 500;
+  font-weight: 600;
   font-size: 0.875rem;
   padding: 0.625rem 0.75rem;
   transition: background-color 120ms ease;
 }
 
 .auth-gate [data-amplify-authenticator] .amplify-button--primary:hover {
-  background: #4338ca;
+  background: #22d6bf;
 }
 
 .auth-gate [data-amplify-authenticator] .amplify-button--link {
-  color: #4f46e5;
+  color: #19c2ad;
   font-size: 0.8125rem;
 }
 
 .auth-gate [data-amplify-authenticator] .amplify-button--link:hover {
-  color: #4338ca;
+  color: #22d6bf;
   background: transparent;
   text-decoration: underline;
 }
 
 .auth-gate [data-amplify-authenticator] .federated-sign-in-container,
 .auth-gate [data-amplify-authenticator] [data-amplify-footer] {
-  border-top: 1px solid #f1f5f9;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 :root {
@@ -351,18 +351,6 @@ body {
   background: blue;
   z-index: 99;
   transition: width 0.1s ease-in-out;
-}
-.splat-viewer-container #quality {
-  position: absolute;
-  bottom: 10px;
-  z-index: 999;
-  right: 10px;
-}
-.splat-viewer-container #caminfo {
-  position: absolute;
-  top: 10px;
-  z-index: 999;
-  right: 10px;
 }
 .splat-viewer-container #canvas {
   display: block;

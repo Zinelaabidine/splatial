@@ -105,7 +105,6 @@ export async function runViewer(splatUrl) {
   );
 
   const canvas = document.getElementById("canvas");
-  const fps = document.getElementById("fps");
 
   let projectionMatrix;
   let camera = defaultCameras[0];
@@ -148,8 +147,6 @@ export async function runViewer(splatUrl) {
     }
   };
 
-  let lastFrame = 0;
-  let avgFps = 0;
   let carouselStart = 0;
   _controls.setCarouselStart(carouselStart);
 
@@ -160,9 +157,6 @@ export async function runViewer(splatUrl) {
 
     const viewProj = multiply4(projectionMatrix, actualViewMatrix);
     worker.postMessage({ view: viewProj });
-
-    const currentFps = 1000 / (now - lastFrame) || 0;
-    avgFps = avgFps * 0.9 + currentFps * 0.1;
 
     if (vertexCount > 0) {
       document.getElementById("spinner").style.display = "none";
@@ -179,8 +173,6 @@ export async function runViewer(splatUrl) {
     } else {
       document.getElementById("progress").style.display = "none";
     }
-    fps.innerText = Math.round(avgFps) + " fps";
-    lastFrame = now;
     requestAnimationFrame(frame);
   };
 
