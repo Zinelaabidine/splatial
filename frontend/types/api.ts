@@ -127,6 +127,10 @@ export interface Comment {
   /** Lowercase handles the backend resolved from @mentions in `body`. */
   mentions?: string[];
   createdAt: string;
+  /** Per-type reaction counts on this comment (same vocabulary as scene reactions). */
+  reactionCounts?: ReactionCounts;
+  reactionsTotal?: number;
+  myReaction?: ReactionType | null;
 }
 
 export interface CommentsResponse {
@@ -142,6 +146,8 @@ export interface RepliesResponse {
 export interface DeleteCommentResponse {
   ok: true;
   commentsCount: number;
+  /** Replies cascade-deleted along with a top-level comment. */
+  deletedReplyCount?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -317,6 +323,12 @@ export interface Scene {
   /** Lowercase slug tags for discovery (max 10). */
   tags?: string[];
   createdAt: string;
+  /** Last time the scene record changed (job status, progress, etc). */
+  updatedAt?: string;
+  /** Set when status is FAILED — short machine-ish reason (e.g. SFM_FAILED). */
+  failureReason?: string;
+  /** Set when status is FAILED — human-readable detail. */
+  errorMessage?: string;
   /** S3 key in the splat-scenes bucket — present when the scene is READY. */
   plyKey?: string;
   /** S3 key for a user-set JPEG thumbnail alongside the splat output. */

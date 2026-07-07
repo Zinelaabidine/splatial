@@ -70,6 +70,7 @@ exports.handler = async (event) => {
     sceneId,
     limit,
     exclusiveStartKey,
+    userId,
   });
 
   const nextCursor = encodeCursor(lastEvaluatedKey);

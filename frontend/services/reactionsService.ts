@@ -24,3 +24,33 @@ export async function removeReaction(
     signal,
   }) as Promise<ReactionSummary>;
 }
+
+export async function setCommentReaction(
+  sceneId: string,
+  commentId: string,
+  type: ReactionType,
+  signal?: AbortSignal,
+): Promise<ReactionSummary> {
+  return authenticatedFetch(
+    `/api/v1/scenes/${sceneId}/comments/${commentId}/reaction`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ type }),
+      signal,
+    },
+  ) as Promise<ReactionSummary>;
+}
+
+export async function removeCommentReaction(
+  sceneId: string,
+  commentId: string,
+  signal?: AbortSignal,
+): Promise<ReactionSummary> {
+  return authenticatedFetch(
+    `/api/v1/scenes/${sceneId}/comments/${commentId}/reaction`,
+    {
+      method: "DELETE",
+      signal,
+    },
+  ) as Promise<ReactionSummary>;
+}

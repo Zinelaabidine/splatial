@@ -3,10 +3,29 @@
 const { DynamoDBClient, GetItemCommand, UpdateItemCommand } = require("@aws-sdk/client-dynamodb");
 const response = require("../lib/response");
 const { applyProgressFields } = require("../lib/progress-fields");
+const { wantsEmailFor } = require("../lib/profile");
+const { sendJobStatusEmail } = require("../lib/email");
 const logger = require("../lib/logger");
 
 const dynamo = new DynamoDBClient({});
 const TABLE  = process.env.SCENES_TABLE_NAME;
+const PROFILES_TABLE = process.env.PROFILES_TABLE_NAME;
+
+/** Best-effort "your job finished/failed" email. Never throws. */
+async function maybeSendJobStatusEmail({ ownerId, sceneId, sceneName, status, errorMessage }) {
+  if (!ownerId || (status !== "READY" && status !== "FAILED")) return;
+  try {
+    const profileResult = await dynamo.send(
+      new GetItemCommand({ TableName: PROFILES_TABLE, Key: { user_id: { S: ownerId } } })
+    );
+    const profile = profileResult.Item;
+    const to = profile?.email?.S;
+    if (!to || !wantsEmailFor(profile, "jobStatus")) return;
+    await sendJobStatusEmail({ to, sceneName, sceneId, status, errorMessage });
+  } catch (err) {
+    console.error("job status email failed", { ownerId, sceneId, err: err.message });
+  }
+}
 
 // Maps worker execution status → scene management status
 const STATUS_MAP = {
@@ -178,6 +197,29 @@ exports.handler = async (event) => {
         ExpressionAttributeValues: parentValues,
       })
     );
+  }
+
+  if (mappedStatus === "READY" || mappedStatus === "FAILED") {
+    const ownerId = Item.user_id?.S;
+    let sceneName = Item.name?.S;
+    if (!sceneName && parentSceneId) {
+      const parent = await dynamo.send(
+        new GetItemCommand({
+          TableName: TABLE,
+          Key: { scene_id: { S: parentSceneId } },
+          ProjectionExpression: "#nm",
+          ExpressionAttributeNames: { "#nm": "name" },
+        })
+      );
+      sceneName = parent.Item?.name?.S;
+    }
+    await maybeSendJobStatusEmail({
+      ownerId,
+      sceneId: parentSceneId || attemptId,
+      sceneName,
+      status: mappedStatus,
+      errorMessage: errorMessage || reason,
+    });
   }
 
   return response(200, { attemptId, updated: true });

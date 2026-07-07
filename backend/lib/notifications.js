@@ -3,13 +3,23 @@
 const { randomUUID } = require("crypto");
 const {
   DynamoDBClient,
+  GetItemCommand,
   QueryCommand,
   TransactWriteItemsCommand,
   UpdateItemCommand,
 } = require("@aws-sdk/client-dynamodb");
 const { S3Client, GetObjectCommand } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
-const { counterValue } = require("./profile");
+const { counterValue, wantsEmailFor } = require("./profile");
+const { sendSocialNotificationEmail } = require("./email");
+
+// Notification type -> notifyEmail preference key (see lib/profile.js).
+const EMAIL_PREF_KEY = {
+  FOLLOW: "follow",
+  REACTION: "reaction",
+  COMMENT: "comment",
+  MENTION: "mention",
+};
 
 const dynamo = new DynamoDBClient({});
 const s3 = new S3Client({});
@@ -132,8 +142,39 @@ async function emitNotification({
         ],
       })
     );
+
+    await maybeSendEmail({ recipientId, type, actorProfile, sceneId, commentId, reactionType });
   } catch (err) {
     console.error("emitNotification failed", { recipientId, type, err });
+  }
+}
+
+/** Best-effort email follow-up to an in-app notification, gated on recipient prefs. */
+async function maybeSendEmail({ recipientId, type, actorProfile, sceneId, commentId, reactionType }) {
+  const prefKey = EMAIL_PREF_KEY[type];
+  if (!prefKey) return;
+
+  try {
+    const recipient = await dynamo.send(
+      new GetItemCommand({
+        TableName: PROFILES_TABLE,
+        Key: { user_id: { S: recipientId } },
+      })
+    );
+    const recipientItem = recipient.Item;
+    const to = recipientItem?.email?.S;
+    if (!to || !wantsEmailFor(recipientItem, prefKey)) return;
+
+    await sendSocialNotificationEmail({
+      to,
+      type,
+      actorDisplayName: actorProfile?.display_name?.S,
+      sceneId,
+      commentId,
+      reactionType,
+    });
+  } catch (err) {
+    console.error("notification email failed", { recipientId, type, err: err.message });
   }
 }
 

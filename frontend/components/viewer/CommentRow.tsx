@@ -5,10 +5,12 @@ import { useCallback, useState } from "react";
 import { Loader2, Trash2 } from "lucide-react";
 
 import CommentBody from "@/components/viewer/CommentBody";
+import CommentReactionBar from "@/components/viewer/CommentReactionBar";
 import { UserAvatar } from "@/components/splatworks/SplatworksLogo";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { formatRelativeTime } from "@/lib/time/formatRelativeTime";
+import { normalizeReactionSummary } from "@/lib/reactions/constants";
 import { cn } from "@/lib/utils";
 import {
   createReply,
@@ -193,28 +195,35 @@ export default function CommentRow({
           className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed text-[#e8e8e8]"
         />
 
-        {canHaveReplies ? (
-          <div className="mt-1.5 flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setShowReplyBox((v) => !v)}
-              className="font-sw-mono text-[11px] text-[#909090] hover:text-white"
-            >
-              Reply
-            </button>
-            {replyCount > 0 ? (
+        <div className="mt-1.5 flex items-center gap-3">
+          <CommentReactionBar
+            sceneId={sceneId ?? comment.sceneId}
+            commentId={comment.commentId}
+            initialSummary={normalizeReactionSummary(comment)}
+          />
+          {canHaveReplies ? (
+            <>
               <button
                 type="button"
-                onClick={handleToggleReplies}
+                onClick={() => setShowReplyBox((v) => !v)}
                 className="font-sw-mono text-[11px] text-[#909090] hover:text-white"
               >
-                {showReplies
-                  ? "Hide replies"
-                  : `View ${replyCount} ${replyCount === 1 ? "reply" : "replies"}`}
+                Reply
               </button>
-            ) : null}
-          </div>
-        ) : null}
+              {replyCount > 0 ? (
+                <button
+                  type="button"
+                  onClick={handleToggleReplies}
+                  className="font-sw-mono text-[11px] text-[#909090] hover:text-white"
+                >
+                  {showReplies
+                    ? "Hide replies"
+                    : `View ${replyCount} ${replyCount === 1 ? "reply" : "replies"}`}
+                </button>
+              ) : null}
+            </>
+          ) : null}
+        </div>
 
         {canHaveReplies && showReplyBox ? (
           <div className="mt-2 space-y-1.5">

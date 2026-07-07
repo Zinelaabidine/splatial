@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useAuthenticator } from "@aws-amplify/ui-react";
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Bell, ChevronRight, CreditCard, LogOut, UserCog } from "lucide-react";
 
 import { UserAvatar } from "@/components/splatworks/SplatworksLogo";
@@ -77,7 +77,6 @@ function MenuRow({
 export default function SettingsPanel() {
   const account = useAppAccount();
   const { signOut } = useAuthenticator((ctx) => [ctx.signOut]);
-  const [emailNotifications, setEmailNotifications] = useState(true);
   const { open, setOpen, ref } = useDismissablePopover<HTMLDivElement>();
 
   const close = () => setOpen(false);
@@ -131,18 +130,8 @@ export default function SettingsPanel() {
             <MenuRow
               icon={Bell}
               label="Email notifications"
-              trailing={
-                <input
-                  type="checkbox"
-                  checked={emailNotifications}
-                  onChange={(e) => setEmailNotifications(e.target.checked)}
-                  aria-label="Email notifications"
-                  className={cn(
-                    "h-4 w-4 shrink-0 cursor-pointer rounded border border-[#404040] bg-[#1a1a1a]",
-                    "accent-[#3b82f6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3b82f6]/50",
-                  )}
-                />
-              }
+              href="/settings/profile"
+              onClick={close}
             />
           </div>
 

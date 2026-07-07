@@ -74,6 +74,9 @@ exports.handler = async (event) => {
   const now = new Date().toISOString();
   const trimmedName = name.trim();
   const ownerFields = ownerFieldsFromProfile(profile, userId);
+  // New scenes fall back to the owner's default visibility preference
+  // (Settings > Privacy); DEFAULT_VISIBILITY covers profiles that never set one.
+  const initialVisibility = profile.default_visibility?.S === "PUBLIC" ? "PUBLIC" : DEFAULT_VISIBILITY;
 
   await dynamo.send(
     new PutItemCommand({
@@ -84,7 +87,7 @@ exports.handler = async (event) => {
         name: { S: trimmedName },
         input_type: { S: inputType },
         status: { S: "UPLOADED" },
-        visibility: { S: DEFAULT_VISIBILITY },
+        visibility: { S: initialVisibility },
         created_at: { S: now },
         updated_at: { S: now },
         ...(validatedCategory ? { category: { S: validatedCategory } } : {}),
@@ -100,7 +103,7 @@ exports.handler = async (event) => {
     name: trimmedName,
     inputType,
     status: "UPLOADED",
-    visibility: DEFAULT_VISIBILITY,
+    visibility: initialVisibility,
     createdAt: now,
     ...(validatedCategory ? { category: validatedCategory } : {}),
     ...(normalizedTags ? { tags: normalizedTags } : {}),
