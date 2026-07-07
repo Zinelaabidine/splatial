@@ -133523,7 +133523,7 @@ const handleLoadSplat = async (events, msg, origin) => {
     try {
         await events.invoke('import', [{
                 filename: msg.filename,
-                contents: msg.buffer
+                contents: new Blob([msg.buffer])
             }]);
         window.parent.postMessage({ type: 'load-splat-complete' }, origin);
     }
