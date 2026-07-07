@@ -8,7 +8,7 @@ let _overrideMatrix = null;
 let _controls = null;
 let viewerStarted = false;
 
-/** @type {{ disposed: boolean, rafId: number | null, worker: Worker | null, onResize: (() => void) | null, preventDefault: ((e: Event) => void) | null, onDrop: ((e: DragEvent) => void) | null } | null} */
+/** @type {{ disposed: boolean, rafId: number | null, worker: Worker | null, onResize: (() => void) | null, preventDefault: ((e: Event) => void) | null, onDrop: ((e: DragEvent) => void) | null, splatData: Uint8Array | null, splatDownloadComplete: boolean } | null} */
 let _session = null;
 
 function disposeViewerSession() {
@@ -93,6 +93,16 @@ export function disposeControls() {
   }
 }
 
+/** Returns a cloned ArrayBuffer of the fully loaded splat, or null if unavailable. */
+export function getViewerSplatBuffer() {
+  if (!_session || _session.disposed || !_session.splatDownloadComplete) {
+    return null;
+  }
+  const data = _session.splatData;
+  if (!data || data.byteLength === 0) return null;
+  return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+}
+
 export async function runViewer(splatUrl) {
   disposeViewerSession();
   const session = {
@@ -102,6 +112,8 @@ export async function runViewer(splatUrl) {
     onResize: null,
     preventDefault: null,
     onDrop: null,
+    splatData: null,
+    splatDownloadComplete: false,
   };
   _session = session;
 
@@ -141,6 +153,7 @@ export async function runViewer(splatUrl) {
   const rowLength = 3 * 4 + 3 * 4 + 4 + 4;
   const reader = req.body.getReader();
   let splatData = new Uint8Array(req.headers.get("content-length"));
+  session.splatData = splatData;
 
   const downloadOverlay = document.getElementById("download-overlay");
   const downloadFill = document.getElementById("download-bar-fill");
@@ -183,6 +196,7 @@ export async function runViewer(splatUrl) {
     if (session.disposed) return;
     if (e.data.buffer) {
       splatData = new Uint8Array(e.data.buffer);
+      session.splatData = splatData;
       if (e.data.save) {
         const blob = new Blob([splatData.buffer], {
           type: "application/octet-stream",
@@ -273,6 +287,8 @@ export async function runViewer(splatUrl) {
       stopLoading = true;
       fr.onload = () => {
         splatData = new Uint8Array(fr.result);
+        session.splatData = splatData;
+        session.splatDownloadComplete = true;
         console.log("Loaded", Math.floor(splatData.length / rowLength));
 
         if (isPly(splatData)) {
@@ -347,6 +363,7 @@ export async function runViewer(splatUrl) {
         vertexCount: Math.floor(bytesRead / rowLength),
       });
     }
+    session.splatDownloadComplete = true;
     try {
       if (downloadOverlay) downloadOverlay.style.display = "none";
     } catch {}

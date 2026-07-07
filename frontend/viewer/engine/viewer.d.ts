@@ -38,6 +38,12 @@ export function applyViewMatrix(m: number[]): void;
 export function isViewerStarted(): boolean;
 
 /**
+ * Returns a cloned ArrayBuffer of the fully loaded splat bytes, or null if the
+ * download is still in progress or the viewer has been torn down.
+ */
+export function getViewerSplatBuffer(): ArrayBuffer | null;
+
+/**
  * Snaps the live camera back to the scene's default view and clears any
  * trajectory override. Recovers a camera that drifted outside the
  * reconstructed splat volume — wired to the viewer dock's "Home" button.
