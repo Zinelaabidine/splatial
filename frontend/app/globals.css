@@ -1035,10 +1035,66 @@ body {
   position: relative;
 }
 
-/* Sidebar drawer — flush against the top bar, separated by a hairline. */
-.sw-sidebar-panel {
-  background: #111114;
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
+/* Top navigation — horizontal primary links in the header. */
+.sw-top-nav-link {
+  white-space: nowrap;
+}
+
+.sw-top-nav-active {
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* Header primary CTA — "New Scene" in the top bar. */
+.sw-header-cta {
+  background: #19c2ad;
+  color: #08110f;
+  box-shadow: 0 2px 8px rgba(25, 194, 173, 0.28);
+}
+
+.sw-header-cta:hover {
+  background: #22d6bf;
+}
+
+/* Viewer scene actions — unified floating pill on the canvas. */
+.sw-scene-actions-pill {
+  gap: 2px;
+  padding: 4px 6px;
+  border-radius: 9999px;
+  background: rgba(8, 8, 10, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.sw-scene-actions-pill > .pointer-events-auto > button,
+.sw-scene-actions-pill > .pointer-events-auto.relative > button {
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.sw-scene-actions-pill > .pointer-events-auto > button:hover,
+.sw-scene-actions-pill > .pointer-events-auto.relative > button:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+.sw-scene-actions-pill > .pointer-events-auto:not(:last-child) {
+  position: relative;
+}
+
+.sw-scene-actions-pill > .pointer-events-auto:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  right: -2px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1px;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.12);
 }
 
 /* Viewer overlay panels — frosted dark glass floating above the canvas. */
