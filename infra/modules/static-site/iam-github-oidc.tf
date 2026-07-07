@@ -1012,6 +1012,8 @@ data "aws_iam_policy_document" "github_deploy_cdn_policy" {
 
   # ─── SES (transactional email — ses.tf) ────────────────────────────────────
 
+  # SES identity-management APIs (VerifyDomainIdentity, GetIdentityVerificationAttributes,
+  # etc.) do not support resource-level permissions — AWS requires Resource "*".
   statement {
     sid    = "SESDomainIdentityManage"
     effect = "Allow"
@@ -1024,9 +1026,7 @@ data "aws_iam_policy_document" "github_deploy_cdn_policy" {
       "ses:SetIdentityMailFromDomain",
       "ses:GetIdentityMailFromDomainAttributes",
     ]
-    resources = [
-      "arn:aws:ses:${var.aws_region}:886601940523:identity/${var.domain_name}",
-    ]
+    resources = ["*"]
   }
 
   # ─── Route 53 ──────────────────────────────────────────────────────────────
