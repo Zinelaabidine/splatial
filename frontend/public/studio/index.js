@@ -133511,39 +133511,10 @@ const handleSaveTarget = async (events, msg, origin) => {
         window.parent.postMessage({ type: 'save-error', message }, origin);
     }
 };
-const LOAD_SPLAT = 'load-splat';
-const isLoadSplatMessage = (data) => {
-    return (data &&
-        typeof data === 'object' &&
-        data.type === LOAD_SPLAT &&
-        typeof data.filename === 'string' &&
-        data.buffer instanceof ArrayBuffer);
-};
-const handleLoadSplat = async (events, msg, origin) => {
-    try {
-        await events.invoke('import', [{
-                filename: msg.filename,
-                contents: new Blob([msg.buffer])
-            }]);
-        window.parent.postMessage({ type: 'load-splat-complete' }, origin);
-    }
-    catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        window.parent.postMessage({ type: 'load-splat-error', message }, origin);
-    }
-};
 const registerIframeApi = (events) => {
     window.addEventListener('message', (event) => {
         const source = event.source;
         if (!source) {
-            return;
-        }
-        const parentOrigin = new URL(window.location.href).searchParams.get('parentOrigin');
-        if (isLoadSplatMessage(event.data)) {
-            if (!parentOrigin || event.origin !== parentOrigin) {
-                return;
-            }
-            void handleLoadSplat(events, event.data, parentOrigin);
             return;
         }
         if (isSceneDirtyQuery(event.data)) {
@@ -158324,10 +158295,6 @@ const main = async () => {
                     }]);
             }
         });
-    }
-    const parentOrigin = url.searchParams.get('parentOrigin');
-    if (parentOrigin && window.parent !== window) {
-        window.parent.postMessage({ type: 'studio-ready' }, parentOrigin);
     }
 };
 
