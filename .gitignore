@@ -53,6 +53,18 @@ frontend/redesign-preview.html
 .DS_Store
 **/.DS_Store
 .vscode/
+
+# ----------------------------------------------------------------------
+# graphify (generated knowledge graph — rebuild with: graphify . or graphify update .)
+# ----------------------------------------------------------------------
+graphify-out/
+
+# ----------------------------------------------------------------------
+# Claude Code — local machine config (not shared)
+# ----------------------------------------------------------------------
+.claude/settings.json
+.claude/scheduled_tasks.lock
+
 # ----------------------------------------------------------------------
 # Old application code (to be removed after migration)
 # ----------------------------------------------------------------------
