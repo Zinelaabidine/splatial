@@ -468,6 +468,8 @@ data "aws_iam_policy_document" "github_deploy_compute_policy" {
     resources = [
       "arn:aws:sqs:${var.aws_region}:886601940523:${local.name_prefix}-splat-processing-queue",
       "arn:aws:sqs:${var.aws_region}:886601940523:${local.name_prefix}-splat-processing-dlq",
+      "arn:aws:sqs:${var.aws_region}:886601940523:${local.name_prefix}-splat-processing-queue-priority",
+      "arn:aws:sqs:${var.aws_region}:886601940523:${local.name_prefix}-splat-processing-dlq-priority",
     ]
   }
 
@@ -522,6 +524,8 @@ data "aws_iam_policy_document" "github_deploy_compute_policy" {
         "arn:aws:ec2:${var.aws_region}:886601940523:instance/*",
         "arn:aws:ec2:${var.aws_region}:886601940523:launch-template/${aws_launch_template.worker.id}",
         "arn:aws:ec2:${var.aws_region}:886601940523:launch-template/${aws_launch_template.worker.id}/*",
+        "arn:aws:ec2:${var.aws_region}:886601940523:launch-template/${aws_launch_template.worker_priority.id}",
+        "arn:aws:ec2:${var.aws_region}:886601940523:launch-template/${aws_launch_template.worker_priority.id}/*",
         "arn:aws:ec2:${var.aws_region}:886601940523:security-group/${aws_security_group.worker.id}",
         "arn:aws:ec2:${var.aws_region}:886601940523:volume/*",
         "arn:aws:ec2:${var.aws_region}:886601940523:network-interface/*",
@@ -585,6 +589,7 @@ data "aws_iam_policy_document" "github_deploy_compute_policy" {
     ]
     resources = [
       "arn:aws:autoscaling:${var.aws_region}:886601940523:autoScalingGroup:*:autoScalingGroupName/${local.name_prefix}-splat-worker-asg",
+      "arn:aws:autoscaling:${var.aws_region}:886601940523:autoScalingGroup:*:autoScalingGroupName/${local.name_prefix}-splat-worker-priority-asg",
     ]
   }
 
@@ -753,6 +758,8 @@ data "aws_iam_policy_document" "github_deploy_network_policy" {
       "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-worker-amis",
       "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-presence-connections",
       "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-presence-connections/index/*",
+      "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-users",
+      "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-job-quota-events",
     ]
   }
 
@@ -890,6 +897,7 @@ data "aws_iam_policy_document" "github_deploy_network_policy" {
     ]
     resources = [
       "arn:aws:events:${var.aws_region}:886601940523:rule/${local.name_prefix}-asg-manual-mode-check",
+      "arn:aws:events:${var.aws_region}:886601940523:rule/${local.name_prefix}-retention-sweep",
     ]
   }
 }
@@ -1104,6 +1112,8 @@ data "aws_iam_policy_document" "github_deploy_cdn_policy" {
     resources = [
       "arn:aws:cloudwatch:${var.aws_region}:886601940523:alarm:${local.name_prefix}-sqs-scale-out",
       "arn:aws:cloudwatch:${var.aws_region}:886601940523:alarm:${local.name_prefix}-sqs-scale-in",
+      "arn:aws:cloudwatch:${var.aws_region}:886601940523:alarm:${local.name_prefix}-sqs-scale-out-priority",
+      "arn:aws:cloudwatch:${var.aws_region}:886601940523:alarm:${local.name_prefix}-sqs-scale-in-priority",
       "arn:aws:cloudwatch:${var.aws_region}:886601940523:alarm:TargetTracking-${local.name_prefix}-splat-worker-asg-*",
     ]
   }
