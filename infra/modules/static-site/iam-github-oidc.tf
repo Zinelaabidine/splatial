@@ -760,6 +760,8 @@ data "aws_iam_policy_document" "github_deploy_network_policy" {
       "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-presence-connections/index/*",
       "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-users",
       "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-job-quota-events",
+      "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-audit-logs",
+      "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-audit-logs/index/*",
     ]
   }
 
