@@ -11,11 +11,15 @@ const response = require("../lib/response");
 const {
   buildMinimalProfileItem,
   displayNameFromClaims,
+  emailFromClaims,
   normalizeUsername,
   profileResponseFromItem,
   validateBio,
+  validateDefaultVisibility,
   validateDisplayName,
+  validateNotifyEmailPatch,
   validateUsername,
+  NOTIFY_EMAIL_ATTR,
 } = require("../lib/profile");
 
 const dynamo = new DynamoDBClient({});
@@ -33,7 +37,12 @@ async function getOrCreateProfile(userId, claims) {
   if (existing.Item) return existing.Item;
 
   const now = new Date().toISOString();
-  const item = buildMinimalProfileItem(userId, displayNameFromClaims(claims), now);
+  const item = buildMinimalProfileItem(
+    userId,
+    displayNameFromClaims(claims),
+    now,
+    emailFromClaims(claims)
+  );
 
   try {
     await dynamo.send(
@@ -98,9 +107,14 @@ exports.handler = async (event) => {
   const hasUsername = body.username !== undefined;
   const hasDisplayName = body.displayName !== undefined;
   const hasBio = body.bio !== undefined;
+  const hasNotifyEmail = body.notifyEmail !== undefined;
+  const hasDefaultVisibility = body.defaultVisibility !== undefined;
 
-  if (!hasUsername && !hasDisplayName && !hasBio) {
-    return response(400, { error: "Provide at least one of: username, displayName, bio" });
+  if (!hasUsername && !hasDisplayName && !hasBio && !hasNotifyEmail && !hasDefaultVisibility) {
+    return response(400, {
+      error:
+        "Provide at least one of: username, displayName, bio, notifyEmail, defaultVisibility",
+    });
   }
 
   let normalizedUsername;
@@ -122,6 +136,20 @@ exports.handler = async (event) => {
     const check = validateBio(body.bio);
     if (!check.ok) return response(400, { error: check.error });
     bio = check.bio;
+  }
+
+  let notifyEmailPatch;
+  if (hasNotifyEmail) {
+    const check = validateNotifyEmailPatch(body.notifyEmail);
+    if (!check.ok) return response(400, { error: check.error });
+    notifyEmailPatch = check.patch;
+  }
+
+  let defaultVisibility;
+  if (hasDefaultVisibility) {
+    const check = validateDefaultVisibility(body.defaultVisibility);
+    if (!check.ok) return response(400, { error: check.error });
+    defaultVisibility = check.defaultVisibility;
   }
 
   const profile = await getOrCreateProfile(userId, claims);
@@ -155,6 +183,26 @@ exports.handler = async (event) => {
   if (hasBio) {
     exprParts.push("bio = :bio");
     exprValues[":bio"] = { S: bio };
+  }
+
+  if (notifyEmailPatch) {
+    for (const [key, value] of Object.entries(notifyEmailPatch)) {
+      const attr = NOTIFY_EMAIL_ATTR[key];
+      const valueKey = `:notify_${key}`;
+      exprParts.push(`${attr} = ${valueKey}`);
+      exprValues[valueKey] = { BOOL: value };
+    }
+  }
+
+  if (defaultVisibility) {
+    exprParts.push("default_visibility = :defaultVisibility");
+    exprValues[":defaultVisibility"] = { S: defaultVisibility };
+  }
+
+  const callerEmail = emailFromClaims(claims);
+  if (callerEmail && profile.email?.S !== callerEmail) {
+    exprParts.push("email = :email");
+    exprValues[":email"] = { S: callerEmail };
   }
 
   let updated;
@@ -196,6 +244,6 @@ exports.handler = async (event) => {
     ).catch(() => {});
   }
 
-  const responseBody = await profileResponseFromItem(updated);
+  const responseBody = await profileResponseFromItem(updated, true);
   return response(200, responseBody);
 };

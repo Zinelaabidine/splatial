@@ -50,7 +50,7 @@ const GRID_CLASS =
   "grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-5";
 
 export default function ScenesDashboardView() {
-  const { search } = usePageSearch("Search scenes");
+  const { search } = usePageSearch("Search");
   const {
     scenes,
     totalCount,

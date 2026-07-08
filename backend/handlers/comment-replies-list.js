@@ -76,6 +76,7 @@ exports.handler = async (event) => {
     parentCommentId,
     limit,
     exclusiveStartKey,
+    userId,
   });
 
   const nextCursor = encodeCursor(lastEvaluatedKey);

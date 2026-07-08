@@ -46,6 +46,8 @@ const commentsList = require("./handlers/comments-list");
 const commentDelete = require("./handlers/comment-delete");
 const commentReplyCreate = require("./handlers/comment-reply-create");
 const commentRepliesList = require("./handlers/comment-replies-list");
+const commentReactionSet = require("./handlers/comment-reaction-set");
+const commentReactionDelete = require("./handlers/comment-reaction-delete");
 const notificationsList = require("./handlers/notifications-list");
 const notificationsRead = require("./handlers/notifications-read");
 const notificationsUnreadCount = require("./handlers/notifications-unread-count");
@@ -149,6 +151,10 @@ exports.handler = async (event) => {
         return await commentReplyCreate.handler(event);
       case "GET /api/v1/scenes/{sceneId}/comments/{commentId}/replies":
         return await commentRepliesList.handler(event);
+      case "PUT /api/v1/scenes/{sceneId}/comments/{commentId}/reaction":
+        return await commentReactionSet.handler(event);
+      case "DELETE /api/v1/scenes/{sceneId}/comments/{commentId}/reaction":
+        return await commentReactionDelete.handler(event);
 
       // ── Notifications ────────────────────────────────────────────────
       case "GET /api/v1/notifications":

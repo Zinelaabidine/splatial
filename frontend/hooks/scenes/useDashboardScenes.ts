@@ -8,6 +8,7 @@ import {
   isActiveSceneStatus,
   POLL_INTERVAL_MS,
 } from "@/lib/scenes/sceneMappers";
+import { sceneEditUrl } from "@/lib/scenes/viewerUrls";
 import { cancelJob, submitJob } from "@/services/jobsService";
 import { deleteScene, listScenes } from "@/services/scenesService";
 import type { MockScene, SortOption } from "@/types/dashboard";
@@ -90,7 +91,7 @@ export function useDashboardScenes() {
   const handleEditScene = useCallback(
     (scene: MockScene) => {
       if (scene.sceneId) {
-        router.push(`/scenes/edit?id=${scene.sceneId}`);
+        router.push(sceneEditUrl(scene.sceneId));
       }
     },
     [router],

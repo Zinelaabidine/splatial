@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 
 import BookmarkButton from "@/components/viewer/BookmarkButton";
+import EditButton from "@/components/viewer/EditButton";
 import ForkCountBadge from "@/components/splatworks/ForkCountBadge";
 import ReactionBar from "@/components/viewer/ReactionBar";
 import RemixAttribution from "@/components/viewer/RemixAttribution";
@@ -94,20 +95,22 @@ export default function GaussianViewerView({
         <RemixSuccessBanner />
       </Suspense>
 
-      {/* Engagement actions — top-right, deliberately separate from the
-          Tours/Shots/Trajectory dock (bottom-center): "operate the scene"
-          and "engage with the scene" are different tasks. */}
-      <div className="pointer-events-none absolute right-4 top-4 z-[var(--z-canvas-overlay)] flex flex-wrap items-start justify-end gap-2">
-        {reactionSummary ? (
-          <ReactionBar key={sceneId} sceneId={sceneId} initialSummary={reactionSummary} />
-        ) : null}
-        <RemixButton sceneId={sceneId} sceneName={sceneName} />
-        <BookmarkButton
-          key={`${sceneId}-bookmark`}
-          sceneId={sceneId}
-          initialBookmarked={isBookmarked}
-        />
-        <ShareButton sceneId={sceneId} />
+      {/* Scene engagement — floating pill below the header, separate from the
+          bottom-center viewer dock (Home / Tours / Shots / Trajectory). */}
+      <div className="pointer-events-none absolute right-4 top-[4.25rem] z-[var(--z-canvas-overlay)]">
+        <div className="sw-scene-actions-pill pointer-events-auto flex items-center">
+          {isSceneOwner ? <EditButton sceneId={sceneId} /> : null}
+          {reactionSummary ? (
+            <ReactionBar key={sceneId} sceneId={sceneId} initialSummary={reactionSummary} />
+          ) : null}
+          <RemixButton sceneId={sceneId} sceneName={sceneName} />
+          <BookmarkButton
+            key={`${sceneId}-bookmark`}
+            sceneId={sceneId}
+            initialBookmarked={isBookmarked}
+          />
+          <ShareButton sceneId={sceneId} />
+        </div>
       </div>
 
       {(showAttribution || forksCount > 0) && (

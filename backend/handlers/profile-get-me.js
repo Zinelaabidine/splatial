@@ -4,11 +4,13 @@ const {
   DynamoDBClient,
   GetItemCommand,
   PutItemCommand,
+  UpdateItemCommand,
 } = require("@aws-sdk/client-dynamodb");
 const response = require("../lib/response");
 const {
   buildMinimalProfileItem,
   displayNameFromClaims,
+  emailFromClaims,
   profileResponseFromItem,
 } = require("../lib/profile");
 
@@ -32,14 +34,31 @@ exports.handler = async (event) => {
     })
   );
 
+  const email = emailFromClaims(claims);
+
   if (existing.Item) {
-    const body = await profileResponseFromItem(existing.Item);
+    // Keep the cached email fresh (used for outbound notification emails —
+    // see lib/email.js) without requiring a dedicated update endpoint.
+    if (email && existing.Item.email?.S !== email) {
+      await dynamo
+        .send(
+          new UpdateItemCommand({
+            TableName: PROFILES_TABLE,
+            Key: { user_id: { S: userId } },
+            UpdateExpression: "SET email = :email",
+            ExpressionAttributeValues: { ":email": { S: email } },
+          })
+        )
+        .catch(() => {});
+      existing.Item.email = { S: email };
+    }
+    const body = await profileResponseFromItem(existing.Item, true);
     return response(200, body);
   }
 
   const now = new Date().toISOString();
   const displayName = displayNameFromClaims(claims);
-  const item = buildMinimalProfileItem(userId, displayName, now);
+  const item = buildMinimalProfileItem(userId, displayName, now, email);
 
   try {
     await dynamo.send(
@@ -59,10 +78,10 @@ exports.handler = async (event) => {
       })
     );
     if (!raced.Item) throw err;
-    const body = await profileResponseFromItem(raced.Item);
+    const body = await profileResponseFromItem(raced.Item, true);
     return response(200, body);
   }
 
-  const body = await profileResponseFromItem(item);
+  const body = await profileResponseFromItem(item, true);
   return response(200, body);
 };

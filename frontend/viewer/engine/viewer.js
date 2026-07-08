@@ -2,6 +2,7 @@ import {
   applyViewMatrix,
   clearOverrideMatrix,
   disposeControls,
+  getViewerSplatBuffer,
   getViewMatrixSnapshot,
   isViewerStarted,
   resetView as resetViewState,
@@ -39,7 +40,7 @@ export function readViewMatrix() {
 }
 
 /** Jump the live camera to a saved view matrix (keeps user control afterward). */
-export { applyViewMatrix, isViewerStarted };
+export { applyViewMatrix, getViewerSplatBuffer, isViewerStarted };
 
 /** Snaps the live camera back to the scene's default view. See viewerState.resetView. */
 export function resetView() {

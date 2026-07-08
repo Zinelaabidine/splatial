@@ -17,6 +17,23 @@ import {
   isValidUsernameFormat,
   normalizeUsernameInput,
 } from "@/types/profile";
+import type { NotifyEmailPrefs } from "@/types/profile";
+
+const NOTIFY_EMAIL_LABELS: Record<keyof NotifyEmailPrefs, string> = {
+  follow: "Someone follows you",
+  reaction: "Someone reacts to your scene or comment",
+  comment: "Someone comments on your scene",
+  mention: "Someone mentions you in a comment",
+  jobStatus: "A training job finishes or fails",
+};
+
+const DEFAULT_NOTIFY_EMAIL: NotifyEmailPrefs = {
+  follow: true,
+  reaction: true,
+  comment: true,
+  mention: true,
+  jobStatus: true,
+};
 
 export default function ProfileSettingsPage() {
   const [loading, setLoading] = useState(true);
@@ -31,6 +48,14 @@ export default function ProfileSettingsPage() {
   const [bio, setBio] = useState("");
   const availability = useUsernameAvailability(username, profile?.username);
 
+  const [notifyEmail, setNotifyEmail] = useState<NotifyEmailPrefs>(DEFAULT_NOTIFY_EMAIL);
+  const [notifySaving, setNotifySaving] = useState<keyof NotifyEmailPrefs | null>(null);
+  const [notifyError, setNotifyError] = useState<string | null>(null);
+
+  const [defaultVisibility, setDefaultVisibility] = useState<"PUBLIC" | "PRIVATE">("PRIVATE");
+  const [visibilitySaving, setVisibilitySaving] = useState(false);
+  const [visibilityError, setVisibilityError] = useState<string | null>(null);
+
   useEffect(() => {
     let cancelled = false;
     const controller = new AbortController();
@@ -42,6 +67,8 @@ export default function ProfileSettingsPage() {
         setUsername(loaded.username ?? "");
         setDisplayName(loaded.displayName);
         setBio(loaded.bio);
+        if (loaded.notifyEmail) setNotifyEmail(loaded.notifyEmail);
+        if (loaded.defaultVisibility) setDefaultVisibility(loaded.defaultVisibility);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -119,6 +146,52 @@ export default function ProfileSettingsPage() {
       setSaving(false);
     }
   }, [availability, bio, displayName, profile, username]);
+
+  const handleNotifyEmailToggle = useCallback(
+    async (key: keyof NotifyEmailPrefs, value: boolean) => {
+      const previous = notifyEmail;
+      setNotifyEmail((prev) => ({ ...prev, [key]: value }));
+      setNotifySaving(key);
+      setNotifyError(null);
+      try {
+        const updated = await updateMyProfile({ notifyEmail: { [key]: value } });
+        if (updated.notifyEmail) setNotifyEmail(updated.notifyEmail);
+      } catch (err) {
+        setNotifyEmail(previous);
+        setNotifyError(
+          err instanceof ApiRequestError || err instanceof Error
+            ? err.message
+            : "Could not update notification preference.",
+        );
+      } finally {
+        setNotifySaving(null);
+      }
+    },
+    [notifyEmail],
+  );
+
+  const handleDefaultVisibilityChange = useCallback(
+    async (value: "PUBLIC" | "PRIVATE") => {
+      const previous = defaultVisibility;
+      setDefaultVisibility(value);
+      setVisibilitySaving(true);
+      setVisibilityError(null);
+      try {
+        const updated = await updateMyProfile({ defaultVisibility: value });
+        if (updated.defaultVisibility) setDefaultVisibility(updated.defaultVisibility);
+      } catch (err) {
+        setDefaultVisibility(previous);
+        setVisibilityError(
+          err instanceof ApiRequestError || err instanceof Error
+            ? err.message
+            : "Could not update default visibility.",
+        );
+      } finally {
+        setVisibilitySaving(false);
+      }
+    },
+    [defaultVisibility],
+  );
 
   if (loading) {
     return (
@@ -238,6 +311,70 @@ export default function ProfileSettingsPage() {
             )}
           </Button>
         </div>
+      </div>
+
+      <div className="mt-6 space-y-5 rounded-2xl border border-[#303030] bg-[#0f0f0f] p-6">
+        <div>
+          <h2 className="text-base font-semibold text-white">Email notifications</h2>
+          <p className="mt-1 text-xs text-[#909090]">
+            {profile?.email
+              ? `Sent to ${profile.email}.`
+              : "Sign in again to link an email address for notifications."}{" "}
+            All are on by default.
+          </p>
+        </div>
+        <div className="space-y-3">
+          {(Object.keys(NOTIFY_EMAIL_LABELS) as (keyof NotifyEmailPrefs)[]).map((key) => (
+            <label
+              key={key}
+              className="flex items-center justify-between gap-3 text-sm text-[#e8e8e8]"
+            >
+              <span>{NOTIFY_EMAIL_LABELS[key]}</span>
+              <input
+                type="checkbox"
+                checked={notifyEmail[key]}
+                disabled={notifySaving === key}
+                onChange={(e) => void handleNotifyEmailToggle(key, e.target.checked)}
+                aria-label={NOTIFY_EMAIL_LABELS[key]}
+                className="h-4 w-4 shrink-0 cursor-pointer rounded border border-[#404040] bg-[#1a1a1a] accent-[#3b82f6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3b82f6]/50 disabled:opacity-50"
+              />
+            </label>
+          ))}
+        </div>
+        {notifyError && <p className="text-sm text-red-400">{notifyError}</p>}
+      </div>
+
+      <div className="mt-6 space-y-4 rounded-2xl border border-[#303030] bg-[#0f0f0f] p-6">
+        <div>
+          <h2 className="text-base font-semibold text-white">Privacy</h2>
+          <p className="mt-1 text-xs text-[#909090]">
+            Default visibility applied to newly created scenes. You can still change it per scene.
+          </p>
+        </div>
+        <div className="flex gap-3">
+          {(["PRIVATE", "PUBLIC"] as const).map((option) => (
+            <label
+              key={option}
+              className={`flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${
+                defaultVisibility === option
+                  ? "border-[#3b82f6] bg-[#3b82f6]/10 text-white"
+                  : "border-[#404040] text-[#a0a0aa] hover:bg-[#1a1a1a]"
+              }`}
+            >
+              <input
+                type="radio"
+                name="default-visibility"
+                value={option}
+                checked={defaultVisibility === option}
+                disabled={visibilitySaving}
+                onChange={() => void handleDefaultVisibilityChange(option)}
+                className="sr-only"
+              />
+              {option === "PRIVATE" ? "Private" : "Public"}
+            </label>
+          ))}
+        </div>
+        {visibilityError && <p className="text-sm text-red-400">{visibilityError}</p>}
       </div>
     </div>
   );

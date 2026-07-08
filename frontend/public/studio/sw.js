@@ -1,4 +1,4 @@
-var version = "2.28.1";
+var version = "2.28.2";
 
 const cacheName = `superSplat-v${version}`;
 const cacheUrls = [
@@ -6,7 +6,6 @@ const cacheUrls = [
     './index.css',
     './index.html',
     './index.js',
-    './index.js.map',
     './manifest.json',
     './static/icons/logo-192.png',
     './static/icons/logo-512.png',
@@ -25,11 +24,11 @@ const cacheUrls = [
 ];
 self.addEventListener('install', (event) => {
     console.log(`installing v${version}`);
-    // create cache for current version
+    // Cache each asset independently — addAll fails the whole batch if one 404s.
     event.waitUntil(caches.open(cacheName)
-        .then((cache) => {
-        cache.addAll(cacheUrls);
-    }));
+        .then((cache) => Promise.allSettled(
+            cacheUrls.map((url) => cache.add(url)),
+        )));
 });
 self.addEventListener('activate', () => {
     console.log(`activating v${version}`);

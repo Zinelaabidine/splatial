@@ -2,6 +2,15 @@
  * User profile API contract (GET/PUT /api/v1/profile/me, etc.)
  */
 
+/** Per-notification-type "email me" toggle. Defaults to true for every type. */
+export type NotifyEmailPrefs = {
+  follow: boolean;
+  reaction: boolean;
+  comment: boolean;
+  mention: boolean;
+  jobStatus: boolean;
+};
+
 export type Profile = {
   userId: string;
   username: string | null;
@@ -16,6 +25,10 @@ export type Profile = {
   isFollowing?: boolean;
   /** True when the authenticated viewer is the profile owner. */
   isSelf?: boolean;
+  /** Self-only fields — present only on GET/PUT /api/v1/profile/me. */
+  email?: string | null;
+  notifyEmail?: NotifyEmailPrefs;
+  defaultVisibility?: "PUBLIC" | "PRIVATE";
 };
 
 export type FollowResponse = {
@@ -27,6 +40,8 @@ export type UpdateProfileRequest = {
   username?: string;
   displayName?: string;
   bio?: string;
+  notifyEmail?: Partial<NotifyEmailPrefs>;
+  defaultVisibility?: "PUBLIC" | "PRIVATE";
 };
 
 export type UpdateProfileResponse = Profile;

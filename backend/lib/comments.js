@@ -10,6 +10,10 @@ const {
 const { S3Client, GetObjectCommand } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { counterValue } = require("./profile");
+const {
+  reactionCountsFromCommentItem,
+  getUserReactionsForComments,
+} = require("./comment-reactions");
 
 const dynamo = new DynamoDBClient({});
 const s3 = new S3Client({});
@@ -71,7 +75,7 @@ async function presignedAuthorAvatarUrl(item) {
   );
 }
 
-async function commentResponseFromItem(item) {
+async function commentResponseFromItem(item, myReaction = null) {
   const authorAvatarUrl = await presignedAuthorAvatarUrl(item);
   return {
     commentId: item.comment_id?.S ?? "",
@@ -89,6 +93,13 @@ async function commentResponseFromItem(item) {
     // that makes listReplies() efficient.
     parentCommentId: item.parent_comment_id?.S ?? null,
     replyCount: Number(item.reply_count?.N ?? 0),
+    // Comment-level reactions (see lib/comment-reactions.js). Counters are
+    // denormalized onto the comment item; myReaction is looked up separately
+    // (batched across a page — see listComments/listReplies) since it's
+    // per-viewer, not per-comment.
+    reactionCounts: reactionCountsFromCommentItem(item),
+    reactionsTotal: Number(item.reactions_total?.N ?? 0),
+    myReaction,
   };
 }
 
@@ -233,6 +244,28 @@ async function createReply({ sceneId, parentCommentId, userId, authorProfile, bo
   return await commentResponseFromItem(item);
 }
 
+// Transact items: parent delete + scene counter update always consume 2 slots.
+// Cap cascaded reply deletes well under the 100-item TransactWriteItems limit
+// so we never have to split the cascade across multiple (non-atomic) requests.
+const MAX_CASCADE_REPLIES = 90;
+
+/** Fetch every reply of a top-level comment, paginating past the default page size. */
+async function getAllReplyIds(sceneId, parentCommentId) {
+  const ids = [];
+  let exclusiveStartKey;
+  do {
+    const page = await listReplies({
+      sceneId,
+      parentCommentId,
+      limit: MAX_CASCADE_REPLIES + 1,
+      exclusiveStartKey,
+    });
+    ids.push(...page.replies.map((r) => r.commentId));
+    exclusiveStartKey = page.lastEvaluatedKey;
+  } while (exclusiveStartKey && ids.length <= MAX_CASCADE_REPLIES);
+  return ids;
+}
+
 async function deleteComment({ sceneId, commentId, scene, callerId }) {
   const comment = await getComment(sceneId, commentId);
   if (!comment) {
@@ -255,16 +288,22 @@ async function deleteComment({ sceneId, commentId, scene, callerId }) {
   const parentCommentId = comment.parent_comment_id?.S ?? null;
   const replyCount = Number(comment.reply_count?.N ?? 0);
 
-  // Deleting a top-level comment with existing replies would orphan them
-  // (DynamoDB has no cascade delete). Block it rather than silently leaving
-  // dangling replies or scanning-and-batch-deleting on every request.
+  // Deleting a top-level comment cascades: its replies go with it. Replies
+  // are one level deep (see createReply), so this is always a flat fan-out —
+  // never a recursive tree walk.
+  let replyIdsToDelete = [];
   if (!parentCommentId && replyCount > 0) {
-    const err = new Error(
-      "Cannot delete a comment that has replies. Delete the replies first."
-    );
-    err.statusCode = 409;
-    throw err;
+    replyIdsToDelete = await getAllReplyIds(sceneId, commentId);
+    if (replyIdsToDelete.length > MAX_CASCADE_REPLIES) {
+      const err = new Error(
+        `Cannot delete a comment with more than ${MAX_CASCADE_REPLIES} replies in one request. Delete some replies first.`
+      );
+      err.statusCode = 409;
+      throw err;
+    }
   }
+
+  const totalDeleted = 1 + replyIdsToDelete.length;
 
   const transactItems = [
     {
@@ -282,15 +321,24 @@ async function deleteComment({ sceneId, commentId, scene, callerId }) {
         TableName: SCENES_TABLE,
         Key: { scene_id: { S: sceneId } },
         UpdateExpression:
-          "SET comments_count = if_not_exists(comments_count, :zero) + :minusOne",
-        ConditionExpression: "if_not_exists(comments_count, :zero) >= :one",
+          "SET comments_count = if_not_exists(comments_count, :zero) + :minusN",
+        ConditionExpression: "if_not_exists(comments_count, :zero) >= :n",
         ExpressionAttributeValues: {
           ":zero": { N: "0" },
-          ":one": { N: "1" },
-          ":minusOne": { N: "-1" },
+          ":n": { N: String(totalDeleted) },
+          ":minusN": { N: String(-totalDeleted) },
         },
       },
     },
+    ...replyIdsToDelete.map((replyId) => ({
+      Delete: {
+        TableName: COMMENTS_TABLE,
+        Key: {
+          scene_id: { S: sceneId },
+          comment_id: { S: replyId },
+        },
+      },
+    })),
   ];
 
   if (parentCommentId) {
@@ -334,10 +382,11 @@ async function deleteComment({ sceneId, commentId, scene, callerId }) {
   return {
     ok: true,
     commentsCount: counterValue(sceneResult.Item, "comments_count"),
+    deletedReplyCount: replyIdsToDelete.length,
   };
 }
 
-async function listComments({ sceneId, limit, exclusiveStartKey }) {
+async function listComments({ sceneId, limit, exclusiveStartKey, userId }) {
   const result = await dynamo.send(
     new QueryCommand({
       TableName: COMMENTS_TABLE,
@@ -355,8 +404,18 @@ async function listComments({ sceneId, limit, exclusiveStartKey }) {
     })
   );
 
+  const items = result.Items ?? [];
+  const myReactions = userId
+    ? await getUserReactionsForComments(
+        items.map((item) => item.comment_id?.S ?? ""),
+        userId
+      )
+    : {};
+
   const comments = await Promise.all(
-    (result.Items ?? []).map((item) => commentResponseFromItem(item))
+    items.map((item) =>
+      commentResponseFromItem(item, myReactions[item.comment_id?.S] ?? null)
+    )
   );
 
   return {
@@ -365,7 +424,7 @@ async function listComments({ sceneId, limit, exclusiveStartKey }) {
   };
 }
 
-async function listReplies({ sceneId, parentCommentId, limit, exclusiveStartKey }) {
+async function listReplies({ sceneId, parentCommentId, limit, exclusiveStartKey, userId }) {
   const result = await dynamo.send(
     new QueryCommand({
       TableName: COMMENTS_TABLE,
@@ -380,10 +439,18 @@ async function listReplies({ sceneId, parentCommentId, limit, exclusiveStartKey 
     })
   );
 
+  const items = (result.Items ?? []).filter((item) => item.scene_id?.S === sceneId);
+  const myReactions = userId
+    ? await getUserReactionsForComments(
+        items.map((item) => item.comment_id?.S ?? ""),
+        userId
+      )
+    : {};
+
   const replies = await Promise.all(
-    (result.Items ?? [])
-      .filter((item) => item.scene_id?.S === sceneId)
-      .map((item) => commentResponseFromItem(item))
+    items.map((item) =>
+      commentResponseFromItem(item, myReactions[item.comment_id?.S] ?? null)
+    )
   );
 
   return {

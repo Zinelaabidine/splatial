@@ -34,3 +34,8 @@ export function sceneViewerUrl(
 
   return `/scenes/view?${params.toString()}`;
 }
+
+/** Build `/scenes/edit` URL for the splat geometry editor. */
+export function sceneEditUrl(sceneId: string): string {
+  return `/scenes/edit?id=${encodeURIComponent(sceneId)}`;
+}
