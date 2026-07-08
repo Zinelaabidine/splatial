@@ -4,6 +4,7 @@ const { DynamoDBClient, PutItemCommand } = require("@aws-sdk/client-dynamodb");
 const { LambdaClient, InvokeCommand }    = require("@aws-sdk/client-lambda");
 const { randomUUID }                     = require("crypto");
 const response                           = require("../lib/response");
+const { getUserStatus, blockReasonForNewWork } = require("../lib/account-status");
 
 const dynamo = new DynamoDBClient({});
 const lambda = new LambdaClient({});
@@ -43,6 +44,12 @@ exports.handler = async (event) => {
   const claims = event.requestContext?.authorizer?.jwt?.claims;
   const userId = claims?.sub;
   if (!userId) return response(401, { error: "Unauthorized: missing user identity" });
+
+  const accountStatus = await getUserStatus(dynamo, userId);
+  const blockReason = blockReasonForNewWork(accountStatus);
+  if (blockReason) {
+    return response(403, { error: blockReason, accountStatus });
+  }
 
   let body;
   try {

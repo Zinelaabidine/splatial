@@ -5,17 +5,21 @@ import { useState } from "react";
 import AdminAttemptsView from "@/components/admin/AdminAttemptsView";
 import AdminAsgConfigView from "@/components/admin/AdminAsgConfigView";
 import WorkerAmiPanel from "@/components/admin/WorkerAmiPanel";
+import AdminUsersView from "@/components/admin/AdminUsersView";
+import AdminAuditLogView from "@/components/admin/AdminAuditLogView";
 
 const TABS = [
+  { id: "users", label: "Users" },
   { id: "attempts", label: "Attempts" },
   { id: "asg", label: "ASG config" },
   { id: "worker-amis", label: "Worker AMIs" },
+  { id: "audit-log", label: "Audit log" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
 
 export default function AdminShell() {
-  const [tab, setTab] = useState<TabId>("attempts");
+  const [tab, setTab] = useState<TabId>("users");
 
   return (
     <div>
@@ -36,9 +40,11 @@ export default function AdminShell() {
         ))}
       </div>
 
+      {tab === "users" && <AdminUsersView />}
       {tab === "attempts" && <AdminAttemptsView />}
       {tab === "asg" && <AdminAsgConfigView />}
       {tab === "worker-amis" && <WorkerAmiPanel />}
+      {tab === "audit-log" && <AdminAuditLogView />}
     </div>
   );
 }

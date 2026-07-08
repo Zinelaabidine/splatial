@@ -196,6 +196,8 @@ resource "aws_lambda_function" "upload_lambda" {
       TOURS_TABLE_NAME                   = aws_dynamodb_table.tours.name
       USERS_TABLE_NAME                   = aws_dynamodb_table.users.name
       JOB_QUOTA_EVENTS_TABLE_NAME        = aws_dynamodb_table.job_quota_events.name
+      AUDIT_LOGS_TABLE_NAME              = aws_dynamodb_table.audit_logs.name
+      COGNITO_USER_POOL_ID               = aws_cognito_user_pool.this.id
       SQS_QUEUE_URL                      = aws_sqs_queue.processing_queue.url
       SQS_QUEUE_URL_PRIORITY             = aws_sqs_queue.processing_queue_priority.url
       API_BASE_URL                       = "https://api-${var.environment}.openspacenexus.store"
