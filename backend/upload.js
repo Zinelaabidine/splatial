@@ -34,6 +34,17 @@ const adminWorkerAmisList = require("./handlers/admin-worker-amis-list");
 const adminWorkerAmiRegister = require("./handlers/admin-worker-ami-register");
 const adminWorkerAmiBoot = require("./handlers/admin-worker-ami-boot");
 const adminWorkerAmiActivate = require("./handlers/admin-worker-ami-activate");
+const adminUsersList = require("./handlers/admin-users-list");
+const adminUsersGet = require("./handlers/admin-users-get");
+const adminUsersStatus = require("./handlers/admin-users-status");
+const adminUsersVerifyOverride = require("./handlers/admin-users-verify-override");
+const adminUsersResetPassword = require("./handlers/admin-users-reset-password");
+const adminUsersRevokeSessions = require("./handlers/admin-users-revoke-sessions");
+const adminUsersSoftDelete = require("./handlers/admin-users-soft-delete");
+const adminUsersHardDelete = require("./handlers/admin-users-hard-delete");
+const adminUsersRoles = require("./handlers/admin-users-roles");
+const adminUsersPlan = require("./handlers/admin-users-plan");
+const adminAuditLogsList = require("./handlers/admin-audit-logs-list");
 const profileGetMe = require("./handlers/profile-get-me");
 const profileUpdateMe = require("./handlers/profile-update-me");
 const profileGetByUsername = require("./handlers/profile-get-by-username");
@@ -225,6 +236,30 @@ exports.handler = async (event) => {
         return await adminWorkerAmiBoot.handler(event);
       case "POST /admin/worker-amis/{amiId}/activate":
         return await adminWorkerAmiActivate.handler(event);
+
+      // ── Admin: user management (RBAC-gated inside each handler) ──────────
+      case "GET /admin/users":
+        return await adminUsersList.handler(event);
+      case "GET /admin/users/{userId}":
+        return await adminUsersGet.handler(event);
+      case "POST /admin/users/{userId}/status":
+        return await adminUsersStatus.handler(event);
+      case "POST /admin/users/{userId}/verify-override":
+        return await adminUsersVerifyOverride.handler(event);
+      case "POST /admin/users/{userId}/reset-password":
+        return await adminUsersResetPassword.handler(event);
+      case "POST /admin/users/{userId}/revoke-sessions":
+        return await adminUsersRevokeSessions.handler(event);
+      case "POST /admin/users/{userId}/soft-delete":
+        return await adminUsersSoftDelete.handler(event);
+      case "POST /admin/users/{userId}/hard-delete":
+        return await adminUsersHardDelete.handler(event);
+      case "POST /admin/users/{userId}/roles":
+        return await adminUsersRoles.handler(event);
+      case "POST /admin/users/{userId}/plan":
+        return await adminUsersPlan.handler(event);
+      case "GET /admin/audit-logs":
+        return await adminAuditLogsList.handler(event);
 
       // ── Internal (EventBridge-invoked only — not an API Gateway route) ────
       case "INTERNAL /asg/check-manual-mode":

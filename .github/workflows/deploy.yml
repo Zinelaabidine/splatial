@@ -92,6 +92,12 @@ jobs:
             infra="${{ steps.filter.outputs.infra }}"
             infra_tf="${{ steps.filter.outputs.infra_tf }}"
           fi
+          # Infra-only pushes still need app artifacts deployed — path filters
+          # skip frontend/ and backend/ on HCL-only commits.
+          if [ "$infra" = "true" ]; then
+            frontend="true"
+            backend="true"
+          fi
           {
             echo "frontend=$frontend"
             echo "backend=$backend"

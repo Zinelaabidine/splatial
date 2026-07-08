@@ -6,6 +6,7 @@ const { randomUUID } = require("crypto");
 const response = require("../lib/response");
 const { getUserTier } = require("../lib/user-tier");
 const { getStorageCapBytes, getStorageUsedBytes } = require("../lib/storage-quota");
+const { getUserStatus, blockReasonForNewWork } = require("../lib/account-status");
 
 const s3 = new S3Client({});
 const dynamo = new DynamoDBClient({});
@@ -36,6 +37,14 @@ exports.handler = async (event) => {
   const claims = event.requestContext?.authorizer?.jwt?.claims;
   const userId = claims?.sub;
   if (!userId) return response(401, { error: "Unauthorized: missing user identity" });
+
+  // Account-standing gate: suspended/banned/deleted accounts cannot start a
+  // new upload (which would eventually feed a new processing job).
+  const accountStatus = await getUserStatus(dynamo, userId);
+  const blockReason = blockReasonForNewWork(accountStatus);
+  if (blockReason) {
+    return response(403, { error: blockReason, accountStatus });
+  }
 
   let body;
   try {

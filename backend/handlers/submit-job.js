@@ -10,6 +10,7 @@ const { validateTrainConfig, validateColmapConfig } = require("../lib/job-config
 const { getUserTier, TIER_LIMITS } = require("../lib/user-tier");
 const { getRollingWindowCount, recordQuotaEvent } = require("../lib/quota");
 const { getPoolForTier, getPoolConfig } = require("../lib/worker-pool");
+const { getUserStatus, blockReasonForNewWork } = require("../lib/account-status");
 
 const sqs   = new SQSClient({});
 const dynamo = new DynamoDBClient({});
@@ -42,6 +43,17 @@ exports.handler = async (event) => {
   const claims = event.requestContext?.authorizer?.jwt?.claims;
   const userId = claims?.sub;
   if (!userId) return response(401, { error: "Unauthorized: missing user identity" });
+
+  // Account-standing gate: suspended/banned/deleted accounts can never
+  // enqueue a NEW job. Already-running/queued jobs are untouched here — see
+  // admin-users-status.js for what happens to in-flight work when an admin
+  // changes a user's status.
+  const accountStatus = await getUserStatus(dynamo, userId);
+  const blockReason = blockReasonForNewWork(accountStatus);
+  if (blockReason) {
+    log.event("job.submit.blocked", { data: { account_status: accountStatus } });
+    return response(403, { error: blockReason, accountStatus });
+  }
 
   const tier = await getUserTier(dynamo, userId);
   const quotaLimit = TIER_LIMITS[tier];
