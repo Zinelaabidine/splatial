@@ -7,12 +7,14 @@ const { randomUUID } = require("crypto");
 const response = require("../lib/response");
 const logger = require("../lib/logger");
 const { validateTrainConfig, validateColmapConfig } = require("../lib/job-config");
+const { getUserTier, TIER_LIMITS } = require("../lib/user-tier");
+const { getRollingWindowCount, recordQuotaEvent } = require("../lib/quota");
+const { getPoolForTier, getPoolConfig } = require("../lib/worker-pool");
 
 const sqs   = new SQSClient({});
 const dynamo = new DynamoDBClient({});
 const s3    = new S3Client({});
 
-const QUEUE_URL      = process.env.SQS_QUEUE_URL;
 const TABLE          = process.env.SCENES_TABLE_NAME;
 const INPUT_BUCKET   = process.env.RAW_SCENES_BUCKET_NAME;
 const OUTPUT_BUCKET  = process.env.SPLAT_SCENES_BUCKET_NAME;
@@ -40,6 +42,31 @@ exports.handler = async (event) => {
   const claims = event.requestContext?.authorizer?.jwt?.claims;
   const userId = claims?.sub;
   if (!userId) return response(401, { error: "Unauthorized: missing user identity" });
+
+  const tier = await getUserTier(dynamo, userId);
+  const quotaLimit = TIER_LIMITS[tier];
+
+  // Route by tier to a dedicated queue + ASG (see lib/worker-pool.js) rather
+  // than reordering a shared queue — paid-tier jobs are never queued behind
+  // free-tier jobs in the first place, and the pool's ASG decides Spot vs
+  // On-Demand fleet-wide, not this handler.
+  const pool = getPoolForTier(tier);
+  const { queueUrl: QUEUE_URL } = getPoolConfig(pool);
+
+  if (quotaLimit !== null) {
+    const usedInWindow = await getRollingWindowCount(dynamo, userId, 7);
+    if (usedInWindow >= quotaLimit) {
+      log.event("quota.exceeded", {
+        data: { tier, limit: quotaLimit, used: usedInWindow, window_days: 7 },
+      });
+      return response(429, {
+        error: "Weekly training quota exceeded",
+        tier,
+        limit: quotaLimit,
+        windowDays: 7,
+      });
+    }
+  }
 
   let body;
   try {
@@ -74,6 +101,13 @@ exports.handler = async (event) => {
   if (!SUBMITTABLE.has(currentStatus)) {
     return response(409, { error: `Scene is in ${currentStatus} state and cannot be submitted` });
   }
+
+  // Resubmitting a scene that already has a prior attempt (FAILED or READY)
+  // is a manual retry and charges the quota immediately below, regardless of
+  // this attempt's eventual outcome. A first-ever submission (UPLOADED)
+  // charges nothing here — it's only charged later, in attempt-patch.js, if
+  // and when it succeeds.
+  const isManualRetry = currentStatus !== "UPLOADED";
 
   const s3Key = Item.s3_key?.S;
   if (!s3Key) return response(422, { error: "No file attached to this scene. Upload a file before submitting." });
@@ -146,6 +180,12 @@ exports.handler = async (event) => {
         // trivial to display as-is and to diff between attempts/reruns.
         train_config:    { S: JSON.stringify(resolvedTrainConfig) },
         colmap_config:   { S: JSON.stringify(resolvedColmapConfig) },
+        // Snapshot at submit time so attempt-patch.js can charge/skip the
+        // completion-quota event without a second tier lookup, and so the
+        // charge reflects the tier the user was on when the job actually
+        // ran (not whatever it is by the time it completes).
+        tier:            { S: tier },
+        is_manual_retry: { BOOL: isManualRetry },
       },
     })
   );
@@ -182,7 +222,21 @@ exports.handler = async (event) => {
     })
   );
 
-  log.event("job.queued", { attemptId, data: { queue: QUEUE_URL } });
+  log.event("job.queued", { attemptId, data: { queue: QUEUE_URL, pool } });
+
+  if (quotaLimit !== null && isManualRetry) {
+    await recordQuotaEvent(dynamo, userId, {
+      eventType: "MANUAL_RETRY",
+      attemptId,
+      sceneId,
+    });
+    log.event("quota.charged", {
+      sceneId,
+      attemptId,
+      data: { tier, event_type: "MANUAL_RETRY" },
+    });
+  }
+
   log.event("job.submitted", {
     sceneId,
     attemptId,

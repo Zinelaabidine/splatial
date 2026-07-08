@@ -6,6 +6,7 @@ import type {
   EditPresignResponse,
   ListScenesV1Response,
   Scene,
+  SceneDownloadResponse,
   SceneStatusResponse,
   ThumbnailPresignResponse,
   UpdateSceneRequest,
@@ -55,6 +56,24 @@ export async function getSceneViewUrl(
   return authenticatedFetch(`/api/v1/scenes/${sceneId}/view-url`, {
     signal,
   }) as Promise<ViewUrlResponse>;
+}
+
+export async function getSceneDownloadRaw(
+  sceneId: string,
+  signal?: AbortSignal,
+): Promise<SceneDownloadResponse> {
+  return authenticatedFetch(`/api/v1/scenes/${sceneId}/download/raw`, {
+    signal,
+  }) as Promise<SceneDownloadResponse>;
+}
+
+export async function getSceneDownloadOutput(
+  sceneId: string,
+  signal?: AbortSignal,
+): Promise<SceneDownloadResponse> {
+  return authenticatedFetch(`/api/v1/scenes/${sceneId}/download/output`, {
+    signal,
+  }) as Promise<SceneDownloadResponse>;
 }
 
 export async function updateScene(

@@ -9,10 +9,9 @@ const {
 } = require("@aws-sdk/client-auto-scaling");
 const response = require("../lib/response");
 const { isAdmin, getClaims } = require("../lib/admin-auth");
+const { resolvePool, getPoolConfig } = require("../lib/worker-pool");
 
 const autoscaling = new AutoScalingClient({});
-
-const ASG_NAME = process.env.WORKER_ASG_NAME;
 
 /**
  * POST /admin/asg/boot
@@ -34,15 +33,12 @@ const ASG_NAME = process.env.WORKER_ASG_NAME;
  * incoming jobs will queue but NOT trigger a worker launch until an admin
  * calls POST /admin/asg/release. The frontend must surface this clearly.
  *
- * Body: { count?: number (default 1), reason?: string }
- * Success (200): { desiredCapacity, manualModeActive: true }
+ * Body: { pool?: "standard" | "priority" (default "standard"), count?: number (default 1), reason?: string }
+ * Success (200): { pool, desiredCapacity, manualModeActive: true }
  */
 exports.handler = async (event) => {
   if (!isAdmin(event)) {
     return response(403, { error: "Forbidden: admin role required" });
-  }
-  if (!ASG_NAME) {
-    return response(500, { error: "ASG not configured (WORKER_ASG_NAME missing)" });
   }
 
   let body;
@@ -50,6 +46,12 @@ exports.handler = async (event) => {
     body = JSON.parse(event.body || "{}");
   } catch {
     return response(400, { error: "Malformed JSON body" });
+  }
+
+  const pool = resolvePool(body.pool);
+  const { asgName: ASG_NAME } = getPoolConfig(pool);
+  if (!ASG_NAME) {
+    return response(500, { error: `ASG not configured for pool "${pool}"` });
   }
 
   const count = body.count === undefined ? 1 : Number(body.count);
@@ -108,10 +110,11 @@ exports.handler = async (event) => {
   const actorSub = getClaims(event)?.sub ?? "unknown";
   console.log("admin-asg-boot: manual boot requested", {
     actorSub,
+    pool,
     asgName: ASG_NAME,
     count,
     reason,
   });
 
-  return response(200, { desiredCapacity: count, manualModeActive: true });
+  return response(200, { pool, desiredCapacity: count, manualModeActive: true });
 };

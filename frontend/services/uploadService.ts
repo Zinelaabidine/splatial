@@ -58,9 +58,10 @@ export async function multipartUpload(
 
   onProgress?.("initializing");
 
-  const initBody: Record<string, string> = {
+  const initBody: Record<string, string | number> = {
     filename: file.name,
     contentType,
+    declaredSizeBytes: file.size,
   };
   if (name !== undefined) initBody.name = name;
   if (inputType !== undefined) initBody.inputType = inputType;

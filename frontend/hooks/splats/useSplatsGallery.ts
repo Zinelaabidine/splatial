@@ -4,9 +4,26 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { useAppAccount } from "@/hooks/layout/useAppAccount";
+import { ApiRequestError } from "@/lib/api/apiErrors";
 import { apiSceneToSplat } from "@/lib/splatworks/splatMappers";
-import { deleteScene, listScenes } from "@/services/scenesService";
+import {
+  deleteScene,
+  getSceneDownloadOutput,
+  getSceneDownloadRaw,
+  listScenes,
+} from "@/services/scenesService";
+import type { SceneDownloadResponse } from "@/types/api";
 import type { Splat, SplatsSortOption, SplatsViewMode } from "@/types/splatworks";
+
+/** Saves a presigned download URL to disk via a throwaway <a download>. */
+function triggerBrowserDownload(url: string, filename: string) {
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
 
 const SORT_OPTIONS: SplatsSortOption[] = ["newest", "oldest", "name"];
 
@@ -39,6 +56,7 @@ export function useSplatsGallery(search: string) {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   const fetchSplats = useCallback(async () => {
     setLoading(true);
@@ -90,9 +108,43 @@ export function useSplatsGallery(search: string) {
     [open3D],
   );
 
-  const download = useCallback((_splat: Splat, _format: "ply" | "splat") => {
-    // TODO: presigned download URLs from API
-  }, []);
+  const runDownload = useCallback(
+    async (
+      splat: Splat,
+      fetchDownload: (sceneId: string, signal?: AbortSignal) => Promise<SceneDownloadResponse>,
+    ) => {
+      const sceneId = splat.sceneId ?? splat.id;
+      setDownloadError(null);
+      try {
+        const { url, filename } = await fetchDownload(sceneId);
+        triggerBrowserDownload(url, filename);
+      } catch (err) {
+        if (err instanceof ApiRequestError && err.statusCode === 403) {
+          setDownloadError(
+            "Downloading requires a Pro plan. Upgrade to export your raw and output files.",
+          );
+        } else {
+          console.error("[useSplatsGallery] download failed", err);
+          setDownloadError("Failed to download. Please try again.");
+        }
+      }
+    },
+    [],
+  );
+
+  const download = useCallback(
+    (splat: Splat) => {
+      void runDownload(splat, getSceneDownloadOutput);
+    },
+    [runDownload],
+  );
+
+  const downloadRaw = useCallback(
+    (splat: Splat) => {
+      void runDownload(splat, getSceneDownloadRaw);
+    },
+    [runDownload],
+  );
 
   const share = useCallback((splat: Splat) => {
     const sceneId = splat.sceneId ?? splat.id;
@@ -161,11 +213,14 @@ export function useSplatsGallery(search: string) {
     deleteError,
     actionMessage,
     clearActionMessage: () => setActionMessage(null),
+    downloadError,
+    clearDownloadError: () => setDownloadError(null),
     fetchSplats,
     open3D,
     startTour,
     openDetail,
     download,
+    downloadRaw,
     share,
     rename,
     remove: handleDeleteRequest,

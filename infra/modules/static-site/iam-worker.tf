@@ -53,6 +53,8 @@ resource "aws_iam_role_policy" "worker_policy" {
         Resource = [
           aws_sqs_queue.processing_queue.arn,
           aws_sqs_queue.processing_dlq.arn,
+          aws_sqs_queue.processing_queue_priority.arn,
+          aws_sqs_queue.processing_dlq_priority.arn,
         ]
       },
       {
@@ -81,13 +83,19 @@ resource "aws_iam_role_policy" "worker_policy" {
       },
       {
         # Worker self-terminates via ASG API to enable scale-to-zero.
-        # Scoped to the worker ASG by name.
+        # Scoped to the worker ASGs by name — both pools share this instance
+        # role, so both ASG name patterns must be listed or priority-pool
+        # workers can launch but never self-terminate (scale-to-zero breaks
+        # silently for that pool only).
         Sid    = "ASGSelfTerminate"
         Effect = "Allow"
         Action = [
           "autoscaling:TerminateInstanceInAutoScalingGroup",
         ]
-        Resource = "arn:aws:autoscaling:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:autoScalingGroup:*:autoScalingGroupName/${local.name_prefix}-splat-worker-asg"
+        Resource = [
+          "arn:aws:autoscaling:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:autoScalingGroup:*:autoScalingGroupName/${local.name_prefix}-splat-worker-asg",
+          "arn:aws:autoscaling:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:autoScalingGroup:*:autoScalingGroupName/${local.name_prefix}-splat-worker-priority-asg",
+        ]
       },
       {
         # Required to look up the ASG name from the instance's metadata.
@@ -125,14 +133,19 @@ resource "aws_iam_role_policy" "worker_policy" {
         }
       },
       {
-        # Backward-compatible path for instances launched with the worker Name tag only.
+        # Backward-compatible path for instances launched with the worker Name
+        # tag only. Lists both pools' Name tag values (StringEquals accepts a
+        # list — matches any) since both use this same instance role.
         Sid      = "EC2SelfTerminateByName"
         Effect   = "Allow"
         Action   = ["ec2:TerminateInstances"]
         Resource = "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:instance/*"
         Condition = {
           StringEquals = {
-            "ec2:ResourceTag/Name" = "${local.name_prefix}-splat-worker"
+            "ec2:ResourceTag/Name" = [
+              "${local.name_prefix}-splat-worker",
+              "${local.name_prefix}-splat-worker-priority",
+            ]
           }
         }
       },
@@ -162,10 +175,13 @@ resource "aws_iam_role_policy" "upload_lambda_sqs" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Sid      = "SQSSubmitJob"
-      Effect   = "Allow"
-      Action   = ["sqs:SendMessage"]
-      Resource = aws_sqs_queue.processing_queue.arn
+      Sid    = "SQSSubmitJob"
+      Effect = "Allow"
+      Action = ["sqs:SendMessage"]
+      Resource = [
+        aws_sqs_queue.processing_queue.arn,
+        aws_sqs_queue.processing_queue_priority.arn,
+      ]
     }]
   })
 }

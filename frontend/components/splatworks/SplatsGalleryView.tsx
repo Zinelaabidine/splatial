@@ -34,11 +34,14 @@ export default function SplatsGalleryView() {
     deleteError,
     actionMessage,
     clearActionMessage,
+    downloadError,
+    clearDownloadError,
     fetchSplats,
     open3D,
     startTour,
     openDetail,
     download,
+    downloadRaw,
     share,
     rename,
     remove,
@@ -119,6 +122,19 @@ export default function SplatsGalleryView() {
         </div>
       ) : null}
 
+      {downloadError ? (
+        <div className="mb-4 rounded-xl border border-amber-900/50 bg-amber-950/40 px-5 py-4 text-sm text-amber-200">
+          {downloadError}{" "}
+          <button
+            type="button"
+            onClick={clearDownloadError}
+            className="font-medium underline underline-offset-2 hover:text-amber-100"
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
+
       {error ? (
         <div className="rounded-xl border border-red-900/50 bg-red-950/40 px-5 py-4 text-sm text-red-300">
           {error}{" "}
@@ -151,6 +167,7 @@ export default function SplatsGalleryView() {
               onTour={startTour}
               onCardClick={openDetail}
               onDownload={download}
+              onDownloadRaw={downloadRaw}
               onShare={share}
               onRename={rename}
               onDelete={remove}

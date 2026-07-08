@@ -2,13 +2,85 @@
 
 import Link from "next/link";
 import { useAuthenticator } from "@aws-amplify/ui-react";
-import type { ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Bell, ChevronRight, CreditCard, LogOut, UserCog } from "lucide-react";
 
 import { UserAvatar } from "@/components/splatworks/SplatworksLogo";
 import { useAppAccount } from "@/hooks/layout/useAppAccount";
 import { useDismissablePopover } from "@/hooks/layout/useDismissablePopover";
+import { ApiRequestError } from "@/lib/api/apiErrors";
 import { cn } from "@/lib/utils";
+import { getAccountUsage } from "@/services/accountService";
+import type { AccountUsageResponse } from "@/types/api";
+
+function formatGB(bytes: number): string {
+  const gb = bytes / (1024 * 1024 * 1024);
+  return `${gb >= 10 ? gb.toFixed(0) : gb.toFixed(1)} GB`;
+}
+
+// Compact "X GB of Y GB used" row with a slim progress bar. Fetched lazily
+// each time the menu opens — usage changes slowly enough that a stale
+// value between opens is a non-issue, and this avoids a background
+// subscription for a rarely-viewed number.
+function StorageUsageRow({ open }: { open: boolean }) {
+  const [usage, setUsage] = useState<AccountUsageResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const load = useCallback(async () => {
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+    setError(null);
+    try {
+      const res = await getAccountUsage(ctrl.signal);
+      if (ctrl.signal.aborted) return;
+      setUsage(res);
+    } catch (err) {
+      if (ctrl.signal.aborted) return;
+      const message =
+        err instanceof ApiRequestError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "Failed to load storage usage";
+      setError(message);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
+    return () => abortRef.current?.abort();
+  }, [open, load]);
+
+  if (error || !usage) return null;
+
+  const pct = usage.capBytes > 0
+    ? Math.min(100, Math.round((usage.usedBytes / usage.capBytes) * 100))
+    : 0;
+
+  return (
+    <div className="px-3 py-2">
+      <div className="flex items-center justify-between text-xs text-[#909090]">
+        <span>Storage</span>
+        <span>
+          {formatGB(usage.usedBytes)} of {formatGB(usage.capBytes)} used
+        </span>
+      </div>
+      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.08]">
+        <div
+          className={cn(
+            "h-full rounded-full transition-[width]",
+            pct >= 100 ? "bg-[#f87171]" : "bg-[#3b82f6]",
+          )}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
+}
 
 const ROW_CLASSNAME = (danger?: boolean) =>
   cn(
@@ -127,6 +199,7 @@ export default function SettingsPanel() {
 
           <div className="my-2 flex flex-col gap-0.5">
             <MenuRow icon={CreditCard} label="Plan" detail={account.plan} />
+            <StorageUsageRow open={open} />
             <MenuRow
               icon={Bell}
               label="Email notifications"

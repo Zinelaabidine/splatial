@@ -16,6 +16,7 @@ const {
 const response = require("../lib/response");
 const { adjustPublicScenesCount } = require("../lib/scene-owner");
 const { sceneVisibilityFromItem } = require("../lib/scene-response");
+const { adjustStorageUsedBytes } = require("../lib/storage-quota");
 
 const dynamo = new DynamoDBClient({});
 const s3 = new S3Client({});
@@ -180,6 +181,10 @@ exports.handler = async (event) => {
     }
   }
 
+  const rawBytesFreed = Number(item.raw_size_bytes?.N ?? 0);
+  const outputBytesFreed = Number(item.output_size_bytes?.N ?? 0);
+  const totalBytesFreed = rawBytesFreed + outputBytesFreed;
+
   await dynamo.send(
     new DeleteItemCommand({
       TableName: TABLE,
@@ -188,6 +193,10 @@ exports.handler = async (event) => {
       ExpressionAttributeValues: { ":uid": { S: userId } },
     })
   );
+
+  if (totalBytesFreed > 0) {
+    await adjustStorageUsedBytes(dynamo, userId, -totalBytesFreed);
+  }
 
   if (wasPublic) {
     await adjustPublicScenesCount(userId, -1);

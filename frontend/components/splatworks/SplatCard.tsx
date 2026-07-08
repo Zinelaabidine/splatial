@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   Box,
   Download,
+  FileArchive,
   MoreVertical,
   Pencil,
   Play,
@@ -22,7 +23,10 @@ type SplatCardProps = {
   onOpen3D: (splat: Splat) => void;
   onTour: (splat: Splat) => void;
   onCardClick: (splat: Splat) => void;
-  onDownload: (splat: Splat, format: "ply" | "splat") => void;
+  /** Downloads the generated output (.ply/.splat) — owner-only, paid tiers. */
+  onDownload: (splat: Splat) => void;
+  /** Downloads the original raw source upload — owner-only, paid tiers. */
+  onDownloadRaw: (splat: Splat) => void;
   onShare: (splat: Splat) => void;
   onRename: (splat: Splat) => void;
   onDelete: (splat: Splat) => void;
@@ -34,6 +38,7 @@ export default function SplatCard({
   onTour,
   onCardClick,
   onDownload,
+  onDownloadRaw,
   onShare,
   onRename,
   onDelete,
@@ -154,18 +159,18 @@ export default function SplatCard({
                 >
                   <MenuItem
                     icon={Download}
-                    label="Download .ply"
+                    label="Download"
                     onClick={() => {
                       setMenuOpen(false);
-                      onDownload(splat, "ply");
+                      onDownload(splat);
                     }}
                   />
                   <MenuItem
-                    icon={Download}
-                    label="Download .splat"
+                    icon={FileArchive}
+                    label="Download original"
                     onClick={() => {
                       setMenuOpen(false);
-                      onDownload(splat, "splat");
+                      onDownloadRaw(splat);
                     }}
                   />
                   <MenuItem

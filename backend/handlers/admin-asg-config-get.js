@@ -13,15 +13,12 @@ const {
 const { SQSClient, GetQueueAttributesCommand } = require("@aws-sdk/client-sqs");
 const response = require("../lib/response");
 const { isAdmin } = require("../lib/admin-auth");
+const { resolvePool, getPoolConfig } = require("../lib/worker-pool");
 
 const ec2 = new EC2Client({});
 const autoscaling = new AutoScalingClient({});
 const sqs = new SQSClient({});
 
-const ASG_NAME = process.env.WORKER_ASG_NAME;
-const LAUNCH_TEMPLATE_ID = process.env.WORKER_LAUNCH_TEMPLATE_ID;
-const MAX_SIZE_CAP = Number(process.env.WORKER_ASG_MAX_SIZE_CAP || 5);
-const QUEUE_URL = process.env.SQS_QUEUE_URL;
 // Lambda always sets this reserved env var; used to build ssm/console links.
 const REGION = process.env.AWS_REGION || "us-east-1";
 // Opt-in per environment (see infra/modules/static-site/variables.tf
@@ -33,13 +30,14 @@ const SSH_USER = process.env.WORKER_SSH_USER || "ubuntu";
 const HISTORY_LIMIT = 10;
 
 /**
- * GET /admin/asg-config
+ * GET /admin/asg-config?pool=standard|priority (default "standard")
  *
  * Admin-only. Reads the live worker ASG + launch template state so the admin
  * page can render current AMI / instance type / capacity and a short version
  * history for rollback. Read-only — no mutation happens here.
  *
  * Success (200): {
+ *   pool,
  *   asg: { name, minSize, maxSize, maxSizeCap, desiredCapacity, inServiceInstances,
  *          manualModeActive, manualModeSince, instances: [{ instanceId, lifecycleState,
  *          healthStatus, availabilityZone, instanceType, privateIp, publicIp, launchTime,
@@ -61,10 +59,18 @@ exports.handler = async (event) => {
   if (!isAdmin(event)) {
     return response(403, { error: "Forbidden: admin role required" });
   }
+
+  const pool = resolvePool(event.queryStringParameters?.pool);
+  const {
+    asgName: ASG_NAME,
+    launchTemplateId: LAUNCH_TEMPLATE_ID,
+    maxSizeCap: MAX_SIZE_CAP,
+    queueUrl: QUEUE_URL,
+  } = getPoolConfig(pool);
+
   if (!ASG_NAME || !LAUNCH_TEMPLATE_ID) {
     return response(500, {
-      error:
-        "ASG not configured (WORKER_ASG_NAME / WORKER_LAUNCH_TEMPLATE_ID missing)",
+      error: `ASG not configured for pool "${pool}" (asg name / launch template id missing)`,
     });
   }
 
@@ -189,6 +195,7 @@ exports.handler = async (event) => {
   });
 
   return response(200, {
+    pool,
     asg: {
       name: asg.AutoScalingGroupName,
       minSize: asg.MinSize,

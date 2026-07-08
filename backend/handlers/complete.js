@@ -1,8 +1,11 @@
 "use strict";
 
-const { S3Client, CompleteMultipartUploadCommand } = require("@aws-sdk/client-s3");
-const { DynamoDBClient, UpdateItemCommand } = require("@aws-sdk/client-dynamodb");
+const { S3Client, CompleteMultipartUploadCommand, HeadObjectCommand } = require("@aws-sdk/client-s3");
+const { DynamoDBClient, UpdateItemCommand, DeleteItemCommand } = require("@aws-sdk/client-dynamodb");
 const response = require("../lib/response");
+const { getUserTier } = require("../lib/user-tier");
+const { getStorageCapBytes, getStorageUsedBytes, adjustStorageUsedBytes } = require("../lib/storage-quota");
+const { deleteObjectIfPresent } = require("../lib/s3-cleanup");
 
 const s3 = new S3Client({});
 const dynamo = new DynamoDBClient({});
@@ -63,6 +66,35 @@ exports.handler = async (event) => {
     })
   );
 
+  // Defense-in-depth true-up: init.js only gated on a client-declared size.
+  // This is the real enforcement, measured directly from the completed S3
+  // object — a lying or wrong client-declared size can't get past this.
+  const head = await s3.send(new HeadObjectCommand({ Bucket: BUCKET, Key: key }));
+  const realSizeBytes = head.ContentLength ?? 0;
+
+  const tier = await getUserTier(dynamo, userId);
+  const capBytes = getStorageCapBytes(tier);
+  const usedBytes = await getStorageUsedBytes(dynamo, userId);
+
+  if (usedBytes + realSizeBytes > capBytes) {
+    await deleteObjectIfPresent(s3, BUCKET, key, { sceneId, userId });
+    await dynamo.send(
+      new DeleteItemCommand({
+        TableName: TABLE,
+        Key: { scene_id: { S: sceneId } },
+        ConditionExpression: "user_id = :uid",
+        ExpressionAttributeValues: { ":uid": { S: userId } },
+      })
+    );
+    return response(413, {
+      error: "Upload exceeded your storage allowance; the file was not saved",
+      tier,
+      capBytes,
+      usedBytes,
+      realSizeBytes,
+    });
+  }
+
   const now = new Date().toISOString();
 
   await dynamo.send(
@@ -70,18 +102,21 @@ exports.handler = async (event) => {
       TableName: TABLE,
       Key: { scene_id: { S: sceneId } },
       UpdateExpression:
-        "SET #s = :status, updated_at = :now, s3_location = :loc REMOVE expires_at",
+        "SET #s = :status, updated_at = :now, s3_location = :loc, raw_size_bytes = :size REMOVE expires_at",
       ConditionExpression: "user_id = :uid AND #s = :pending",
       ExpressionAttributeNames: { "#s": "status" },
       ExpressionAttributeValues: {
         ":status":  { S: "UPLOADED" },
         ":now":     { S: now },
         ":loc":     { S: Location ?? key },
+        ":size":    { N: String(realSizeBytes) },
         ":uid":     { S: userId },
         ":pending": { S: "PENDING_UPLOAD" },
       },
     })
   );
+
+  await adjustStorageUsedBytes(dynamo, userId, realSizeBytes);
 
   return response(202, { sceneId, status: "UPLOADED", location: Location });
 };

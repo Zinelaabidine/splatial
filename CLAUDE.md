@@ -39,7 +39,7 @@ API Gateway  -->  Lambda (Node.js 18 / CommonJS, backend/)
 
 - **Asynchronous decoupling** — The API returns immediately (`202 QUEUED`); training runs on GPU workers via SQS, never inside Lambda (15-minute limit).
 - **Zero-buffer upload path** — Lambda never receives binary data. The browser uploads directly to S3 via presigned multipart URLs; Lambda only orchestrates metadata and state.
-- **Spot-first compute** — EC2 G4dn Spot ASG with S3 checkpointing and SQS re-queuing on interruption.
+- **Spot-first compute** — EC2 `g5g.xlarge` (ARM Graviton) Spot ASG with S3 checkpointing and SQS re-queuing on interruption, used by default for free-tier jobs. Paid-tier jobs route to a separate, dedicated On-Demand ASG (`worker_priority`) instead — that pool never receives Spot interruption notices, so it never exercises the checkpoint/requeue path. (Note: `g4dn.xlarge` elsewhere in this doc, e.g. §3's GPU Worker table, is stale — `g5g.xlarge` per `variables.tf` is correct; a full reconciliation pass against Terraform, including the FIFO/standard-queue mismatch noted in §1's request flow diagram, is still pending.)
 - **Zero standing credentials** — GitHub Actions deploys via OIDC; no long-lived AWS keys in CI.
 - **Infrastructure as Code** — Full AWS stack defined in Terraform with `dev`, `staging`, and `prod` environment roots.
 

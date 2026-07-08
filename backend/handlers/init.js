@@ -4,6 +4,8 @@ const { S3Client, CreateMultipartUploadCommand } = require("@aws-sdk/client-s3")
 const { DynamoDBClient, PutItemCommand } = require("@aws-sdk/client-dynamodb");
 const { randomUUID } = require("crypto");
 const response = require("../lib/response");
+const { getUserTier } = require("../lib/user-tier");
+const { getStorageCapBytes, getStorageUsedBytes } = require("../lib/storage-quota");
 
 const s3 = new S3Client({});
 const dynamo = new DynamoDBClient({});
@@ -42,7 +44,7 @@ exports.handler = async (event) => {
     return response(400, { error: "Invalid JSON body" });
   }
 
-  const { filename, contentType, name, inputType } = body;
+  const { filename, contentType, name, inputType, declaredSizeBytes } = body;
 
   if (!filename || typeof filename !== "string" || filename.trim() === "") {
     return response(400, { error: "Missing required field: filename" });
@@ -57,6 +59,30 @@ exports.handler = async (event) => {
 
   if (resolvedInputType !== undefined && !ALLOWED_INPUT_TYPES.has(resolvedInputType)) {
     return response(400, { error: "inputType must be 'video', 'images', or 'zip'" });
+  }
+  if (
+    typeof declaredSizeBytes !== "number" ||
+    !Number.isFinite(declaredSizeBytes) ||
+    declaredSizeBytes <= 0
+  ) {
+    return response(400, { error: "Missing or invalid required field: declaredSizeBytes" });
+  }
+
+  // Soft gate on the client-declared size — blocks obviously-over-cap uploads
+  // before any S3 multipart upload starts. This trusts the client, so it's
+  // not the real enforcement: complete.js re-measures the actual uploaded
+  // size via HeadObject and rejects there too (defense in depth).
+  const tier = await getUserTier(dynamo, userId);
+  const capBytes = getStorageCapBytes(tier);
+  const usedBytes = await getStorageUsedBytes(dynamo, userId);
+  if (usedBytes + declaredSizeBytes > capBytes) {
+    return response(413, {
+      error: "This upload would exceed your storage allowance",
+      tier,
+      capBytes,
+      usedBytes,
+      declaredSizeBytes,
+    });
   }
 
   const sceneId = randomUUID();

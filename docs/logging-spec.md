@@ -137,6 +137,10 @@ field is a breaking change (§14).
 | `attempt.completed` | `attempt-patch` / `complete` | `output_bucket`, `output_prefix`, `ply_key` |
 | `attempt.failed` | `attempt-patch` | `reason`, `error_message` (redacted) |
 | `job.cancelled` | `cancel-job` | **req** `attempt_id`, `scene_id` |
+| `quota.exceeded` | `submit-job` | **req** `tier`, `limit`, `used`, `window_days` |
+| `quota.charged` | `submit-job` / `attempt-patch` | **req** `tier`, `event_type` (`MANUAL_RETRY` \| `COMPLETION`) |
+| `download.blocked` | `scene-download-raw` / `scene-download-output` | **req** `kind` (`raw` \| `output`), `tier` |
+| `download.served` | `scene-download-raw` / `scene-download-output` | **req** `kind` (`raw` \| `output`) |
 
 ### 4.3 Worker (`service: "worker"`)
 

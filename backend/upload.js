@@ -14,6 +14,8 @@ const sceneUpdate = require("./handlers/scene-update");
 const sceneThumbnailPresign = require("./handlers/scene-thumbnail-presign");
 const sceneEditPresign = require("./handlers/scene-edit-presign");
 const sceneEditComplete = require("./handlers/scene-edit-complete");
+const sceneDownloadRaw = require("./handlers/scene-download-raw");
+const sceneDownloadOutput = require("./handlers/scene-download-output");
 const submitJob        = require("./handlers/submit-job");
 const cancelJob        = require("./handlers/cancel-job");
 const attemptPatch     = require("./handlers/attempt-patch");
@@ -26,6 +28,8 @@ const adminAsgBoot = require("./handlers/admin-asg-boot");
 const adminAsgRelease = require("./handlers/admin-asg-release");
 const adminAsgSpotPrice = require("./handlers/admin-asg-spot-price");
 const adminAsgCheckManualMode = require("./handlers/admin-asg-check-manual-mode");
+const retentionSweep = require("./handlers/retention-sweep");
+const accountUsage = require("./handlers/account-usage");
 const adminWorkerAmisList = require("./handlers/admin-worker-amis-list");
 const adminWorkerAmiRegister = require("./handlers/admin-worker-ami-register");
 const adminWorkerAmiBoot = require("./handlers/admin-worker-ami-boot");
@@ -117,12 +121,18 @@ exports.handler = async (event) => {
         return await sceneEditComplete.handler(event);
       case "POST /api/v1/scenes/{sceneId}/fork":
         return await forkCreate.handler(event);
+      case "GET /api/v1/scenes/{sceneId}/download/raw":
+        return await sceneDownloadRaw.handler(event);
+      case "GET /api/v1/scenes/{sceneId}/download/output":
+        return await sceneDownloadOutput.handler(event);
 
       // ── User Profiles ─────────────────────────────────────────────────
       case "GET /api/v1/profile/me":
         return await profileGetMe.handler(event);
       case "PUT /api/v1/profile/me":
         return await profileUpdateMe.handler(event);
+      case "GET /api/v1/account/usage":
+        return await accountUsage.handler(event);
       case "GET /api/v1/profiles/{username}":
         return await profileGetByUsername.handler(event);
       case "POST /api/v1/profiles/{username}/follow":
@@ -219,6 +229,9 @@ exports.handler = async (event) => {
       // ── Internal (EventBridge-invoked only — not an API Gateway route) ────
       case "INTERNAL /asg/check-manual-mode":
         await adminAsgCheckManualMode.handler(event);
+        return response(200, { ok: true });
+      case "INTERNAL /retention/sweep":
+        await retentionSweep.handler(event);
         return response(200, { ok: true });
 
       default:

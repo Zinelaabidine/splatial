@@ -110,6 +110,12 @@ variable "worker_asg_max_size" {
   default     = 1
 }
 
+variable "worker_priority_asg_max_size" {
+  description = "Maximum number of GPU worker instances in the priority (paid-tier, On-Demand) ASG."
+  type        = number
+  default     = 1
+}
+
 variable "worker_ssh_key_name" {
   description = "EC2 key pair name attached to the worker launch template for direct SSH access (e.g. \"GaussianWorker\"). Empty string (default) disables SSH entirely — workers stay SSM-only. Must be paired with worker_ssh_allowed_cidr; setting only one of the two has no effect. Only enable this in environments where opening port 22 is an accepted tradeoff (see the worker security group in compute.tf)."
   type        = string
@@ -135,6 +141,17 @@ variable "worker_asg_max_size_cap" {
   validation {
     condition     = var.worker_asg_max_size_cap >= 1
     error_message = "worker_asg_max_size_cap must be at least 1."
+  }
+}
+
+variable "worker_priority_asg_max_size_cap" {
+  description = "Hard ceiling the admin ASG-config page cannot exceed when setting the priority pool's max_size at runtime (cost safety net for expensive GPU On-Demand capacity)."
+  type        = number
+  default     = 3
+
+  validation {
+    condition     = var.worker_priority_asg_max_size_cap >= 1
+    error_message = "worker_priority_asg_max_size_cap must be at least 1."
   }
 }
 

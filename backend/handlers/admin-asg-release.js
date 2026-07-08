@@ -8,10 +8,9 @@ const {
 } = require("@aws-sdk/client-auto-scaling");
 const response = require("../lib/response");
 const { isAdmin, getClaims } = require("../lib/admin-auth");
+const { resolvePool, getPoolConfig } = require("../lib/worker-pool");
 
 const autoscaling = new AutoScalingClient({});
-
-const ASG_NAME = process.env.WORKER_ASG_NAME;
 
 /**
  * POST /admin/asg/release
@@ -22,14 +21,25 @@ const ASG_NAME = process.env.WORKER_ASG_NAME;
  * manual boot is active (idempotent — resuming an already-active process, or
  * setting desired capacity that's already 0, is a no-op).
  *
- * Success (200): { desiredCapacity: 0, manualModeActive: false }
+ * Body: { pool?: "standard" | "priority" (default "standard") }
+ * Success (200): { pool, desiredCapacity: 0, manualModeActive: false }
  */
 exports.handler = async (event) => {
   if (!isAdmin(event)) {
     return response(403, { error: "Forbidden: admin role required" });
   }
+
+  let body;
+  try {
+    body = JSON.parse(event.body || "{}");
+  } catch {
+    return response(400, { error: "Malformed JSON body" });
+  }
+
+  const pool = resolvePool(body.pool);
+  const { asgName: ASG_NAME } = getPoolConfig(pool);
   if (!ASG_NAME) {
-    return response(500, { error: "ASG not configured (WORKER_ASG_NAME missing)" });
+    return response(500, { error: `ASG not configured for pool "${pool}"` });
   }
 
   await autoscaling.send(
@@ -56,8 +66,9 @@ exports.handler = async (event) => {
   const actorSub = getClaims(event)?.sub ?? "unknown";
   console.log("admin-asg-release: manual mode released", {
     actorSub,
+    pool,
     asgName: ASG_NAME,
   });
 
-  return response(200, { desiredCapacity: 0, manualModeActive: false });
+  return response(200, { pool, desiredCapacity: 0, manualModeActive: false });
 };

@@ -7,10 +7,10 @@ const {
   DeleteTagsCommand,
 } = require("@aws-sdk/client-auto-scaling");
 const { notifyAdmins } = require("../lib/notify");
+const { getPoolConfig, POOLS } = require("../lib/worker-pool");
 
 const autoscaling = new AutoScalingClient({});
 
-const ASG_NAME = process.env.WORKER_ASG_NAME;
 const ALERT_MINUTES = Number(process.env.MANUAL_MODE_ALERT_MINUTES || 30);
 
 /**
@@ -29,9 +29,17 @@ const ALERT_MINUTES = Number(process.env.MANUAL_MODE_ALERT_MINUTES || 30);
  * repeat every 15 minutes) warning that real jobs may be queuing without
  * scale-out.
  */
+// Invoked on a fixed 15-minute schedule with no input (see the
+// aws_cloudwatch_event_rule in admin-notifications.tf) — there's no per-call
+// parameter to say "check this one pool", so every invocation checks both.
 exports.handler = async () => {
+  await Promise.all([...POOLS].map(checkPool));
+};
+
+async function checkPool(pool) {
+  const { asgName: ASG_NAME } = getPoolConfig(pool);
   if (!ASG_NAME) {
-    console.error("admin-asg-check-manual-mode: WORKER_ASG_NAME not configured");
+    console.error("admin-asg-check-manual-mode: ASG not configured", { pool });
     return;
   }
 
@@ -40,7 +48,7 @@ exports.handler = async () => {
   );
   const asg = asgOut.AutoScalingGroups?.[0];
   if (!asg) {
-    console.error("admin-asg-check-manual-mode: ASG not found", { ASG_NAME });
+    console.error("admin-asg-check-manual-mode: ASG not found", { pool, ASG_NAME });
     return;
   }
 
@@ -81,11 +89,11 @@ exports.handler = async () => {
       : `${Math.round(elapsedMinutes)}m`;
 
   await notifyAdmins({
-    title: "Worker ASG manual mode still active",
+    title: `Worker ASG manual mode still active (${pool})`,
     message:
-      `${ASG_NAME} has had SQS-driven auto-scaling paused for ${elapsedLabel} ` +
-      `(since ${sinceTag.Value}). Real jobs submitted during this window will ` +
-      `queue but not launch a worker. Release from the admin page when done testing.`,
+      `${ASG_NAME} (${pool} pool) has had SQS-driven auto-scaling paused for ` +
+      `${elapsedLabel} (since ${sinceTag.Value}). Real jobs submitted during this ` +
+      `window will queue but not launch a worker. Release from the admin page when done testing.`,
   });
 
   await autoscaling.send(
@@ -101,4 +109,4 @@ exports.handler = async () => {
       ],
     }),
   );
-};
+}

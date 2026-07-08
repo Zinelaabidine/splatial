@@ -14,13 +14,10 @@ const {
 const response = require("../lib/response");
 const { isAdmin, getClaims } = require("../lib/admin-auth");
 const { notifyAdmins } = require("../lib/notify");
+const { resolvePool, getPoolConfig } = require("../lib/worker-pool");
 
 const ec2 = new EC2Client({});
 const autoscaling = new AutoScalingClient({});
-
-const ASG_NAME = process.env.WORKER_ASG_NAME;
-const LAUNCH_TEMPLATE_ID = process.env.WORKER_LAUNCH_TEMPLATE_ID;
-const MAX_SIZE_CAP = Number(process.env.WORKER_ASG_MAX_SIZE_CAP || 5);
 
 const AMI_ID_RE = /^ami-[a-f0-9]{8,17}$/;
 const INSTANCE_TYPE_RE = /^[a-z0-9]+\.[a-z0-9]+$/;
@@ -44,20 +41,14 @@ const ALLOWED_INSTANCE_TYPES = ["g5g.xlarge", "g5g.16xlarge"];
  *     lifecycle.ignore_changes on max_size keeps Terraform from reverting it.
  *
  * Body (at least one field required):
- *   { amiId?: string, instanceType?: "g5g.xlarge" | "g5g.16xlarge", maxSize?: number, reason?: string }
+ *   { pool?: "standard" | "priority" (default "standard"), amiId?: string, instanceType?: "g5g.xlarge" | "g5g.16xlarge", maxSize?: number, reason?: string }
  *
- * Success (200): the fields that were actually changed + the new launch
- * template version number (if a template change was made).
+ * Success (200): { pool, ...the fields that were actually changed + the new
+ * launch template version number (if a template change was made) }
  */
 exports.handler = async (event) => {
   if (!isAdmin(event)) {
     return response(403, { error: "Forbidden: admin role required" });
-  }
-  if (!ASG_NAME || !LAUNCH_TEMPLATE_ID) {
-    return response(500, {
-      error:
-        "ASG not configured (WORKER_ASG_NAME / WORKER_LAUNCH_TEMPLATE_ID missing)",
-    });
   }
 
   let body;
@@ -65,6 +56,18 @@ exports.handler = async (event) => {
     body = JSON.parse(event.body || "{}");
   } catch {
     return response(400, { error: "Malformed JSON body" });
+  }
+
+  const pool = resolvePool(body.pool);
+  const {
+    asgName: ASG_NAME,
+    launchTemplateId: LAUNCH_TEMPLATE_ID,
+    maxSizeCap: MAX_SIZE_CAP,
+  } = getPoolConfig(pool);
+  if (!ASG_NAME || !LAUNCH_TEMPLATE_ID) {
+    return response(500, {
+      error: `ASG not configured for pool "${pool}" (asg name / launch template id missing)`,
+    });
   }
 
   const amiId = typeof body.amiId === "string" ? body.amiId.trim() : undefined;
@@ -140,7 +143,7 @@ exports.handler = async (event) => {
       // Cross-check instance type architecture compatibility when both are
       // being set (or when only the AMI changes, against the type already on
       // the latest launch template version).
-      const targetType = instanceType ?? (await getLatestInstanceType());
+      const targetType = instanceType ?? (await getLatestInstanceType(LAUNCH_TEMPLATE_ID));
       if (targetType) {
         const typeOut = await ec2.send(
           new DescribeInstanceTypesCommand({ InstanceTypes: [targetType] }),
@@ -167,7 +170,7 @@ exports.handler = async (event) => {
       if (!typeInfo) {
         return response(400, { error: `Instance type not found: ${instanceType}` });
       }
-      const currentAmiId = await getLatestAmiId();
+      const currentAmiId = await getLatestAmiId(LAUNCH_TEMPLATE_ID);
       if (currentAmiId) {
         const imgOut = await ec2.send(
           new DescribeImagesCommand({ ImageIds: [currentAmiId] }),
@@ -217,34 +220,35 @@ exports.handler = async (event) => {
 
   console.log("admin-asg-config: change applied", {
     actorSub,
+    pool,
     asgName: ASG_NAME,
     changes: result,
   });
 
   await notifyAdmins({
-    title: "Worker ASG config changed",
+    title: `Worker ASG config changed (${pool})`,
     message:
-      `${actorSub} updated ${ASG_NAME}: ${JSON.stringify(result)}` +
+      `${actorSub} updated ${ASG_NAME} (${pool} pool): ${JSON.stringify(result)}` +
       (reason ? ` — ${reason}` : ""),
   });
 
-  return response(200, result);
+  return response(200, { pool, ...result });
 };
 
-async function getLatestInstanceType() {
+async function getLatestInstanceType(launchTemplateId) {
   const out = await ec2.send(
     new DescribeLaunchTemplateVersionsCommand({
-      LaunchTemplateId: LAUNCH_TEMPLATE_ID,
+      LaunchTemplateId: launchTemplateId,
       Versions: ["$Latest"],
     }),
   );
   return out.LaunchTemplateVersions?.[0]?.LaunchTemplateData?.InstanceType ?? null;
 }
 
-async function getLatestAmiId() {
+async function getLatestAmiId(launchTemplateId) {
   const out = await ec2.send(
     new DescribeLaunchTemplateVersionsCommand({
-      LaunchTemplateId: LAUNCH_TEMPLATE_ID,
+      LaunchTemplateId: launchTemplateId,
       Versions: ["$Latest"],
     }),
   );

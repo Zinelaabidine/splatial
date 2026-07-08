@@ -85,6 +85,17 @@ resource "aws_iam_role_policy" "upload_lambda_data_access" {
         Resource = "${aws_s3_bucket.raw_scenes.arn}/*"
       },
       {
+        # Required for scene-download-raw.js's presigned GetObject — the
+        # presign call itself is local, but the actual GET the client later
+        # performs against S3 is authorized against this Lambda's role at
+        # request time, so it needs its own explicit grant (not covered by
+        # the write-only actions in S3MultipartUpload above).
+        Sid      = "S3RawScenesRead"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject"]
+        Resource = "${aws_s3_bucket.raw_scenes.arn}/*"
+      },
+      {
         Sid    = "DynamoDBScenesAccess"
         Effect = "Allow"
         Action = [
@@ -113,13 +124,18 @@ resource "aws_iam_role_policy" "upload_lambda_data_access" {
           "${aws_dynamodb_table.bookmarks.arn}/index/*",
           aws_dynamodb_table.shots.arn,
           aws_dynamodb_table.tours.arn,
+          aws_dynamodb_table.users.arn,
+          aws_dynamodb_table.job_quota_events.arn,
         ]
       },
       {
-        Sid      = "SQSJobSubmit"
-        Effect   = "Allow"
-        Action   = ["sqs:SendMessage"]
-        Resource = aws_sqs_queue.processing_queue.arn
+        Sid    = "SQSJobSubmit"
+        Effect = "Allow"
+        Action = ["sqs:SendMessage"]
+        Resource = [
+          aws_sqs_queue.processing_queue.arn,
+          aws_sqs_queue.processing_queue_priority.arn,
+        ]
       },
       {
         Sid      = "SESSendNotificationEmail"
@@ -165,31 +181,37 @@ resource "aws_lambda_function" "upload_lambda" {
 
   environment {
     variables = {
-      RAW_SCENES_BUCKET_NAME       = aws_s3_bucket.raw_scenes.bucket
-      SPLAT_SCENES_BUCKET_NAME     = aws_s3_bucket.splat_scenes.bucket
-      SCENES_TABLE_NAME            = aws_dynamodb_table.scenes.name
-      PROFILES_TABLE_NAME          = aws_dynamodb_table.profiles.name
-      USERNAMES_TABLE_NAME         = aws_dynamodb_table.usernames.name
-      FOLLOWS_TABLE_NAME           = aws_dynamodb_table.follows.name
-      REACTIONS_TABLE_NAME         = aws_dynamodb_table.reactions.name
-      COMMENTS_TABLE_NAME          = aws_dynamodb_table.comments.name
-      COMMENT_REACTIONS_TABLE_NAME = aws_dynamodb_table.comment_reactions.name
-      NOTIFICATIONS_TABLE_NAME     = aws_dynamodb_table.notifications.name
-      BOOKMARKS_TABLE_NAME         = aws_dynamodb_table.bookmarks.name
-      SHOTS_TABLE_NAME             = aws_dynamodb_table.shots.name
-      TOURS_TABLE_NAME             = aws_dynamodb_table.tours.name
-      SQS_QUEUE_URL                = aws_sqs_queue.processing_queue.url
-      API_BASE_URL                 = "https://api-${var.environment}.openspacenexus.store"
-      GDRIVE_IMPORT_FUNCTION_NAME  = aws_lambda_function.gdrive_import_lambda.function_name
-      WORKER_LOG_GROUP             = local.worker_log_group
-      WORKER_ASG_NAME              = aws_autoscaling_group.worker.name
-      WORKER_LAUNCH_TEMPLATE_ID    = aws_launch_template.worker.id
-      WORKER_ASG_MAX_SIZE_CAP      = tostring(var.worker_asg_max_size_cap)
-      WORKER_SPOT_AZS              = join(",", var.worker_spot_availability_zones)
-      SLACK_WEBHOOK_URL            = var.slack_webhook_url
-      ADMIN_SNS_TOPIC_ARN          = aws_sns_topic.admin_notifications.arn
-      MANUAL_MODE_ALERT_MINUTES    = tostring(var.manual_mode_alert_minutes)
-      NODE_ENV                     = "production"
+      RAW_SCENES_BUCKET_NAME             = aws_s3_bucket.raw_scenes.bucket
+      SPLAT_SCENES_BUCKET_NAME           = aws_s3_bucket.splat_scenes.bucket
+      SCENES_TABLE_NAME                  = aws_dynamodb_table.scenes.name
+      PROFILES_TABLE_NAME                = aws_dynamodb_table.profiles.name
+      USERNAMES_TABLE_NAME               = aws_dynamodb_table.usernames.name
+      FOLLOWS_TABLE_NAME                 = aws_dynamodb_table.follows.name
+      REACTIONS_TABLE_NAME               = aws_dynamodb_table.reactions.name
+      COMMENTS_TABLE_NAME                = aws_dynamodb_table.comments.name
+      COMMENT_REACTIONS_TABLE_NAME       = aws_dynamodb_table.comment_reactions.name
+      NOTIFICATIONS_TABLE_NAME           = aws_dynamodb_table.notifications.name
+      BOOKMARKS_TABLE_NAME               = aws_dynamodb_table.bookmarks.name
+      SHOTS_TABLE_NAME                   = aws_dynamodb_table.shots.name
+      TOURS_TABLE_NAME                   = aws_dynamodb_table.tours.name
+      USERS_TABLE_NAME                   = aws_dynamodb_table.users.name
+      JOB_QUOTA_EVENTS_TABLE_NAME        = aws_dynamodb_table.job_quota_events.name
+      SQS_QUEUE_URL                      = aws_sqs_queue.processing_queue.url
+      SQS_QUEUE_URL_PRIORITY             = aws_sqs_queue.processing_queue_priority.url
+      API_BASE_URL                       = "https://api-${var.environment}.openspacenexus.store"
+      GDRIVE_IMPORT_FUNCTION_NAME        = aws_lambda_function.gdrive_import_lambda.function_name
+      WORKER_LOG_GROUP                   = local.worker_log_group
+      WORKER_ASG_NAME                    = aws_autoscaling_group.worker.name
+      WORKER_LAUNCH_TEMPLATE_ID          = aws_launch_template.worker.id
+      WORKER_ASG_MAX_SIZE_CAP            = tostring(var.worker_asg_max_size_cap)
+      WORKER_ASG_NAME_PRIORITY           = aws_autoscaling_group.worker_priority.name
+      WORKER_LAUNCH_TEMPLATE_ID_PRIORITY = aws_launch_template.worker_priority.id
+      WORKER_ASG_MAX_SIZE_CAP_PRIORITY   = tostring(var.worker_priority_asg_max_size_cap)
+      WORKER_SPOT_AZS                    = join(",", var.worker_spot_availability_zones)
+      SLACK_WEBHOOK_URL                  = var.slack_webhook_url
+      ADMIN_SNS_TOPIC_ARN                = aws_sns_topic.admin_notifications.arn
+      MANUAL_MODE_ALERT_MINUTES          = tostring(var.manual_mode_alert_minutes)
+      NODE_ENV                           = "production"
 
       # Outbound notification email (see backend/lib/email.js + ses.tf).
       NOTIFICATIONS_FROM_EMAIL = "notifications@${var.domain_name}"

@@ -33,6 +33,7 @@ import type {
   AdminAsgInstance,
   SpotPriceResponse,
   WorkerAmi,
+  WorkerPool,
 } from "@/types/admin";
 
 function formatWhen(iso: string | null): string {
@@ -64,6 +65,11 @@ const INSTANCE_TYPE_OPTIONS = [
   { value: "g5g.xlarge", label: "g5g.xlarge — routine jobs" },
   { value: "g5g.16xlarge", label: "g5g.16xlarge — heavier/faster processing" },
 ] as const;
+
+const POOL_OPTIONS: { value: WorkerPool; label: string; sublabel: string }[] = [
+  { value: "standard", label: "Standard", sublabel: "free tier · Spot" },
+  { value: "priority", label: "Priority", sublabel: "paid tier · On-Demand" },
+];
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
   return (
@@ -418,6 +424,7 @@ function AmiPicker({
 export default function AdminAsgConfigView() {
   const isAdmin = useIsAdmin();
 
+  const [pool, setPool] = useState<WorkerPool>("standard");
   const [config, setConfig] = useState<AdminAsgConfigResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -454,7 +461,7 @@ export default function AdminAsgConfigView() {
     setLoading(true);
     setLoadError(null);
     try {
-      const res = await getAsgConfig(controller.signal);
+      const res = await getAsgConfig(pool, controller.signal);
       setConfig(res);
       setAmiId(res.current.amiId ?? "");
       setInstanceType(res.current.instanceType ?? "");
@@ -465,7 +472,7 @@ export default function AdminAsgConfigView() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [pool]);
 
   useEffect(() => {
     if (isAdmin === true) {
@@ -517,11 +524,12 @@ export default function AdminAsgConfigView() {
     setSubmitSuccess(null);
     try {
       const payload: {
+        pool?: WorkerPool;
         amiId?: string;
         instanceType?: string;
         maxSize?: number;
         reason?: string;
-      } = {};
+      } = { pool };
       if (amiId.trim() !== (config.current.amiId ?? "")) payload.amiId = amiId.trim();
       if (instanceType.trim() !== (config.current.instanceType ?? ""))
         payload.instanceType = instanceType.trim();
@@ -552,6 +560,7 @@ export default function AdminAsgConfigView() {
     setBootError(null);
     try {
       await bootWorker({
+        pool,
         count: Number(bootCount) || 1,
         reason: bootReason.trim() || undefined,
       });
@@ -569,7 +578,7 @@ export default function AdminAsgConfigView() {
     setReleaseSubmitting(true);
     setReleaseError(null);
     try {
-      await releaseWorker();
+      await releaseWorker(pool);
       await load();
     } catch (e) {
       setReleaseError(e instanceof Error ? e.message : "Failed to release");
@@ -621,6 +630,26 @@ export default function AdminAsgConfigView() {
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
           Refresh
         </button>
+      </div>
+
+      <div className="mb-5 inline-flex rounded-lg border border-[#2a2a2a] bg-[#161616] p-1">
+        {POOL_OPTIONS.map((o) => (
+          <button
+            key={o.value}
+            type="button"
+            onClick={() => setPool(o.value)}
+            className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
+              pool === o.value
+                ? "bg-[#3b82f6] text-white"
+                : "text-[#909090] hover:bg-[#1f1f1f]"
+            }`}
+          >
+            {o.label}
+            <span className={`ml-1.5 text-xs ${pool === o.value ? "text-[#dbe8fd]" : "text-[#707070]"}`}>
+              {o.sublabel}
+            </span>
+          </button>
+        ))}
       </div>
 
       {loadError && (
@@ -825,10 +854,13 @@ export default function AdminAsgConfigView() {
                   </p>
                 ) : spotPrice?.cheapest ? (
                   <p className="mt-1 text-xs text-[#8fd6a3]">
-                    Est. Spot: ${spotPrice.cheapest.pricePerHour.toFixed(4)}/hr in{" "}
+                    {pool === "priority" ? "Spot reference price" : "Est. Spot"}: $
+                    {spotPrice.cheapest.pricePerHour.toFixed(4)}/hr in{" "}
                     {spotPrice.cheapest.az}
                     {spotPrice.prices.length > 1 &&
                       ` (cheapest of ${spotPrice.prices.length} AZs)`}
+                    {pool === "priority" &&
+                      " — this pool runs On-Demand, shown for cost comparison only"}
                   </p>
                 ) : spotPrice && spotPrice.prices.length === 0 ? (
                   <p className="mt-1 text-xs text-[#707070]">
@@ -850,7 +882,8 @@ export default function AdminAsgConfigView() {
                   className="w-full rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-2 text-sm text-[#e8e8e8] outline-none focus:border-[#3b82f6]"
                 />
                 <p className="mt-1 text-xs text-[#707070]">
-                  Hard cap: {config.asg.maxSizeCap} (Spot GPU instances only).
+                  Hard cap: {config.asg.maxSizeCap} (
+                  {pool === "priority" ? "On-Demand" : "Spot"} GPU instances only).
                 </p>
               </div>
 
@@ -893,11 +926,12 @@ export default function AdminAsgConfigView() {
             {confirmOpen && (
               <div className="mt-4 rounded-lg border border-[#3a3312] bg-[#211d0d] px-4 py-3 text-sm text-[#e8d98a]">
                 <p className="mb-3">
-                  This affects every new GPU worker instance launched from now on.
+                  This affects every new GPU worker instance launched from now on
+                  in the {pool} pool.
                   {spotPrice?.cheapest && (
                     <>
                       {" "}
-                      Estimated Spot cost: ~$
+                      {pool === "priority" ? "Spot reference cost" : "Estimated Spot cost"}: ~$
                       {spotPrice.cheapest.pricePerHour.toFixed(4)}/hr per instance.
                     </>
                   )}{" "}

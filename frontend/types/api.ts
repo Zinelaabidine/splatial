@@ -15,6 +15,20 @@
 export interface InitUploadRequest {
   filename: string;
   contentType: string;
+  /**
+   * File.size, in bytes — a soft pre-check against the caller's storage cap
+   * (see backend/handlers/init.js). Not authoritative: complete.js
+   * re-measures the real uploaded size via HeadObject and enforces the cap
+   * there too.
+   */
+  declaredSizeBytes: number;
+}
+
+/** Mirrors GET /api/v1/account/usage in the backend. */
+export interface AccountUsageResponse {
+  tier: string;
+  usedBytes: number;
+  capBytes: number;
 }
 
 export interface InitUploadResponse {
@@ -475,6 +489,17 @@ export interface ViewUrlResponse {
   /** Presigned S3 GET URL, valid for 1 hour. */
   url: string;
   expiresIn: number;
+}
+
+// ---------------------------------------------------------------------------
+// Raw/output downloads (owner-only, paid tiers — see lib/download-gate.js)
+// ---------------------------------------------------------------------------
+export interface SceneDownloadResponse {
+  sceneId: string;
+  /** Presigned S3 GET URL with Content-Disposition: attachment, valid for 1 hour. */
+  url: string;
+  expiresIn: number;
+  filename: string;
 }
 
 // ---------------------------------------------------------------------------

@@ -15,6 +15,7 @@ import type {
   UpdateAsgConfigResponse,
   WorkerAmi,
   WorkerAmisResponse,
+  WorkerPool,
 } from "@/types/admin";
 
 export type ListAttemptsParams = {
@@ -46,13 +47,16 @@ export async function listAdminAttempts(
 }
 
 /**
- * GET /admin/asg-config — read the live GPU worker ASG / launch template
- * state (current AMI, instance type, capacity, and recent version history).
+ * GET /admin/asg-config?pool=standard|priority — read the live GPU worker
+ * ASG / launch template state (current AMI, instance type, capacity, and
+ * recent version history) for the given pool. Defaults to "standard".
  */
 export async function getAsgConfig(
+  pool: WorkerPool = "standard",
   signal?: AbortSignal,
 ): Promise<AdminAsgConfigResponse> {
-  return authenticatedFetch("/admin/asg-config", {
+  const qs = new URLSearchParams({ pool }).toString();
+  return authenticatedFetch(`/admin/asg-config?${qs}`, {
     signal,
   }) as Promise<AdminAsgConfigResponse>;
 }
@@ -60,7 +64,8 @@ export async function getAsgConfig(
 /**
  * POST /admin/asg-config — update the worker AMI / instance type / ASG max
  * size at runtime. No Terraform apply or deploy required; takes effect on
- * the next scale-out.
+ * the next scale-out. Include `pool` in the payload to target the priority
+ * pool; omitted defaults to "standard".
  */
 export async function updateAsgConfig(
   payload: UpdateAsgConfigPayload,
@@ -75,7 +80,9 @@ export async function updateAsgConfig(
  * POST /admin/asg/boot — force the worker ASG's desired capacity up right
  * now (e.g. to smoke-test a newly-selected AMI) instead of waiting for a
  * real SQS job. Suspends SQS-driven scaling until /admin/asg/release is
- * called — the caller is responsible for surfacing that clearly.
+ * called — the caller is responsible for surfacing that clearly. Include
+ * `pool` in the payload to target the priority pool; omitted defaults to
+ * "standard".
  */
 export async function bootWorker(
   payload: BootWorkerPayload = {},
@@ -88,11 +95,14 @@ export async function bootWorker(
 
 /**
  * POST /admin/asg/release — end a manual boot session: desired capacity
- * back to 0, SQS-driven scaling resumes.
+ * back to 0, SQS-driven scaling resumes. Defaults to the "standard" pool.
  */
-export async function releaseWorker(): Promise<ReleaseWorkerResponse> {
+export async function releaseWorker(
+  pool: WorkerPool = "standard",
+): Promise<ReleaseWorkerResponse> {
   return authenticatedFetch("/admin/asg/release", {
     method: "POST",
+    body: JSON.stringify({ pool }),
   }) as Promise<ReleaseWorkerResponse>;
 }
 

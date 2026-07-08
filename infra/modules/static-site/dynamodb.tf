@@ -40,6 +40,16 @@ resource "aws_dynamodb_table" "scenes" {
     type = "S"
   }
 
+  attribute {
+    name = "raw_retention_status"
+    type = "S"
+  }
+
+  attribute {
+    name = "raw_expires_at"
+    type = "S"
+  }
+
   # GSI for listing a user's scenes by status (e.g. PENDING_UPLOAD, READY).
   global_secondary_index {
     name = "user_id-status-index"
@@ -89,6 +99,29 @@ resource "aws_dynamodb_table" "scenes" {
     }
 
     projection_type = "ALL"
+  }
+
+  # Sparse GSI: raw_retention_status is set (to "PENDING") only on scenes with
+  # a raw source pending deletion — written by attempt-patch.js on a
+  # successful training completion (see lib/retention.js for the per-tier
+  # window), removed by retention-sweep.js once swept. Lets the daily
+  # retention job Query "everything due" directly instead of a full Scan;
+  # raw_size_bytes/output_size_bytes (see storage-quota.js) aren't key
+  # attributes so they don't need a declared `attribute` block here.
+  global_secondary_index {
+    name = "raw_retention_status-raw_expires_at-index"
+
+    key_schema {
+      attribute_name = "raw_retention_status"
+      key_type       = "HASH"
+    }
+
+    key_schema {
+      attribute_name = "raw_expires_at"
+      key_type       = "RANGE"
+    }
+
+    projection_type = "KEYS_ONLY"
   }
 
   # TTL: Lambda sets `expires_at` (epoch seconds) on every record.

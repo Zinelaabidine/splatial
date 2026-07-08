@@ -341,6 +341,26 @@ resource "aws_apigatewayv2_route" "scenes_fork" {
   target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
 }
 
+resource "aws_apigatewayv2_route" "scenes_download_raw" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "GET /api/v1/scenes/{sceneId}/download/raw"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
+resource "aws_apigatewayv2_route" "scenes_download_output" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "GET /api/v1/scenes/{sceneId}/download/output"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
 # ── User Profiles ─────────────────────────────────────────────────────────────
 
 resource "aws_apigatewayv2_route" "profile_get_me" {
@@ -356,6 +376,16 @@ resource "aws_apigatewayv2_route" "profile_get_me" {
 resource "aws_apigatewayv2_route" "profile_update_me" {
   api_id    = aws_apigatewayv2_api.http_api.id
   route_key = "PUT /api/v1/profile/me"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+
+  target = "integrations/${aws_apigatewayv2_integration.upload_init.id}"
+}
+
+resource "aws_apigatewayv2_route" "account_usage" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "GET /api/v1/account/usage"
 
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id

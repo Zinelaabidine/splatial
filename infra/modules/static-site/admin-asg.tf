@@ -52,11 +52,16 @@ resource "aws_iam_role_policy" "admin_asg_config" {
       },
       {
         # CreateLaunchTemplateVersion DOES support resource-level permission
-        # (unlike the Describe calls above) — scope it to the worker template.
-        Sid      = "CreateWorkerLaunchTemplateVersion"
-        Effect   = "Allow"
-        Action   = ["ec2:CreateLaunchTemplateVersion"]
-        Resource = "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:launch-template/${aws_launch_template.worker.id}"
+        # (unlike the Describe calls above) — scope it to both worker
+        # templates (standard + priority pools; see admin-asg-config-update.js
+        # for the `pool` selector that picks which one a given call targets).
+        Sid    = "CreateWorkerLaunchTemplateVersion"
+        Effect = "Allow"
+        Action = ["ec2:CreateLaunchTemplateVersion"]
+        Resource = [
+          "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:launch-template/${aws_launch_template.worker.id}",
+          "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:launch-template/${aws_launch_template.worker_priority.id}",
+        ]
       },
       {
         # DescribeAutoScalingGroups is a list call and, like EC2 Describe
@@ -68,41 +73,53 @@ resource "aws_iam_role_policy" "admin_asg_config" {
       },
       {
         # UpdateAutoScalingGroup DOES support resource-level permission —
-        # scope it to the worker ASG only.
-        Sid      = "UpdateWorkerAsg"
-        Effect   = "Allow"
-        Action   = ["autoscaling:UpdateAutoScalingGroup"]
-        Resource = aws_autoscaling_group.worker.arn
+        # scope it to both worker ASGs (standard + priority).
+        Sid    = "UpdateWorkerAsg"
+        Effect = "Allow"
+        Action = ["autoscaling:UpdateAutoScalingGroup"]
+        Resource = [
+          aws_autoscaling_group.worker.arn,
+          aws_autoscaling_group.worker_priority.arn,
+        ]
       },
       {
         # Manual "boot a worker now" testing flow (POST /admin/asg/boot and
         # /release): suspends the AlarmNotification process so the SQS
         # scale-in alarm doesn't race to reclaim the manually-requested
         # capacity, then resumes it on release. Both actions support
-        # resource-level permission — scope to the worker ASG only.
-        Sid      = "SuspendResumeWorkerAsgAlarms"
-        Effect   = "Allow"
-        Action   = ["autoscaling:SuspendProcesses", "autoscaling:ResumeProcesses"]
-        Resource = aws_autoscaling_group.worker.arn
+        # resource-level permission — scope to both worker ASGs.
+        Sid    = "SuspendResumeWorkerAsgAlarms"
+        Effect = "Allow"
+        Action = ["autoscaling:SuspendProcesses", "autoscaling:ResumeProcesses"]
+        Resource = [
+          aws_autoscaling_group.worker.arn,
+          aws_autoscaling_group.worker_priority.arn,
+        ]
       },
       {
         # Tags the ASG with a ManualModeSince timestamp on boot (there's no
         # AWS-native "suspended since" field) and clears it on release, so the
         # scheduled check in admin-notifications.tf knows how long a manual
         # session has been active. Both Tagging actions support resource-level
-        # permission — scope to the worker ASG only.
-        Sid      = "TagWorkerAsgForManualModeTracking"
-        Effect   = "Allow"
-        Action   = ["autoscaling:CreateOrUpdateTags", "autoscaling:DeleteTags"]
-        Resource = aws_autoscaling_group.worker.arn
+        # permission — scope to both worker ASGs.
+        Sid    = "TagWorkerAsgForManualModeTracking"
+        Effect = "Allow"
+        Action = ["autoscaling:CreateOrUpdateTags", "autoscaling:DeleteTags"]
+        Resource = [
+          aws_autoscaling_group.worker.arn,
+          aws_autoscaling_group.worker_priority.arn,
+        ]
       },
       {
         # Queue-depth readout on the admin page, for context before deciding
-        # to boot a worker manually.
-        Sid      = "ReadProcessingQueueDepth"
-        Effect   = "Allow"
-        Action   = ["sqs:GetQueueAttributes"]
-        Resource = aws_sqs_queue.processing_queue.arn
+        # to boot a worker manually. Covers both pools' queues.
+        Sid    = "ReadProcessingQueueDepth"
+        Effect = "Allow"
+        Action = ["sqs:GetQueueAttributes"]
+        Resource = [
+          aws_sqs_queue.processing_queue.arn,
+          aws_sqs_queue.processing_queue_priority.arn,
+        ]
       },
     ]
   })

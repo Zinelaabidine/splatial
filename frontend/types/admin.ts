@@ -92,7 +92,16 @@ export type AdminAsgHistoryItem = {
   createdAt: string | null;
 };
 
+/**
+ * Two GPU worker pools: "standard" (free tier, Spot) and "priority" (paid
+ * tier, On-Demand — see compute-priority.tf). Every ASG-related admin call
+ * takes/returns which pool it targeted; omitting `pool` on a request
+ * defaults to "standard" on the backend.
+ */
+export type WorkerPool = "standard" | "priority";
+
 export type AdminAsgConfigResponse = {
+  pool: WorkerPool;
   asg: AdminAsgSummary;
   launchTemplate: AdminLaunchTemplateSummary;
   current: AdminAsgCurrent;
@@ -101,6 +110,7 @@ export type AdminAsgConfigResponse = {
 };
 
 export type UpdateAsgConfigPayload = {
+  pool?: WorkerPool;
   amiId?: string;
   instanceType?: string;
   maxSize?: number;
@@ -108,6 +118,7 @@ export type UpdateAsgConfigPayload = {
 };
 
 export type UpdateAsgConfigResponse = {
+  pool: WorkerPool;
   launchTemplateVersion?: number;
   amiId?: string;
   instanceType?: string;
@@ -115,16 +126,19 @@ export type UpdateAsgConfigResponse = {
 };
 
 export type BootWorkerPayload = {
+  pool?: WorkerPool;
   count?: number;
   reason?: string;
 };
 
 export type BootWorkerResponse = {
+  pool: WorkerPool;
   desiredCapacity: number;
   manualModeActive: boolean;
 };
 
 export type ReleaseWorkerResponse = {
+  pool: WorkerPool;
   desiredCapacity: number;
   manualModeActive: boolean;
 };
