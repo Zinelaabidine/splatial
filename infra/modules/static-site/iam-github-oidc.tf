@@ -524,8 +524,11 @@ data "aws_iam_policy_document" "github_deploy_compute_policy" {
         "arn:aws:ec2:${var.aws_region}:886601940523:instance/*",
         "arn:aws:ec2:${var.aws_region}:886601940523:launch-template/${aws_launch_template.worker.id}",
         "arn:aws:ec2:${var.aws_region}:886601940523:launch-template/${aws_launch_template.worker.id}/*",
-        "arn:aws:ec2:${var.aws_region}:886601940523:launch-template/${aws_launch_template.worker_priority.id}",
-        "arn:aws:ec2:${var.aws_region}:886601940523:launch-template/${aws_launch_template.worker_priority.id}/*",
+        # Launch template IDs are assigned by AWS at create time. Do not reference
+        # aws_launch_template.worker_priority here — that would pull the priority
+        # SQS queues into the deploy-role policy bootstrap apply before sqs:CreateQueue
+        # has propagated to the OIDC session.
+        "arn:aws:ec2:${var.aws_region}:886601940523:launch-template/*",
         "arn:aws:ec2:${var.aws_region}:886601940523:security-group/${aws_security_group.worker.id}",
         "arn:aws:ec2:${var.aws_region}:886601940523:volume/*",
         "arn:aws:ec2:${var.aws_region}:886601940523:network-interface/*",
