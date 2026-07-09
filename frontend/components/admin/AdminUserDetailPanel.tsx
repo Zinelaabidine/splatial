@@ -17,8 +17,30 @@ import {
 } from "@/services/adminUsersService";
 import type { AdminUserDetail, AdminUserRole, AdminUserTier, UserStatusAction } from "@/types/adminUsers";
 import { ApiRequestError } from "@/lib/api/apiErrors";
+import { cn } from "@/lib/utils";
 
 const ASSIGNABLE_ROLES: AdminUserRole[] = ["admin", "moderator", "beta_tester"];
+
+const INPUT_CLASS =
+  "w-full rounded-md border border-zinc-700/80 bg-zinc-950/80 px-3 py-2 text-sm text-zinc-100 outline-none transition-colors focus:border-teal-500/60 focus:ring-1 focus:ring-teal-500/30";
+
+const BTN_SECONDARY =
+  "rounded-md border border-zinc-700/80 bg-zinc-900/60 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-colors hover:border-zinc-600 hover:bg-zinc-800/80 disabled:opacity-50";
+
+const BTN_WARNING =
+  "rounded-md border border-amber-600/40 bg-amber-950/30 px-3 py-1.5 text-xs font-medium text-amber-400 transition-colors hover:border-amber-500/50 hover:bg-amber-950/50 disabled:opacity-50";
+
+const BTN_DANGER_OUTLINE =
+  "rounded-md border border-red-800/60 bg-red-950/20 px-3 py-1.5 text-xs font-medium text-red-400 transition-colors hover:border-red-700/60 hover:bg-red-950/40 disabled:opacity-50";
+
+const BTN_DANGER_FILLED =
+  "rounded-md border border-red-700/50 bg-red-900/40 px-3 py-1.5 text-xs font-medium text-red-300 transition-colors hover:bg-red-900/60 disabled:opacity-50";
+
+const BTN_PRIMARY =
+  "rounded-md border border-teal-600/40 bg-teal-600/20 px-3 py-1.5 text-xs font-medium text-teal-300 transition-colors hover:bg-teal-600/30 disabled:opacity-50";
+
+const BTN_POSITIVE =
+  "rounded-md border border-emerald-600/40 bg-emerald-950/30 px-3 py-1.5 text-xs font-medium text-emerald-400 transition-colors hover:border-emerald-500/50 hover:bg-emerald-950/50 disabled:opacity-50";
 
 type PendingAction =
   | { kind: "status"; action: UserStatusAction }
@@ -44,6 +66,55 @@ function formatWhen(iso: string | null): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleString();
+}
+
+function DetailCard({
+  title,
+  children,
+  variant = "default",
+}: {
+  title: string;
+  children: React.ReactNode;
+  variant?: "default" | "danger";
+}) {
+  return (
+    <section
+      className={cn(
+        "rounded-lg border p-4",
+        variant === "danger"
+          ? "border-red-900/40 bg-red-950/15"
+          : "border-zinc-800/90 bg-zinc-900/40",
+      )}
+    >
+      <h3
+        className={cn(
+          "mb-3 text-[11px] font-semibold uppercase tracking-wider",
+          variant === "danger" ? "text-red-400/90" : "text-zinc-500",
+        )}
+      >
+        {title}
+      </h3>
+      {children}
+    </section>
+  );
+}
+
+function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-start justify-between gap-4 border-b border-zinc-800/60 py-2 last:border-b-0">
+      <span className="shrink-0 text-xs text-zinc-500">{label}</span>
+      <span className="text-right text-sm text-zinc-200">{value}</span>
+    </div>
+  );
+}
+
+function ActionGroup({ label, children }: { label?: string; children: React.ReactNode }) {
+  return (
+    <div className="mt-3">
+      {label && <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-zinc-600">{label}</p>}
+      <div className="flex flex-wrap gap-2">{children}</div>
+    </div>
+  );
 }
 
 export default function AdminUserDetailPanel({
@@ -233,207 +304,305 @@ export default function AdminUserDetailPanel({
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end bg-black/50" onClick={onClose}>
-      <div
-        className="h-full w-full max-w-lg overflow-y-auto border-l border-[#2a2a2a] bg-[#161616] p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-[#f1f1f1]">User details</h2>
-          <button type="button" onClick={onClose} className="rounded-md p-1.5 text-[#909090] hover:bg-[#222]">
-            <X className="h-5 w-5" />
+    <>
+      <div className="flex h-full flex-col overflow-hidden">
+        <div className="flex shrink-0 items-center justify-between border-b border-zinc-800/90 px-5 py-4">
+          <div>
+            <h2 className="text-sm font-semibold text-zinc-100">User details</h2>
+            <p className="mt-0.5 text-xs text-zinc-500">Review standing and take actions</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md p-1.5 text-zinc-500 transition-colors hover:bg-zinc-800/80 hover:text-zinc-300"
+            aria-label="Close panel"
+          >
+            <X className="h-4 w-4" />
           </button>
         </div>
 
-        {loading ? (
-          <div className="flex h-48 items-center justify-center text-[#909090]">
-            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-            Loading…
-          </div>
-        ) : error || !detail ? (
-          <div className="rounded-lg border border-[#5b2626] bg-[#2a1414] px-4 py-3 text-sm text-[#f0a8a8]">
-            {error ?? "User not found"}
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {actionError && (
-              <div className="rounded-lg border border-[#5b2626] bg-[#2a1414] px-3 py-2 text-sm text-[#f0a8a8]">
-                {actionError}
-              </div>
-            )}
-
-            {/* Profile */}
-            <section>
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#808080]">Profile</h3>
-              <p className="text-base font-medium text-[#f1f1f1]">{detail.profile.displayName || "—"}</p>
-              <p className="text-sm text-[#a0a0a0]">{detail.profile.email ?? "no email on file"}</p>
-              <p className="text-sm text-[#a0a0a0]">@{detail.profile.username ?? "—"}</p>
-              <p className="mt-1 text-xs text-[#707070]">Joined {formatWhen(detail.profile.createdAt)}</p>
-              <p className="text-xs text-[#707070]">Last profile activity {formatWhen(detail.cognito?.lastModifiedDate ?? null)}</p>
-            </section>
-
-            {/* Account status */}
-            <section>
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#808080]">Account status</h3>
-              <p className="text-sm text-[#e8e8e8]">
-                {detail.account.status}
-                {detail.account.statusReason ? ` — ${detail.account.statusReason}` : ""}
-              </p>
-              {detail.account.statusChangedAt && (
-                <p className="text-xs text-[#707070]">
-                  Changed {formatWhen(detail.account.statusChangedAt)} by {detail.account.statusChangedBy}
-                </p>
+        <div className="flex-1 overflow-y-auto px-5 py-4">
+          {loading ? (
+            <div className="flex h-48 items-center justify-center text-zinc-500">
+              <Loader2 className="mr-2 h-5 w-5 animate-spin text-teal-500" />
+              Loading…
+            </div>
+          ) : error || !detail ? (
+            <div className="rounded-lg border border-red-900/50 bg-red-950/30 px-4 py-3 text-sm text-red-300">
+              {error ?? "User not found"}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {actionError && (
+                <div className="rounded-lg border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-300">
+                  {actionError}
+                </div>
               )}
-              <p className="mt-1 text-xs text-[#707070]">
-                Cognito sign-in: {detail.cognito?.enabled === false ? "disabled" : "enabled"} ({detail.cognito?.userStatus ?? "unknown"})
-              </p>
-              <p className="text-xs text-[#707070]">
-                Email verified: {detail.cognito?.emailVerified ? "yes" : "no"} · Phone verified: {detail.cognito?.phoneVerified ? "yes" : "no"}
-              </p>
 
-              <div className="mt-3 flex flex-wrap gap-2">
-                {detail.account.status === "ACTIVE" && (
-                  <button onClick={() => setPending({ kind: "status", action: "suspend" })} className="rounded-lg border border-yellow-700/40 bg-yellow-900/20 px-3 py-1.5 text-xs font-medium text-yellow-400 hover:bg-yellow-900/30">
-                    Suspend
-                  </button>
-                )}
-                {(detail.account.status === "ACTIVE" || detail.account.status === "SUSPENDED") && (
-                  <button onClick={() => setPending({ kind: "status", action: "ban" })} className="rounded-lg border border-red-700/40 bg-red-900/20 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-900/30">
-                    Ban
-                  </button>
-                )}
-                {(detail.account.status === "SUSPENDED" || detail.account.status === "BANNED" || detail.account.status === "SOFT_DELETED") && (
-                  <button onClick={() => setPending({ kind: "status", action: "reactivate" })} className="rounded-lg border border-green-700/40 bg-green-900/20 px-3 py-1.5 text-xs font-medium text-green-400 hover:bg-green-900/30">
-                    Reactivate
-                  </button>
-                )}
-                <button onClick={() => setPending({ kind: "revoke-sessions" })} className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-xs font-medium text-[#e8e8e8] hover:bg-[#222]">
-                  Force logout
-                </button>
-                <button onClick={runResetPassword} disabled={busy} className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-xs font-medium text-[#e8e8e8] hover:bg-[#222] disabled:opacity-50">
-                  Reset password
-                </button>
-                <button onClick={() => setShowVerifyForm((s) => !s)} className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-xs font-medium text-[#e8e8e8] hover:bg-[#222]">
-                  Verification override
-                </button>
-              </div>
-
-              {showVerifyForm && (
-                <div className="mt-3 rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-3">
-                  <label className="mb-2 flex items-center gap-2 text-sm text-[#c8c8c8]">
-                    <input type="checkbox" checked={emailVerifiedDraft} onChange={(e) => setEmailVerifiedDraft(e.target.checked)} />
-                    Email verified
-                  </label>
-                  <label className="mb-2 flex items-center gap-2 text-sm text-[#c8c8c8]">
-                    <input type="checkbox" checked={phoneVerifiedDraft} onChange={(e) => setPhoneVerifiedDraft(e.target.checked)} />
-                    Phone verified
-                  </label>
-                  <textarea
-                    value={verifyReason}
-                    onChange={(e) => setVerifyReason(e.target.value)}
-                    placeholder="Reason"
-                    rows={2}
-                    className="mb-2 w-full rounded-lg border border-[#2a2a2a] bg-[#161616] px-2 py-1.5 text-sm text-[#e8e8e8] outline-none"
+              <DetailCard title="Profile">
+                <p className="text-base font-semibold text-zinc-50">{detail.profile.displayName || "—"}</p>
+                <p className="mt-1 text-sm text-zinc-400">{detail.profile.email ?? "No email on file"}</p>
+                <p className="text-sm text-zinc-500">@{detail.profile.username ?? "—"}</p>
+                <div className="mt-3 space-y-0">
+                  <MetaRow label="Joined" value={formatWhen(detail.profile.createdAt)} />
+                  <MetaRow
+                    label="Last profile activity"
+                    value={formatWhen(detail.cognito?.lastModifiedDate ?? null)}
                   />
-                  <button onClick={submitVerify} disabled={busy} className="rounded-lg bg-[#3b82f6] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#2f6fd6] disabled:opacity-50">
-                    Save override
-                  </button>
                 </div>
-              )}
-            </section>
+              </DetailCard>
 
-            {/* Plan & roles */}
-            <section>
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#808080]">Plan & roles</h3>
-              <p className="text-sm text-[#e8e8e8]">Plan: <span className="font-medium">{detail.tier}</span></p>
-              <p className="text-sm text-[#e8e8e8]">Roles: {detail.roles.join(", ")}</p>
-              <div className="mt-2 flex gap-2">
-                <button onClick={() => setShowPlanForm((s) => !s)} className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-xs font-medium text-[#e8e8e8] hover:bg-[#222]">
-                  Change plan
-                </button>
-                <button onClick={() => setShowRolesForm((s) => !s)} className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1.5 text-xs font-medium text-[#e8e8e8] hover:bg-[#222]">
-                  Assign roles
-                </button>
-              </div>
-
-              {showPlanForm && (
-                <div className="mt-3 rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-3">
-                  <select value={planDraft} onChange={(e) => setPlanDraft(e.target.value as AdminUserTier)} className="mb-2 w-full rounded-lg border border-[#2a2a2a] bg-[#161616] px-2 py-1.5 text-sm text-[#e8e8e8]">
-                    <option value="free">Free — 1 job / 7 days, 1 GiB storage, Spot pool</option>
-                    <option value="pro">Pro — unlimited jobs, 10 GiB storage, priority On-Demand pool</option>
-                  </select>
-                  <textarea value={planReason} onChange={(e) => setPlanReason(e.target.value)} placeholder="Reason" rows={2} className="mb-2 w-full rounded-lg border border-[#2a2a2a] bg-[#161616] px-2 py-1.5 text-sm text-[#e8e8e8]" />
-                  <button onClick={submitPlan} disabled={busy} className="rounded-lg bg-[#3b82f6] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#2f6fd6] disabled:opacity-50">
-                    Save plan
-                  </button>
+              <DetailCard title="Account status">
+                <div className="space-y-0">
+                  <MetaRow
+                    label="Standing"
+                    value={
+                      <span className="font-medium">
+                        {detail.account.status.replace(/_/g, " ")}
+                        {detail.account.statusReason ? ` — ${detail.account.statusReason}` : ""}
+                      </span>
+                    }
+                  />
+                  {detail.account.statusChangedAt && (
+                    <MetaRow
+                      label="Changed"
+                      value={`${formatWhen(detail.account.statusChangedAt)} by ${detail.account.statusChangedBy}`}
+                    />
+                  )}
+                  <MetaRow
+                    label="Cognito sign-in"
+                    value={
+                      detail.cognito?.enabled === false
+                        ? "Disabled"
+                        : `Enabled (${detail.cognito?.userStatus ?? "unknown"})`
+                    }
+                  />
+                  <MetaRow
+                    label="Email verified"
+                    value={detail.cognito?.emailVerified ? "Yes" : "No"}
+                  />
+                  <MetaRow
+                    label="Phone verified"
+                    value={detail.cognito?.phoneVerified ? "Yes" : "No"}
+                  />
                 </div>
-              )}
 
-              {showRolesForm && (
-                <div className="mt-3 rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-3">
-                  {ASSIGNABLE_ROLES.map((r) => (
-                    <label key={r} className="mb-1 flex items-center gap-2 text-sm text-[#c8c8c8]">
+                <ActionGroup label="Standing actions">
+                  {detail.account.status === "ACTIVE" && (
+                    <button
+                      type="button"
+                      onClick={() => setPending({ kind: "status", action: "suspend" })}
+                      className={BTN_WARNING}
+                    >
+                      Suspend
+                    </button>
+                  )}
+                  {(detail.account.status === "ACTIVE" || detail.account.status === "SUSPENDED") && (
+                    <button
+                      type="button"
+                      onClick={() => setPending({ kind: "status", action: "ban" })}
+                      className={BTN_DANGER_OUTLINE}
+                    >
+                      Ban
+                    </button>
+                  )}
+                  {(detail.account.status === "SUSPENDED" ||
+                    detail.account.status === "BANNED" ||
+                    detail.account.status === "SOFT_DELETED") && (
+                    <button
+                      type="button"
+                      onClick={() => setPending({ kind: "status", action: "reactivate" })}
+                      className={BTN_POSITIVE}
+                    >
+                      Reactivate
+                    </button>
+                  )}
+                </ActionGroup>
+
+                <ActionGroup label="Session & access">
+                  <button
+                    type="button"
+                    onClick={() => setPending({ kind: "revoke-sessions" })}
+                    className={BTN_SECONDARY}
+                  >
+                    Force logout
+                  </button>
+                  <button type="button" onClick={runResetPassword} disabled={busy} className={BTN_SECONDARY}>
+                    Reset password
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowVerifyForm((s) => !s)}
+                    className={BTN_SECONDARY}
+                  >
+                    Verification override
+                  </button>
+                </ActionGroup>
+
+                {showVerifyForm && (
+                  <div className="mt-3 rounded-md border border-zinc-800/90 bg-zinc-950/50 p-3">
+                    <label className="mb-2 flex items-center gap-2 text-sm text-zinc-300">
                       <input
                         type="checkbox"
-                        checked={rolesDraft.includes(r)}
-                        onChange={(e) =>
-                          setRolesDraft((prev) => (e.target.checked ? [...prev, r] : prev.filter((x) => x !== r)))
-                        }
+                        checked={emailVerifiedDraft}
+                        onChange={(e) => setEmailVerifiedDraft(e.target.checked)}
+                        className="rounded border-zinc-600"
                       />
-                      {r}
+                      Email verified
                     </label>
-                  ))}
-                  <textarea value={rolesReason} onChange={(e) => setRolesReason(e.target.value)} placeholder="Reason" rows={2} className="mb-2 mt-2 w-full rounded-lg border border-[#2a2a2a] bg-[#161616] px-2 py-1.5 text-sm text-[#e8e8e8]" />
-                  <button onClick={submitRoles} disabled={busy} className="rounded-lg bg-[#3b82f6] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#2f6fd6] disabled:opacity-50">
-                    Save roles
+                    <label className="mb-3 flex items-center gap-2 text-sm text-zinc-300">
+                      <input
+                        type="checkbox"
+                        checked={phoneVerifiedDraft}
+                        onChange={(e) => setPhoneVerifiedDraft(e.target.checked)}
+                        className="rounded border-zinc-600"
+                      />
+                      Phone verified
+                    </label>
+                    <textarea
+                      value={verifyReason}
+                      onChange={(e) => setVerifyReason(e.target.value)}
+                      placeholder="Reason (optional)"
+                      rows={2}
+                      className={cn(INPUT_CLASS, "mb-2")}
+                    />
+                    <button type="button" onClick={submitVerify} disabled={busy} className={BTN_PRIMARY}>
+                      Save override
+                    </button>
+                  </div>
+                )}
+              </DetailCard>
+
+              <DetailCard title="Plan & roles">
+                <div className="space-y-0">
+                  <MetaRow
+                    label="Plan"
+                    value={<span className="font-medium capitalize text-teal-400">{detail.tier}</span>}
+                  />
+                  <MetaRow label="Roles" value={detail.roles.join(", ") || "—"} />
+                </div>
+
+                <ActionGroup>
+                  <button type="button" onClick={() => setShowPlanForm((s) => !s)} className={BTN_SECONDARY}>
+                    Change plan
+                  </button>
+                  <button type="button" onClick={() => setShowRolesForm((s) => !s)} className={BTN_SECONDARY}>
+                    Assign roles
+                  </button>
+                </ActionGroup>
+
+                {showPlanForm && (
+                  <div className="mt-3 rounded-md border border-zinc-800/90 bg-zinc-950/50 p-3">
+                    <select
+                      value={planDraft}
+                      onChange={(e) => setPlanDraft(e.target.value as AdminUserTier)}
+                      className={cn(INPUT_CLASS, "mb-2")}
+                    >
+                      <option value="free">Free — 1 job / 7 days, 1 GiB storage, Spot pool</option>
+                      <option value="pro">Pro — unlimited jobs, 10 GiB storage, priority On-Demand pool</option>
+                    </select>
+                    <textarea
+                      value={planReason}
+                      onChange={(e) => setPlanReason(e.target.value)}
+                      placeholder="Reason (required)"
+                      rows={2}
+                      className={cn(INPUT_CLASS, "mb-2")}
+                    />
+                    <button type="button" onClick={submitPlan} disabled={busy} className={BTN_PRIMARY}>
+                      Save plan
+                    </button>
+                  </div>
+                )}
+
+                {showRolesForm && (
+                  <div className="mt-3 rounded-md border border-zinc-800/90 bg-zinc-950/50 p-3">
+                    {ASSIGNABLE_ROLES.map((r) => (
+                      <label key={r} className="mb-1.5 flex items-center gap-2 text-sm text-zinc-300">
+                        <input
+                          type="checkbox"
+                          checked={rolesDraft.includes(r)}
+                          onChange={(e) =>
+                            setRolesDraft((prev) => (e.target.checked ? [...prev, r] : prev.filter((x) => x !== r)))
+                          }
+                          className="rounded border-zinc-600"
+                        />
+                        {r}
+                      </label>
+                    ))}
+                    <textarea
+                      value={rolesReason}
+                      onChange={(e) => setRolesReason(e.target.value)}
+                      placeholder="Reason (required)"
+                      rows={2}
+                      className={cn(INPUT_CLASS, "mb-2 mt-2")}
+                    />
+                    <button type="button" onClick={submitRoles} disabled={busy} className={BTN_PRIMARY}>
+                      Save roles
+                    </button>
+                  </div>
+                )}
+              </DetailCard>
+
+              <DetailCard title="Usage & quota">
+                <div className="space-y-0">
+                  <MetaRow
+                    label="Jobs (7d)"
+                    value={
+                      <>
+                        {detail.usage.usedInWindow ?? 0}
+                        {detail.usage.quotaLimit != null ? ` / ${detail.usage.quotaLimit}` : " / unlimited"}
+                      </>
+                    }
+                  />
+                  <MetaRow
+                    label="Storage"
+                    value={`${formatBytes(detail.usage.storageUsedBytes)} / ${formatBytes(detail.usage.storageCapBytes)}`}
+                  />
+                </div>
+              </DetailCard>
+
+              <DetailCard title="Recent activity">
+                {detail.recentJobs.length === 0 ? (
+                  <p className="text-sm text-zinc-500">No jobs yet.</p>
+                ) : (
+                  <ul className="divide-y divide-zinc-800/60">
+                    {detail.recentJobs.map((j) => (
+                      <li key={j.sceneId} className="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
+                        <span className="truncate text-sm text-zinc-300">{j.name ?? j.sceneId}</span>
+                        <span className="shrink-0 rounded border border-zinc-700/60 bg-zinc-800/40 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-500">
+                          {j.status}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </DetailCard>
+
+              <DetailCard title="Danger zone" variant="danger">
+                <p className="mb-3 text-xs leading-relaxed text-zinc-500">
+                  Destructive actions disable access and may remove the sign-in identity. Each requires confirmation
+                  and is recorded in the audit log.
+                </p>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={() => setPending({ kind: "soft-delete" })}
+                    className={BTN_DANGER_OUTLINE}
+                  >
+                    Soft delete
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPending({ kind: "hard-delete" })}
+                    className={BTN_DANGER_FILLED}
+                  >
+                    Hard delete
                   </button>
                 </div>
-              )}
-            </section>
-
-            {/* Usage */}
-            <section>
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#808080]">Usage & quota</h3>
-              <p className="text-sm text-[#e8e8e8]">
-                Jobs (7d): {detail.usage.usedInWindow ?? 0}
-                {detail.usage.quotaLimit != null ? ` / ${detail.usage.quotaLimit}` : " / unlimited"}
-              </p>
-              <p className="text-sm text-[#e8e8e8]">
-                Storage: {formatBytes(detail.usage.storageUsedBytes)} / {formatBytes(detail.usage.storageCapBytes)}
-              </p>
-            </section>
-
-            {/* Recent jobs */}
-            <section>
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#808080]">Recent job activity</h3>
-              {detail.recentJobs.length === 0 ? (
-                <p className="text-sm text-[#707070]">No jobs yet.</p>
-              ) : (
-                <ul className="space-y-1">
-                  {detail.recentJobs.map((j) => (
-                    <li key={j.sceneId} className="flex items-center justify-between text-sm text-[#c8c8c8]">
-                      <span className="truncate">{j.name ?? j.sceneId}</span>
-                      <span className="ml-2 shrink-0 text-xs text-[#808080]">{j.status}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-
-            {/* Danger zone */}
-            <section className="rounded-lg border border-[#3a2020] bg-[#1a1414] p-3">
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#c08080]">Danger zone</h3>
-              <div className="flex flex-wrap gap-2">
-                <button onClick={() => setPending({ kind: "soft-delete" })} className="rounded-lg border border-[#5b2626] bg-[#2a1414] px-3 py-1.5 text-xs font-medium text-[#f0a8a8] hover:bg-[#3a1a1a]">
-                  Soft delete
-                </button>
-                <button onClick={() => setPending({ kind: "hard-delete" })} className="rounded-lg bg-[#c23a3a] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#a83030]">
-                  Hard delete
-                </button>
-              </div>
-            </section>
-          </div>
-        )}
+              </DetailCard>
+            </div>
+          )}
+        </div>
       </div>
 
       {pending?.kind === "status" && pending.action === "suspend" && (
@@ -441,7 +610,7 @@ export default function AdminUserDetailPanel({
           title="Suspend account"
           description="Blocks new uploads and job submissions immediately. Currently-queued jobs are cancelled; running jobs finish normally. The user can still sign in."
           confirmLabel="Suspend"
-          tone="destructive"
+          tone="warning"
           busy={busy}
           error={actionError}
           onCancel={() => setPending(null)}
@@ -515,6 +684,6 @@ export default function AdminUserDetailPanel({
           onConfirm={(reason) => runHardDelete(reason)}
         />
       )}
-    </div>
+    </>
   );
 }

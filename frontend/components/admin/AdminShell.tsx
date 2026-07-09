@@ -40,7 +40,11 @@ export default function AdminShell() {
         ))}
       </div>
 
-      {tab === "users" && <AdminUsersView />}
+      {tab === "users" && (
+        <div className="mx-auto w-full max-w-[1600px]">
+          <AdminUsersView />
+        </div>
+      )}
       {tab === "attempts" && <AdminAttemptsView />}
       {tab === "asg" && <AdminAsgConfigView />}
       {tab === "worker-amis" && <WorkerAmiPanel />}
