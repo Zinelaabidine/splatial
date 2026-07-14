@@ -1,13 +1,11 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Hanken_Grotesk, JetBrains_Mono } from "next/font/google";
+import { Geist_Mono, Hanken_Grotesk, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import AmplifyProvider from "@/components/layout/AmplifyProvider";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
+// Geist Sans was previously loaded here but never consumed: --font-sans resolves
+// to Tailwind's default stack and the body uses --font-hanken as its primary
+// family. Dropping it removes one WOFF2 download from the critical path.
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
@@ -38,7 +36,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${hankenGrotesk.variable} ${jetbrainsMono.variable} font-[family-name:var(--font-hanken)] bg-[var(--nord-bg)] text-[var(--nord-ink)] antialiased`}
+        className={`${geistMono.variable} ${hankenGrotesk.variable} ${jetbrainsMono.variable} font-[family-name:var(--font-hanken)] bg-[var(--nord-bg)] text-[var(--nord-ink)] antialiased`}
       >
         <AmplifyProvider>{children}</AmplifyProvider>
       </body>

@@ -1,6 +1,7 @@
 "use client";
 
 import { authenticatedFetch } from "@/services/apiClient";
+import { invalidateScenesCache } from "@/services/scenesService";
 import type {
   CancelJobResponse,
   ColmapConfig,
@@ -18,7 +19,7 @@ export async function submitJob(
   options?: SubmitJobOptions,
   signal?: AbortSignal,
 ): Promise<SubmitJobResponse> {
-  return authenticatedFetch("/jobs/submit", {
+  const result = (await authenticatedFetch("/jobs/submit", {
     method: "POST",
     body: JSON.stringify({
       sceneId,
@@ -26,15 +27,19 @@ export async function submitJob(
       ...(options?.colmapConfig ? { colmapConfig: options.colmapConfig } : {}),
     }),
     signal,
-  }) as Promise<SubmitJobResponse>;
+  })) as SubmitJobResponse;
+  invalidateScenesCache();
+  return result;
 }
 
 export async function cancelJob(
   sceneId: string,
   signal?: AbortSignal,
 ): Promise<CancelJobResponse> {
-  return authenticatedFetch(`/jobs/${sceneId}/cancel`, {
+  const result = (await authenticatedFetch(`/jobs/${sceneId}/cancel`, {
     method: "POST",
     signal,
-  }) as Promise<CancelJobResponse>;
+  })) as CancelJobResponse;
+  invalidateScenesCache();
+  return result;
 }
