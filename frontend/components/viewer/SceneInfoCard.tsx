@@ -112,16 +112,16 @@ export default function SceneInfoCard({
   return (
     <div
       className={cn(
-        "pointer-events-auto flex max-w-sm flex-col gap-2 rounded-xl border border-white/10 bg-black/70 px-4 py-3 shadow-lg backdrop-blur-md",
+        "pointer-events-auto flex max-w-sm flex-col gap-2 rounded-xl border border-[var(--nord-hairline)] bg-[var(--nord-scrim)] px-4 py-3 shadow-lg backdrop-blur-md",
         className,
       )}
     >
       {sceneName ? (
         <div className="flex items-center gap-2">
-          <h1 className="truncate text-base font-semibold text-white">{sceneName}</h1>
+          <h1 className="truncate text-base font-semibold text-[var(--nord-ink)]">{sceneName}</h1>
           {viewerCount !== null && viewerCount > 0 ? (
-            <span className="flex shrink-0 items-center gap-1 rounded-full bg-white/10 px-2 py-0.5 font-sw-mono text-[10px] text-white/70">
-              <span className="size-1.5 rounded-full bg-emerald-400" aria-hidden />
+            <span className="flex shrink-0 items-center gap-1 rounded-full bg-[var(--nord-tint)] px-2 py-0.5 font-sw-mono text-[10px] text-[var(--nord-ink)]">
+              <span className="size-1.5 rounded-full bg-[var(--nord-success)]" aria-hidden />
               {viewerCount} watching
             </span>
           ) : null}
@@ -144,12 +144,12 @@ export default function SceneInfoCard({
           <div className="min-w-0 flex-1">
             <Link
               href={`/u/${encodeURIComponent(handle)}`}
-              className="block truncate text-sm font-medium text-white hover:underline"
+              className="block truncate text-sm font-medium text-[var(--nord-ink)] hover:underline"
             >
               {displayName || `@${handle}`}
             </Link>
             {bio ? (
-              <p className="truncate text-xs text-white/60">{bio}</p>
+              <p className="truncate text-xs text-[var(--nord-ink)]">{bio}</p>
             ) : null}
           </div>
 
@@ -163,7 +163,7 @@ export default function SceneInfoCard({
               className={cn(
                 "h-auto shrink-0 rounded-full px-3 py-1 text-xs",
                 isFollowing
-                  ? "border-white/20 bg-transparent text-white hover:bg-white/10"
+                  ? "border-[var(--nord-hairline)] bg-transparent text-[var(--nord-ink)] hover:bg-[var(--nord-tint)]"
                   : undefined,
               )}
             >

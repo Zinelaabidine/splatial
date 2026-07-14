@@ -70,8 +70,8 @@ export default function BookmarkButton({
         title={bookmarked ? "Saved" : "Save"}
         onClick={() => void handleToggle()}
         className={cn(
-          "h-auto gap-1.5 rounded-full border border-white/10 bg-black/70 px-3 py-2 text-white shadow-lg backdrop-blur-md hover:bg-white/10",
-          bookmarked && "bg-white/15 ring-1 ring-white/30",
+          "h-auto gap-1.5 rounded-full border border-[var(--nord-hairline)] bg-[var(--nord-scrim)] px-3 py-2 text-[var(--nord-cta-fg)] shadow-lg backdrop-blur-md hover:bg-[var(--nord-tint)]",
+          bookmarked && "bg-[var(--nord-tint)] ring-1 ring-[var(--nord-hairline)]",
         )}
       >
         <Bookmark
@@ -82,7 +82,7 @@ export default function BookmarkButton({
         <span className="text-xs font-medium">{bookmarked ? "Saved" : "Save"}</span>
       </Button>
       {error ? (
-        <p className="max-w-xs rounded-md bg-black/80 px-2 py-1 text-center text-xs text-red-400">
+        <p className="max-w-xs rounded-md bg-[var(--nord-scrim)] px-2 py-1 text-center text-xs text-[var(--nord-danger)]">
           {error}
         </p>
       ) : null}

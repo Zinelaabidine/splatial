@@ -24,7 +24,7 @@ function LandingPageGateInner() {
   if (!isHydrated || authStatus === "configuring") {
     return (
       <div className="sw-field flex min-h-screen items-center justify-center">
-        <div className="h-8 w-8 animate-pulse rounded-full bg-white/10" />
+        <div className="h-8 w-8 animate-pulse rounded-full bg-[var(--nord-tint)]" />
       </div>
     );
   }

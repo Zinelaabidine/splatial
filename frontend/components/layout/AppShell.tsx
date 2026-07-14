@@ -21,7 +21,7 @@ function AppShellInner({ children, fullBleed: fullBleedProp }: AppShellProps) {
     fullBleedProp ?? pathname.startsWith("/scenes/view");
 
   return (
-    <div className="relative flex h-screen flex-col overflow-hidden text-[#eef1f7]">
+    <div className="relative flex h-screen flex-col overflow-hidden text-[var(--nord-ink)]">
       {/* Volumetric data-field background */}
       <div className="sw-field pointer-events-none fixed inset-0 -z-30" />
       <div className="sw-field-glow pointer-events-none fixed inset-0 -z-20" />

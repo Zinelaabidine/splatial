@@ -11,7 +11,7 @@ export default function OrientationWidget({ className }: OrientationWidgetProps)
   return (
     <div
       className={cn(
-        "pointer-events-none select-none bg-white/30 backdrop-blur-sm shadow-xl rounded-lg p-2",
+        "pointer-events-none select-none bg-[var(--nord-tint)] backdrop-blur-sm shadow-xl rounded-lg p-2",
         className,
       )}
       aria-hidden

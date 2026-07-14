@@ -27,8 +27,8 @@ const LegacySplatViewer = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="flex h-full items-center justify-center bg-[#0a0a0a]">
-        <Loader2 className="h-6 w-6 animate-spin text-[#909090]" />
+      <div className="flex h-full items-center justify-center bg-[var(--nord-bg)]">
+        <Loader2 className="h-6 w-6 animate-spin text-[var(--nord-slate)]" />
       </div>
     ),
   },
@@ -55,16 +55,16 @@ function EditSceneViewer({ sceneId }: { sceneId: string }) {
 
   if (loading) {
     return (
-      <div className="flex h-full items-center justify-center bg-[#0a0a0a]">
-        <p className="text-sm text-[#909090]">Loading splat…</p>
+      <div className="flex h-full items-center justify-center bg-[var(--nord-bg)]">
+        <p className="text-sm text-[var(--nord-slate)]">Loading splat…</p>
       </div>
     );
   }
 
   if (error || !splatUrl) {
     return (
-      <div className="flex h-full items-center justify-center bg-[#0a0a0a] px-6 text-center">
-        <p className="text-sm text-red-400">{error ?? "Unable to load scene."}</p>
+      <div className="flex h-full items-center justify-center bg-[var(--nord-bg)] px-6 text-center">
+        <p className="text-sm text-[var(--nord-danger)]">{error ?? "Unable to load scene."}</p>
       </div>
     );
   }
@@ -210,22 +210,22 @@ export default function EditSceneModal({
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-[var(--nord-scrim)] p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-labelledby="edit-scene-title"
       onClick={busy ? undefined : onDismiss}
     >
       <div
-        className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-[#404040] bg-[#1a1a1a] shadow-2xl"
+        className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-[var(--nord-hairline)] bg-[var(--nord-surface)] shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <header className="flex items-center justify-between border-b border-[#303030] px-5 py-4">
+        <header className="flex items-center justify-between border-b border-[var(--nord-hairline)] px-5 py-4">
           <div>
-            <h2 id="edit-scene-title" className="text-base font-semibold text-white">
+            <h2 id="edit-scene-title" className="text-base font-semibold text-[var(--nord-ink)]">
               Edit scene
             </h2>
-            <p className="mt-0.5 text-xs text-[#909090]">
+            <p className="mt-0.5 text-xs text-[var(--nord-slate)]">
               Rename the scene and orbit to a view you like, then set it as the thumbnail.
             </p>
           </div>
@@ -234,7 +234,7 @@ export default function EditSceneModal({
             onClick={onDismiss}
             disabled={busy}
             aria-label="Close"
-            className="rounded-lg p-1.5 text-[#909090] transition-colors hover:bg-[#303030] hover:text-white disabled:opacity-40"
+            className="rounded-lg p-1.5 text-[var(--nord-slate)] transition-colors hover:bg-[var(--nord-surface)] hover:text-[var(--nord-ink)] disabled:opacity-40"
           >
             <X className="h-4 w-4" />
           </button>
@@ -242,7 +242,7 @@ export default function EditSceneModal({
 
         <div className="flex flex-col gap-4 overflow-y-auto px-5 py-4">
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="edit-scene-name" className="text-xs font-medium text-[#d4d4d4]">
+            <label htmlFor="edit-scene-name" className="text-xs font-medium text-[var(--nord-ink)]">
               Scene name
             </label>
             <input
@@ -251,7 +251,7 @@ export default function EditSceneModal({
               value={name}
               disabled={busy}
               onChange={(e) => setName(e.target.value)}
-              className="rounded-lg border border-[#404040] bg-[#262626] px-3 py-2 text-sm text-white outline-none transition focus:border-[#6366f1] focus:ring-2 focus:ring-[#6366f1]/20 disabled:opacity-50"
+              className="rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-surface)] px-3 py-2 text-sm text-[var(--nord-ink)] outline-none transition focus:border-[#6366f1] focus:ring-2 focus:ring-[#6366f1]/20 disabled:opacity-50"
             />
           </div>
 
@@ -262,7 +262,7 @@ export default function EditSceneModal({
           />
 
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="edit-scene-category" className="text-xs font-medium text-[#d4d4d4]">
+            <label htmlFor="edit-scene-category" className="text-xs font-medium text-[var(--nord-ink)]">
               Category
             </label>
             <select
@@ -270,7 +270,7 @@ export default function EditSceneModal({
               value={category ?? ""}
               disabled={busy}
               onChange={(e) => setCategory(e.target.value === "" ? null : e.target.value)}
-              className="rounded-lg border border-[#404040] bg-[#262626] px-3 py-2 text-sm text-white outline-none transition focus:border-[#6366f1] focus:ring-2 focus:ring-[#6366f1]/20 disabled:opacity-50"
+              className="rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-surface)] px-3 py-2 text-sm text-[var(--nord-ink)] outline-none transition focus:border-[#6366f1] focus:ring-2 focus:ring-[#6366f1]/20 disabled:opacity-50"
             >
               <option value="">None</option>
               {SCENE_CATEGORIES.map((cat) => (
@@ -283,17 +283,17 @@ export default function EditSceneModal({
 
           <SceneTagsInput tags={tags} disabled={busy} onChange={setTags} />
 
-          <div className="relative overflow-hidden rounded-xl border border-[#303030] bg-[#0a0a0a]">
+          <div className="relative overflow-hidden rounded-xl border border-[var(--nord-hairline)] bg-[var(--nord-bg)]">
             <div className="relative h-[min(52vh,420px)] w-full [&_.splat-viewer-container]:h-full [&_#canvas]:h-full [&_#canvas]:w-full">
               <EditSceneViewer sceneId={sceneId} />
             </div>
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center bg-gradient-to-t from-black/80 to-transparent px-4 pb-4 pt-10">
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center bg-gradient-to-t from-[var(--nord-scrim)] to-transparent px-4 pb-4 pt-10">
               <Button
                 type="button"
                 size="sm"
                 disabled={busy}
                 onClick={() => void handleCaptureThumbnail()}
-                className="pointer-events-auto bg-white/10 text-white backdrop-blur hover:bg-white/20"
+                className="pointer-events-auto bg-[var(--nord-tint)] text-[var(--nord-ink)] backdrop-blur hover:bg-[var(--nord-tint)]"
               >
                 <Camera data-icon="inline-start" />
                 {capturing ? "Capturing…" : "Set thumbnail from current view"}
@@ -302,7 +302,7 @@ export default function EditSceneModal({
           </div>
 
           {thumbnailPreview && (
-            <div className="flex items-center gap-3 rounded-lg border border-[#303030] bg-[#212121] p-3">
+            <div className="flex items-center gap-3 rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-surface)] p-3">
               {/* Presigned S3 / blob URLs — not compatible with next/image */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
@@ -310,7 +310,7 @@ export default function EditSceneModal({
                 alt="Selected thumbnail preview"
                 className="h-16 w-24 shrink-0 rounded-md object-cover"
               />
-              <p className="text-xs text-[#909090]">
+              <p className="text-xs text-[var(--nord-slate)]">
                 {thumbnailBlob
                   ? "New thumbnail selected — save to upload."
                   : "Current thumbnail"}
@@ -319,19 +319,19 @@ export default function EditSceneModal({
           )}
 
           {error && (
-            <p className="text-sm text-red-400" role="alert">
+            <p className="text-sm text-[var(--nord-danger)]" role="alert">
               {error}
             </p>
           )}
         </div>
 
-        <footer className="flex justify-end gap-2 border-t border-[#303030] px-5 py-4">
+        <footer className="flex justify-end gap-2 border-t border-[var(--nord-hairline)] px-5 py-4">
           <Button
             type="button"
             variant="outline"
             disabled={busy}
             onClick={onDismiss}
-            className="border-[#404040] bg-transparent text-[#d4d4d4] hover:bg-[#303030] hover:text-white"
+            className="border-[var(--nord-hairline)] bg-transparent text-[var(--nord-ink)] hover:bg-[var(--nord-surface)] hover:text-[var(--nord-ink)]"
           >
             Cancel
           </Button>

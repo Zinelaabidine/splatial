@@ -24,7 +24,7 @@ export default function MarketingHeader() {
             <Link
               key={link.href}
               href={link.href}
-              className="text-sm font-medium text-[#b0b0ba] transition-colors hover:text-white"
+              className="text-sm font-medium text-[var(--nord-slate)] transition-colors hover:text-[var(--nord-ink)]"
             >
               {link.label}
             </Link>
@@ -36,7 +36,7 @@ export default function MarketingHeader() {
             href="/scenes"
             className={cn(
               buttonVariants({ variant: "ghost", size: "lg" }),
-              "text-[#e8e8ec] hover:bg-white/10",
+              "text-[var(--nord-ink)] hover:bg-[var(--nord-tint)]",
             )}
           >
             Log in
@@ -45,7 +45,7 @@ export default function MarketingHeader() {
             href="/scenes?authTab=signup"
             className={cn(
               buttonVariants({ size: "lg" }),
-              "bg-[#19c2ad] text-black hover:bg-[#22d6bf]",
+              "bg-[var(--nord-pine)] text-[var(--nord-ink)] hover:bg-[var(--nord-pine)]",
             )}
           >
             Get Started

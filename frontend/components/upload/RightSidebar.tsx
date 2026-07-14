@@ -99,10 +99,10 @@ export default function RightSidebar({
       {/* Header */}
       <header className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-semibold tracking-tight text-slate-900">
+          <h3 className="text-sm font-semibold tracking-tight text-[var(--nord-ink)]">
             Activity
           </h3>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-[var(--nord-slate)]">
             {active.length === 0 && terminated.length === 0
               ? "Nothing here yet"
               : `${active.length} active · ${terminated.length} recent`}
@@ -113,7 +113,7 @@ export default function RightSidebar({
             variant="ghost"
             size="xs"
             onClick={onClearTerminated}
-            className="text-slate-400 hover:text-slate-700"
+            className="text-[var(--nord-slate)] hover:text-[var(--nord-ink)]"
           >
             <Trash2 className="h-3 w-3" />
             Clear
@@ -166,7 +166,7 @@ export default function RightSidebar({
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <h4 className="text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-400">
+    <h4 className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--nord-slate)]">
       {children}
     </h4>
   );
@@ -182,10 +182,10 @@ function EmptyState({
   subtitle: string;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-slate-100 bg-slate-50/40 px-3 py-6 text-center">
-      <span className="text-slate-300">{icon}</span>
-      <p className="text-xs font-medium text-slate-600">{title}</p>
-      <p className="text-[11px] text-slate-400">{subtitle}</p>
+    <div className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-[var(--nord-hairline)] bg-[var(--nord-surface-2)] px-3 py-6 text-center">
+      <span className="text-[var(--nord-ink)]">{icon}</span>
+      <p className="text-xs font-medium text-[var(--nord-slate-soft)]">{title}</p>
+      <p className="text-[11px] text-[var(--nord-slate)]">{subtitle}</p>
     </div>
   );
 }
@@ -205,20 +205,20 @@ function ActiveRow({
     item.stage === "processing";
 
   return (
-    <li className="group rounded-xl border border-slate-100 bg-white p-3 transition-colors hover:border-slate-200">
+    <li className="group rounded-xl border border-[var(--nord-hairline)] bg-[var(--nord-surface)] p-3 transition-colors hover:border-[var(--nord-hairline)]">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px] font-medium text-slate-900">
+          <p className="truncate text-[13px] font-medium text-[var(--nord-ink)]">
             {item.filename}
           </p>
-          <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-slate-400">
+          <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-[var(--nord-slate)]">
             <span>{formatBytes(item.size)}</span>
-            <span className="h-1 w-1 rounded-full bg-slate-200" />
-            <span className="inline-flex items-center gap-1 text-slate-500">
+            <span className="h-1 w-1 rounded-full bg-[var(--nord-surface-2)]" />
+            <span className="inline-flex items-center gap-1 text-[var(--nord-slate)]">
               {item.stage === "processing" ? (
                 <Loader2 className="h-3 w-3 animate-spin text-indigo-500" />
               ) : item.stage === "uploading" ? null : (
-                <Loader2 className="h-3 w-3 animate-spin text-slate-400" />
+                <Loader2 className="h-3 w-3 animate-spin text-[var(--nord-slate)]" />
               )}
               {STAGE_LABEL[item.stage]}
               {item.stage === "uploading" ? ` · ${item.progress}%` : ""}
@@ -228,7 +228,7 @@ function ActiveRow({
         <button
           type="button"
           onClick={() => onCancel(item.id)}
-          className="rounded-md p-1 text-slate-300 opacity-0 transition-all hover:bg-slate-50 hover:text-slate-700 group-hover:opacity-100"
+          className="rounded-md p-1 text-[var(--nord-ink)] opacity-0 transition-all hover:bg-[var(--nord-surface-2)] hover:text-[var(--nord-ink)] group-hover:opacity-100"
           aria-label="Cancel upload"
         >
           <X className="h-3.5 w-3.5" />
@@ -238,7 +238,7 @@ function ActiveRow({
       <Progress
         value={item.progress}
         className={cn(
-          "mt-3 [&_[data-slot=progress-track]]:bg-slate-100 [&_[data-slot=progress-track]]:h-1",
+          "mt-3 [&_[data-slot=progress-track]]:bg-[var(--nord-surface-2)] [&_[data-slot=progress-track]]:h-1",
           "[&_[data-slot=progress-indicator]]:bg-indigo-500",
           indeterminate && "[&_[data-slot=progress-indicator]]:animate-pulse [&_[data-slot=progress-indicator]]:opacity-60",
         )}
@@ -275,8 +275,8 @@ function RecentTile({
   };
 
   return (
-    <li className="group relative overflow-hidden rounded-xl border border-slate-100 bg-white transition-colors hover:border-slate-200">
-      <div className="relative aspect-square w-full bg-slate-50">
+    <li className="group relative overflow-hidden rounded-xl border border-[var(--nord-hairline)] bg-[var(--nord-surface)] transition-colors hover:border-[var(--nord-hairline)]">
+      <div className="relative aspect-square w-full bg-[var(--nord-surface-2)]">
         {item.thumbnailUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -285,11 +285,11 @@ function RecentTile({
             className="h-full w-full object-cover"
           />
         ) : (
-          <div className="grid h-full w-full place-items-center text-slate-300">
+          <div className="grid h-full w-full place-items-center text-[var(--nord-ink)]">
             {ok ? (
-              <CheckCircle2 className="h-6 w-6 text-emerald-500" />
+              <CheckCircle2 className="h-6 w-6 text-[var(--nord-success)]" />
             ) : canceled ? (
-              <XCircle className="h-6 w-6 text-slate-400" />
+              <XCircle className="h-6 w-6 text-[var(--nord-slate)]" />
             ) : uploaded ? (
               <Play className="h-6 w-6 text-indigo-400" />
             ) : (
@@ -301,7 +301,7 @@ function RecentTile({
         <button
           type="button"
           onClick={() => onRemove(item.id)}
-          className="absolute right-1.5 top-1.5 rounded-md bg-white/80 p-1 text-slate-400 opacity-0 backdrop-blur-sm transition-opacity hover:bg-white hover:text-slate-700 group-hover:opacity-100"
+          className="absolute right-1.5 top-1.5 rounded-md bg-[var(--nord-tint)] p-1 text-[var(--nord-slate)] opacity-0 backdrop-blur-sm transition-opacity hover:bg-[var(--nord-surface)] hover:text-[var(--nord-ink)] group-hover:opacity-100"
           aria-label="Dismiss"
         >
           <X className="h-3 w-3" />
@@ -310,10 +310,10 @@ function RecentTile({
         <span
           className={cn(
             "absolute bottom-1.5 left-1.5 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider",
-            ok && "bg-emerald-50 text-emerald-700",
+            ok && "bg-[var(--nord-success)] text-[var(--nord-success)]",
             uploaded && "bg-indigo-50 text-indigo-700",
             !ok && !canceled && !uploaded && "bg-rose-50 text-rose-700",
-            canceled && "bg-slate-100 text-slate-500",
+            canceled && "bg-[var(--nord-surface-2)] text-[var(--nord-slate)]",
           )}
         >
           {STAGE_LABEL[item.stage]}
@@ -321,10 +321,10 @@ function RecentTile({
       </div>
 
       <div className="p-2">
-        <p className="truncate text-[11px] font-medium text-slate-900">
+        <p className="truncate text-[11px] font-medium text-[var(--nord-ink)]">
           {item.filename}
         </p>
-        <p className="text-[10px] text-slate-400">
+        <p className="text-[10px] text-[var(--nord-slate)]">
           {formatTimeAgo(item.finishedAt ?? item.startedAt)}
         </p>
         {item.error ? (
@@ -341,7 +341,7 @@ function RecentTile({
               <button
                 type="button"
                 onClick={handleSubmit}
-                className="flex flex-1 items-center justify-center gap-1 rounded-md bg-indigo-600 px-2 py-1 text-[10px] font-semibold text-white hover:bg-indigo-700 active:bg-indigo-800"
+                className="flex flex-1 items-center justify-center gap-1 rounded-md bg-indigo-600 px-2 py-1 text-[10px] font-semibold text-[var(--nord-ink)] hover:bg-indigo-700 active:bg-[var(--nord-surface)]"
               >
                 <Play className="h-2.5 w-2.5" />
                 Submit
@@ -352,8 +352,8 @@ function RecentTile({
                 aria-expanded={showAdvanced}
                 aria-label="Advanced settings"
                 className={cn(
-                  "flex items-center justify-center rounded-md border px-1.5 py-1 text-slate-500 hover:bg-slate-50 hover:text-slate-700",
-                  showAdvanced ? "border-indigo-200 bg-indigo-50 text-indigo-600" : "border-slate-200",
+                  "flex items-center justify-center rounded-md border px-1.5 py-1 text-[var(--nord-slate)] hover:bg-[var(--nord-surface-2)] hover:text-[var(--nord-ink)]",
+                  showAdvanced ? "border-indigo-200 bg-indigo-50 text-indigo-600" : "border-[var(--nord-hairline)]",
                 )}
               >
                 <Settings2 className="h-2.5 w-2.5" />

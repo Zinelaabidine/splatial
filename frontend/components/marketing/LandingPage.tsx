@@ -59,16 +59,16 @@ export default function LandingPage() {
       <section className="mx-auto max-w-6xl px-5 pt-16 pb-20 sm:px-8 sm:pt-24 sm:pb-28">
         <div className="grid items-center gap-14 lg:grid-cols-[1.05fr_0.95fr] lg:gap-10">
           <div>
-            <span className="sw-control inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium text-[#9a9aa4]">
-              <Sparkles className="h-3.5 w-3.5 text-[#19c2ad]" />
+            <span className="sw-control inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium text-[var(--nord-slate)]">
+              <Sparkles className="h-3.5 w-3.5 text-[var(--nord-teal)]" />
               High-fidelity Gaussian splatting
             </span>
 
-            <h1 className="mt-5 text-[2.5rem] leading-[1.08] font-semibold tracking-tight text-white sm:text-[3.25rem]">
+            <h1 className="mt-5 text-[2.5rem] leading-[1.08] font-semibold tracking-tight text-[var(--nord-ink)] sm:text-[3.25rem]">
               Turn your photos into explorable 3D worlds.
             </h1>
 
-            <p className="mt-5 max-w-lg text-base leading-relaxed text-[#a4a4ae] sm:text-lg">
+            <p className="mt-5 max-w-lg text-base leading-relaxed text-[var(--nord-slate)] sm:text-lg">
               Splatial is the cloud-native Gaussian splatting platform. Upload
               photos, get a photorealistic volumetric scene back, and share
               it anywhere &mdash; powered by our cloud GPUs, so no local
@@ -80,7 +80,7 @@ export default function LandingPage() {
                 href="/scenes?authTab=signup"
                 className={cn(
                   buttonVariants({ size: "lg" }),
-                  "h-11 gap-2 rounded-full bg-[#19c2ad] px-6 text-[15px] font-semibold text-black hover:bg-[#22d6bf]",
+                  "h-11 gap-2 rounded-full bg-[var(--nord-pine)] px-6 text-[15px] font-semibold text-[var(--nord-ink)] hover:bg-[var(--nord-pine)]",
                 )}
               >
                 Get Started
@@ -90,7 +90,7 @@ export default function LandingPage() {
                 href="#how-it-works"
                 className={cn(
                   buttonVariants({ variant: "outline", size: "lg" }),
-                  "h-11 rounded-full border-white/15 bg-transparent px-6 text-[15px] font-semibold text-[#e8e8ec] hover:bg-white/10",
+                  "h-11 rounded-full border-[var(--nord-hairline)] bg-transparent px-6 text-[15px] font-semibold text-[var(--nord-ink)] hover:bg-[var(--nord-tint)]",
                 )}
               >
                 See how it works
@@ -103,13 +103,13 @@ export default function LandingPage() {
       </section>
 
       {/* Features */}
-      <section id="features" className="border-t border-white/8">
+      <section id="features" className="border-t border-[var(--nord-hairline)]">
         <div className="mx-auto max-w-6xl px-5 py-20 sm:px-8">
           <div className="max-w-xl">
-            <h2 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">
+            <h2 className="text-2xl font-semibold tracking-tight text-[var(--nord-ink)] sm:text-3xl">
               Everything you need to go from photos to a scene
             </h2>
-            <p className="mt-3 text-[#a4a4ae]">
+            <p className="mt-3 text-[var(--nord-slate)]">
               Splatial handles reconstruction, hosting, and delivery, so you can focus on the capture.
             </p>
           </div>
@@ -117,11 +117,11 @@ export default function LandingPage() {
           <div className="mt-12 grid gap-4 sm:grid-cols-2">
             {FEATURES.map(({ icon: Icon, title, description }) => (
               <div key={title} className="sw-glass-card rounded-2xl p-6">
-                <span className="sw-control flex h-10 w-10 items-center justify-center rounded-xl text-[#19c2ad]">
+                <span className="sw-control flex h-10 w-10 items-center justify-center rounded-xl text-[var(--nord-teal)]">
                   <Icon className="h-5 w-5" strokeWidth={2} />
                 </span>
-                <h3 className="mt-4 text-[15px] font-semibold text-white">{title}</h3>
-                <p className="mt-1.5 text-sm leading-relaxed text-[#a4a4ae]">{description}</p>
+                <h3 className="mt-4 text-[15px] font-semibold text-[var(--nord-ink)]">{title}</h3>
+                <p className="mt-1.5 text-sm leading-relaxed text-[var(--nord-slate)]">{description}</p>
               </div>
             ))}
           </div>
@@ -129,13 +129,13 @@ export default function LandingPage() {
       </section>
 
       {/* How it works */}
-      <section id="how-it-works" className="border-t border-white/8">
+      <section id="how-it-works" className="border-t border-[var(--nord-hairline)]">
         <div className="mx-auto max-w-6xl px-5 py-20 sm:px-8">
           <div className="max-w-xl">
-            <h2 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">
+            <h2 className="text-2xl font-semibold tracking-tight text-[var(--nord-ink)] sm:text-3xl">
               The Splatial workflow
             </h2>
-            <p className="mt-3 text-[#a4a4ae]">Four steps, mostly handled for you.</p>
+            <p className="mt-3 text-[var(--nord-slate)]">Four steps, mostly handled for you.</p>
           </div>
 
           <div className="mt-12 grid gap-3 sm:grid-cols-4">
@@ -143,14 +143,14 @@ export default function LandingPage() {
               <div key={label} className="relative">
                 <div className="sw-glass-card flex h-full flex-col gap-3 rounded-2xl p-5">
                   <div className="flex items-center justify-between">
-                    <span className="sw-control flex h-9 w-9 items-center justify-center rounded-lg text-[#e8e8ec]">
+                    <span className="sw-control flex h-9 w-9 items-center justify-center rounded-lg text-[var(--nord-ink)]">
                       <Icon className="h-4.5 w-4.5" strokeWidth={2} />
                     </span>
-                    <span className="font-sw-mono text-xs text-[#5a5a64]">0{index + 1}</span>
+                    <span className="font-sw-mono text-xs text-[var(--nord-slate-soft)]">0{index + 1}</span>
                   </div>
                   <div>
-                    <h3 className="text-[14px] font-semibold text-white">{label}</h3>
-                    <p className="mt-1 text-[13px] leading-relaxed text-[#a4a4ae]">{description}</p>
+                    <h3 className="text-[14px] font-semibold text-[var(--nord-ink)]">{label}</h3>
+                    <p className="mt-1 text-[13px] leading-relaxed text-[var(--nord-slate)]">{description}</p>
                   </div>
                 </div>
               </div>
@@ -160,14 +160,14 @@ export default function LandingPage() {
       </section>
 
       {/* CTA band */}
-      <section className="border-t border-white/8">
+      <section className="border-t border-[var(--nord-hairline)]">
         <div className="mx-auto max-w-6xl px-5 py-16 sm:px-8">
           <div className="sw-glass-card flex flex-col items-start justify-between gap-6 rounded-2xl p-8 sm:flex-row sm:items-center sm:p-10">
             <div>
-              <h2 className="text-xl font-semibold tracking-tight text-white sm:text-2xl">
+              <h2 className="text-xl font-semibold tracking-tight text-[var(--nord-ink)] sm:text-2xl">
                 Ready to build your first scene?
               </h2>
-              <p className="mt-2 text-sm text-[#a4a4ae]">
+              <p className="mt-2 text-sm text-[var(--nord-slate)]">
                 Free to start. No GPU required.
               </p>
             </div>
@@ -175,7 +175,7 @@ export default function LandingPage() {
               href="/scenes?authTab=signup"
               className={cn(
                 buttonVariants({ size: "lg" }),
-                "h-11 shrink-0 gap-2 rounded-full bg-[#19c2ad] px-6 text-[15px] font-semibold text-black hover:bg-[#22d6bf]",
+                "h-11 shrink-0 gap-2 rounded-full bg-[var(--nord-pine)] px-6 text-[15px] font-semibold text-[var(--nord-ink)] hover:bg-[var(--nord-pine)]",
               )}
             >
               Get Started
@@ -210,19 +210,19 @@ function HeroVisual() {
             backgroundSize: "180px 180px",
           }}
         />
-        <span className="absolute flex h-16 w-16 items-center justify-center rounded-2xl bg-white/10 text-white backdrop-blur-sm" style={{ top: "42%", left: "42%" }}>
+        <span className="absolute flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--nord-tint)] text-[var(--nord-ink)] backdrop-blur-sm" style={{ top: "42%", left: "42%" }}>
           <Boxes className="h-7 w-7" strokeWidth={1.75} />
         </span>
       </div>
 
       <div className="sw-overlay-panel absolute -right-3 top-8 rounded-xl px-3.5 py-2.5 text-left sm:-right-6">
-        <p className="text-[11px] text-[#9a9aa4]">Splat count</p>
-        <p className="font-sw-mono text-sm font-semibold text-white">25.1M</p>
+        <p className="text-[11px] text-[var(--nord-slate)]">Splat count</p>
+        <p className="font-sw-mono text-sm font-semibold text-[var(--nord-ink)]">25.1M</p>
       </div>
 
       <div className="sw-overlay-panel absolute -left-3 bottom-10 rounded-xl px-3.5 py-2.5 text-left sm:-left-6">
-        <p className="text-[11px] text-[#9a9aa4]">Render time</p>
-        <p className="font-sw-mono text-sm font-semibold text-[#7eead9]">12ms</p>
+        <p className="text-[11px] text-[var(--nord-slate)]">Render time</p>
+        <p className="font-sw-mono text-sm font-semibold text-[var(--nord-teal)]">12ms</p>
       </div>
     </div>
   );

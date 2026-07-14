@@ -156,18 +156,18 @@ export default function CommentRow({
             {handle ? (
               <Link
                 href={`/u/${encodeURIComponent(handle)}`}
-                className="font-sw-mono text-xs font-medium text-[#19c2ad] hover:underline"
+                className="font-sw-mono text-xs font-medium text-[var(--nord-teal)] hover:underline"
               >
                 @{handle}
               </Link>
             ) : (
-              <span className="font-sw-mono text-xs font-medium text-[#909090]">
+              <span className="font-sw-mono text-xs font-medium text-[var(--nord-slate)]">
                 Unknown
               </span>
             )}
             <time
               dateTime={comment.createdAt}
-              className="ml-2 font-sw-mono text-[10px] text-[#737373]"
+              className="ml-2 font-sw-mono text-[10px] text-[var(--nord-slate)]"
               title={comment.createdAt}
             >
               {formatRelativeTime(comment.createdAt)}
@@ -182,7 +182,7 @@ export default function CommentRow({
               disabled={deleting}
               aria-label="Delete comment"
               onClick={() => onDelete?.(comment.commentId)}
-              className="shrink-0 text-[#737373] hover:bg-[#2a2a2a] hover:text-red-400"
+              className="shrink-0 text-[var(--nord-slate)] hover:bg-[var(--nord-surface)] hover:text-[var(--nord-danger)]"
             >
               <Trash2 className="size-3.5" />
             </Button>
@@ -192,7 +192,7 @@ export default function CommentRow({
         <CommentBody
           body={comment.body}
           mentions={comment.mentions}
-          className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed text-[#e8e8e8]"
+          className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed text-[var(--nord-ink)]"
         />
 
         <div className="mt-1.5 flex items-center gap-3">
@@ -206,7 +206,7 @@ export default function CommentRow({
               <button
                 type="button"
                 onClick={() => setShowReplyBox((v) => !v)}
-                className="font-sw-mono text-[11px] text-[#909090] hover:text-white"
+                className="font-sw-mono text-[11px] text-[var(--nord-slate)] hover:text-[var(--nord-ink)]"
               >
                 Reply
               </button>
@@ -214,7 +214,7 @@ export default function CommentRow({
                 <button
                   type="button"
                   onClick={handleToggleReplies}
-                  className="font-sw-mono text-[11px] text-[#909090] hover:text-white"
+                  className="font-sw-mono text-[11px] text-[var(--nord-slate)] hover:text-[var(--nord-ink)]"
                 >
                   {showReplies
                     ? "Hide replies"
@@ -256,7 +256,7 @@ export default function CommentRow({
                 size="sm"
                 disabled={postingReply || replyDraft.trim().length === 0}
                 onClick={() => void handlePostReply()}
-                className="bg-[#19c2ad] text-black hover:bg-[#15a896]"
+                className="bg-[var(--nord-pine)] text-[var(--nord-ink)] hover:bg-[var(--nord-pine)]"
               >
                 {postingReply ? (
                   <>
@@ -269,7 +269,7 @@ export default function CommentRow({
               </Button>
             </div>
             {replyError ? (
-              <p className="text-xs text-red-400" role="alert">
+              <p className="text-xs text-[var(--nord-danger)]" role="alert">
                 {replyError}
               </p>
             ) : null}
@@ -277,9 +277,9 @@ export default function CommentRow({
         ) : null}
 
         {canHaveReplies && showReplies ? (
-          <div className="mt-3 space-y-3 border-l border-[#2a2a2a] pl-3">
+          <div className="mt-3 space-y-3 border-l border-[var(--nord-hairline)] pl-3">
             {loadingReplies ? (
-              <p className="font-sw-mono text-[11px] text-[#707070]">
+              <p className="font-sw-mono text-[11px] text-[var(--nord-slate-soft)]">
                 Loading replies…
               </p>
             ) : (

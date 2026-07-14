@@ -11,10 +11,10 @@ const HOUR = 3_600_000;
 const FETCH_LIMIT = 200;
 
 const LEVEL_STYLES: Record<string, string> = {
-  error: "text-[#f0a8a8]",
-  warning: "text-[#e8c98a]",
-  info: "text-[#9aa0a6]",
-  debug: "text-[#707070]",
+  error: "text-[var(--nord-danger)]",
+  warning: "text-[#9a6b1f]",
+  info: "text-[var(--nord-slate)]",
+  debug: "text-[var(--nord-slate-soft)]",
 };
 
 const LEVEL_FILTERS = [
@@ -52,15 +52,15 @@ function LogRow({ line }: { line: AttemptLogLine }) {
   const label = line.event ?? line.msg ?? line.raw ?? "";
 
   return (
-    <div className="border-b border-[#1f1f1f] last:border-b-0">
+    <div className="border-b border-[var(--nord-hairline)] last:border-b-0">
       <button
         type="button"
         onClick={() => expandable && setOpen((o) => !o)}
         className={`flex w-full items-start gap-3 px-3 py-1.5 text-left font-mono text-xs leading-relaxed ${
-          expandable ? "cursor-pointer hover:bg-[#1c1c1c]" : "cursor-default"
+          expandable ? "cursor-pointer hover:bg-[var(--nord-surface)]" : "cursor-default"
         }`}
       >
-        <span className="w-4 shrink-0 pt-0.5 text-[#5a5a5a]">
+        <span className="w-4 shrink-0 pt-0.5 text-[var(--nord-slate-soft)]">
           {expandable ? (
             open ? (
               <ChevronDown className="h-3 w-3" />
@@ -69,25 +69,25 @@ function LogRow({ line }: { line: AttemptLogLine }) {
             )
           ) : null}
         </span>
-        <span className="w-24 shrink-0 tabular-nums text-[#707070]">
+        <span className="w-24 shrink-0 tabular-nums text-[var(--nord-slate-soft)]">
           {formatTime(line)}
         </span>
         <span
-          className={`w-16 shrink-0 uppercase ${LEVEL_STYLES[level] ?? "text-[#9aa0a6]"}`}
+          className={`w-16 shrink-0 uppercase ${LEVEL_STYLES[level] ?? "text-[var(--nord-slate)]"}`}
         >
           {level}
         </span>
         {line.event && (
-          <span className="shrink-0 rounded bg-[#1e2a3a] px-1.5 py-px text-[#7fb0e8]">
+          <span className="shrink-0 rounded bg-[var(--nord-surface)] px-1.5 py-px text-[#7fb0e8]">
             {line.event}
           </span>
         )}
-        <span className="min-w-0 flex-1 break-words text-[#cfcfcf]">
+        <span className="min-w-0 flex-1 break-words text-[var(--nord-ink)]">
           {line.event ? line.msg ?? "" : label}
         </span>
       </button>
       {open && expandable && (
-        <pre className="overflow-x-auto bg-[#0e0e0e] px-12 py-2 font-mono text-[11px] text-[#9aa0a6]">
+        <pre className="overflow-x-auto bg-[var(--nord-bg)] px-12 py-2 font-mono text-[11px] text-[var(--nord-slate)]">
           {JSON.stringify(line.data, null, 2)}
         </pre>
       )}
@@ -147,16 +147,16 @@ export default function AttemptLogPanel({ attempt }: { attempt: AdminAttempt }) 
   }, [level, load]);
 
   return (
-    <div className="rounded-lg border border-[#262626] bg-[#0f0f0f]">
-      <div className="flex items-center justify-between gap-2 border-b border-[#262626] px-3 py-2">
-        <span className="text-xs font-medium uppercase tracking-wide text-[#808080]">
+    <div className="rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-bg)]">
+      <div className="flex items-center justify-between gap-2 border-b border-[var(--nord-hairline)] px-3 py-2">
+        <span className="text-xs font-medium uppercase tracking-wide text-[var(--nord-slate)]">
           Worker logs
         </span>
         <div className="flex items-center gap-2">
           <select
             value={level}
             onChange={(e) => setLevel(e.target.value)}
-            className="rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-2 py-1 text-xs text-[#d8d8d8] outline-none focus:border-[#3b82f6]"
+            className="rounded-md border border-[var(--nord-hairline)] bg-[var(--nord-surface)] px-2 py-1 text-xs text-[var(--nord-ink)] outline-none focus:border-[#3b82f6]"
           >
             {LEVEL_FILTERS.map((f) => (
               <option key={f.value} value={f.value}>
@@ -168,7 +168,7 @@ export default function AttemptLogPanel({ attempt }: { attempt: AdminAttempt }) 
             type="button"
             onClick={() => load({ level, nextToken: undefined, append: false })}
             disabled={loading}
-            className="inline-flex items-center gap-1 rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-2 py-1 text-xs text-[#d8d8d8] transition-colors hover:bg-[#222] disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-md border border-[var(--nord-hairline)] bg-[var(--nord-surface)] px-2 py-1 text-xs text-[var(--nord-ink)] transition-colors hover:bg-[var(--nord-surface)] disabled:opacity-50"
           >
             <RefreshCw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} />
             Refresh
@@ -177,14 +177,14 @@ export default function AttemptLogPanel({ attempt }: { attempt: AdminAttempt }) 
       </div>
 
       {error ? (
-        <div className="px-3 py-4 text-xs text-[#f0a8a8]">{error}</div>
+        <div className="px-3 py-4 text-xs text-[var(--nord-danger)]">{error}</div>
       ) : loading ? (
-        <div className="flex items-center justify-center gap-2 px-3 py-6 text-xs text-[#808080]">
+        <div className="flex items-center justify-center gap-2 px-3 py-6 text-xs text-[var(--nord-slate)]">
           <Loader2 className="h-4 w-4 animate-spin" />
           Loading logs…
         </div>
       ) : lines.length === 0 ? (
-        <div className="px-3 py-6 text-center text-xs text-[#808080]">
+        <div className="px-3 py-6 text-center text-xs text-[var(--nord-slate)]">
           No log lines found for this attempt in the retained window.
         </div>
       ) : (
@@ -195,12 +195,12 @@ export default function AttemptLogPanel({ attempt }: { attempt: AdminAttempt }) 
             ))}
           </div>
           {nextToken && (
-            <div className="border-t border-[#262626] px-3 py-2 text-center">
+            <div className="border-t border-[var(--nord-hairline)] px-3 py-2 text-center">
               <button
                 type="button"
                 onClick={() => load({ level, nextToken, append: true })}
                 disabled={loadingMore}
-                className="inline-flex items-center gap-2 rounded-md border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-1 text-xs text-[#d8d8d8] transition-colors hover:bg-[#222] disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-md border border-[var(--nord-hairline)] bg-[var(--nord-surface)] px-3 py-1 text-xs text-[var(--nord-ink)] transition-colors hover:bg-[var(--nord-surface)] disabled:opacity-50"
               >
                 {loadingMore && <Loader2 className="h-3 w-3 animate-spin" />}
                 Load more

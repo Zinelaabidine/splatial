@@ -22,25 +22,25 @@ import { cn } from "@/lib/utils";
 const ASSIGNABLE_ROLES: AdminUserRole[] = ["admin", "moderator", "beta_tester"];
 
 const INPUT_CLASS =
-  "w-full rounded-md border border-zinc-700/80 bg-zinc-950/80 px-3 py-2 text-sm text-zinc-100 outline-none transition-colors focus:border-teal-500/60 focus:ring-1 focus:ring-teal-500/30";
+  "w-full rounded-md border border-[var(--nord-hairline)] bg-[var(--nord-bg)] px-3 py-2 text-sm text-[var(--nord-ink)] outline-none transition-colors focus:border-[var(--nord-teal)] focus:ring-1 focus:ring-[var(--nord-teal)]";
 
 const BTN_SECONDARY =
-  "rounded-md border border-zinc-700/80 bg-zinc-900/60 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-colors hover:border-zinc-600 hover:bg-zinc-800/80 disabled:opacity-50";
+  "rounded-md border border-[var(--nord-hairline)] bg-[var(--nord-surface)] px-3 py-1.5 text-xs font-medium text-[var(--nord-ink)] transition-colors hover:border-[var(--nord-hairline)] hover:bg-[var(--nord-surface)] disabled:opacity-50";
 
 const BTN_WARNING =
-  "rounded-md border border-amber-600/40 bg-amber-950/30 px-3 py-1.5 text-xs font-medium text-amber-400 transition-colors hover:border-amber-500/50 hover:bg-amber-950/50 disabled:opacity-50";
+  "rounded-md border border-amber-600/40 bg-[#f4ecd6] px-3 py-1.5 text-xs font-medium text-amber-400 transition-colors hover:border-amber-500/50 hover:bg-[#f4ecd6] disabled:opacity-50";
 
 const BTN_DANGER_OUTLINE =
-  "rounded-md border border-red-800/60 bg-red-950/20 px-3 py-1.5 text-xs font-medium text-red-400 transition-colors hover:border-red-700/60 hover:bg-red-950/40 disabled:opacity-50";
+  "rounded-md border border-[var(--nord-danger)] bg-[var(--nord-danger-tint)] px-3 py-1.5 text-xs font-medium text-[var(--nord-danger)] transition-colors hover:border-[var(--nord-danger)] hover:bg-[var(--nord-danger-tint)] disabled:opacity-50";
 
 const BTN_DANGER_FILLED =
-  "rounded-md border border-red-700/50 bg-red-900/40 px-3 py-1.5 text-xs font-medium text-red-300 transition-colors hover:bg-red-900/60 disabled:opacity-50";
+  "rounded-md border border-[var(--nord-danger)] bg-[var(--nord-danger-tint)] px-3 py-1.5 text-xs font-medium text-[var(--nord-danger)] transition-colors hover:bg-[var(--nord-danger-tint)] disabled:opacity-50";
 
 const BTN_PRIMARY =
-  "rounded-md border border-teal-600/40 bg-teal-600/20 px-3 py-1.5 text-xs font-medium text-teal-300 transition-colors hover:bg-teal-600/30 disabled:opacity-50";
+  "rounded-md border border-[var(--nord-teal)] bg-[var(--nord-pine)] px-3 py-1.5 text-xs font-medium text-[var(--nord-teal)] transition-colors hover:bg-[var(--nord-pine)] disabled:opacity-50";
 
 const BTN_POSITIVE =
-  "rounded-md border border-emerald-600/40 bg-emerald-950/30 px-3 py-1.5 text-xs font-medium text-emerald-400 transition-colors hover:border-emerald-500/50 hover:bg-emerald-950/50 disabled:opacity-50";
+  "rounded-md border border-[var(--nord-success)] bg-[var(--nord-success-tint)] px-3 py-1.5 text-xs font-medium text-[var(--nord-success)] transition-colors hover:border-[var(--nord-success)] hover:bg-[var(--nord-success-tint)] disabled:opacity-50";
 
 type PendingAction =
   | { kind: "status"; action: UserStatusAction }
@@ -82,14 +82,14 @@ function DetailCard({
       className={cn(
         "rounded-lg border p-4",
         variant === "danger"
-          ? "border-red-900/40 bg-red-950/15"
-          : "border-zinc-800/90 bg-zinc-900/40",
+          ? "border-[var(--nord-danger)] bg-[var(--nord-danger-tint)]"
+          : "border-[var(--nord-hairline)] bg-[var(--nord-surface)]",
       )}
     >
       <h3
         className={cn(
           "mb-3 text-[11px] font-semibold uppercase tracking-wider",
-          variant === "danger" ? "text-red-400/90" : "text-zinc-500",
+          variant === "danger" ? "text-[var(--nord-danger)]" : "text-[var(--nord-slate)]",
         )}
       >
         {title}
@@ -101,9 +101,9 @@ function DetailCard({
 
 function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="flex items-start justify-between gap-4 border-b border-zinc-800/60 py-2 last:border-b-0">
-      <span className="shrink-0 text-xs text-zinc-500">{label}</span>
-      <span className="text-right text-sm text-zinc-200">{value}</span>
+    <div className="flex items-start justify-between gap-4 border-b border-[var(--nord-hairline)] py-2 last:border-b-0">
+      <span className="shrink-0 text-xs text-[var(--nord-slate)]">{label}</span>
+      <span className="text-right text-sm text-[var(--nord-ink)]">{value}</span>
     </div>
   );
 }
@@ -111,7 +111,7 @@ function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
 function ActionGroup({ label, children }: { label?: string; children: React.ReactNode }) {
   return (
     <div className="mt-3">
-      {label && <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-zinc-600">{label}</p>}
+      {label && <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-[var(--nord-slate-soft)]">{label}</p>}
       <div className="flex flex-wrap gap-2">{children}</div>
     </div>
   );
@@ -306,15 +306,15 @@ export default function AdminUserDetailPanel({
   return (
     <>
       <div className="flex h-full flex-col overflow-hidden">
-        <div className="flex shrink-0 items-center justify-between border-b border-zinc-800/90 px-5 py-4">
+        <div className="flex shrink-0 items-center justify-between border-b border-[var(--nord-hairline)] px-5 py-4">
           <div>
-            <h2 className="text-sm font-semibold text-zinc-100">User details</h2>
-            <p className="mt-0.5 text-xs text-zinc-500">Review standing and take actions</p>
+            <h2 className="text-sm font-semibold text-[var(--nord-ink)]">User details</h2>
+            <p className="mt-0.5 text-xs text-[var(--nord-slate)]">Review standing and take actions</p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md p-1.5 text-zinc-500 transition-colors hover:bg-zinc-800/80 hover:text-zinc-300"
+            className="rounded-md p-1.5 text-[var(--nord-slate)] transition-colors hover:bg-[var(--nord-surface)] hover:text-[var(--nord-ink)]"
             aria-label="Close panel"
           >
             <X className="h-4 w-4" />
@@ -323,26 +323,26 @@ export default function AdminUserDetailPanel({
 
         <div className="flex-1 overflow-y-auto px-5 py-4">
           {loading ? (
-            <div className="flex h-48 items-center justify-center text-zinc-500">
-              <Loader2 className="mr-2 h-5 w-5 animate-spin text-teal-500" />
+            <div className="flex h-48 items-center justify-center text-[var(--nord-slate)]">
+              <Loader2 className="mr-2 h-5 w-5 animate-spin text-[var(--nord-teal)]" />
               Loading…
             </div>
           ) : error || !detail ? (
-            <div className="rounded-lg border border-red-900/50 bg-red-950/30 px-4 py-3 text-sm text-red-300">
+            <div className="rounded-lg border border-[var(--nord-danger)] bg-[var(--nord-danger-tint)] px-4 py-3 text-sm text-[var(--nord-danger)]">
               {error ?? "User not found"}
             </div>
           ) : (
             <div className="space-y-4">
               {actionError && (
-                <div className="rounded-lg border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-300">
+                <div className="rounded-lg border border-[var(--nord-danger)] bg-[var(--nord-danger-tint)] px-3 py-2 text-sm text-[var(--nord-danger)]">
                   {actionError}
                 </div>
               )}
 
               <DetailCard title="Profile">
-                <p className="text-base font-semibold text-zinc-50">{detail.profile.displayName || "—"}</p>
-                <p className="mt-1 text-sm text-zinc-400">{detail.profile.email ?? "No email on file"}</p>
-                <p className="text-sm text-zinc-500">@{detail.profile.username ?? "—"}</p>
+                <p className="text-base font-semibold text-[var(--nord-ink)]">{detail.profile.displayName || "—"}</p>
+                <p className="mt-1 text-sm text-[var(--nord-slate)]">{detail.profile.email ?? "No email on file"}</p>
+                <p className="text-sm text-[var(--nord-slate)]">@{detail.profile.username ?? "—"}</p>
                 <div className="mt-3 space-y-0">
                   <MetaRow label="Joined" value={formatWhen(detail.profile.createdAt)} />
                   <MetaRow
@@ -440,22 +440,22 @@ export default function AdminUserDetailPanel({
                 </ActionGroup>
 
                 {showVerifyForm && (
-                  <div className="mt-3 rounded-md border border-zinc-800/90 bg-zinc-950/50 p-3">
-                    <label className="mb-2 flex items-center gap-2 text-sm text-zinc-300">
+                  <div className="mt-3 rounded-md border border-[var(--nord-hairline)] bg-[var(--nord-bg)] p-3">
+                    <label className="mb-2 flex items-center gap-2 text-sm text-[var(--nord-ink)]">
                       <input
                         type="checkbox"
                         checked={emailVerifiedDraft}
                         onChange={(e) => setEmailVerifiedDraft(e.target.checked)}
-                        className="rounded border-zinc-600"
+                        className="rounded border-[var(--nord-hairline)]"
                       />
                       Email verified
                     </label>
-                    <label className="mb-3 flex items-center gap-2 text-sm text-zinc-300">
+                    <label className="mb-3 flex items-center gap-2 text-sm text-[var(--nord-ink)]">
                       <input
                         type="checkbox"
                         checked={phoneVerifiedDraft}
                         onChange={(e) => setPhoneVerifiedDraft(e.target.checked)}
-                        className="rounded border-zinc-600"
+                        className="rounded border-[var(--nord-hairline)]"
                       />
                       Phone verified
                     </label>
@@ -477,7 +477,7 @@ export default function AdminUserDetailPanel({
                 <div className="space-y-0">
                   <MetaRow
                     label="Plan"
-                    value={<span className="font-medium capitalize text-teal-400">{detail.tier}</span>}
+                    value={<span className="font-medium capitalize text-[var(--nord-teal)]">{detail.tier}</span>}
                   />
                   <MetaRow label="Roles" value={detail.roles.join(", ") || "—"} />
                 </div>
@@ -492,7 +492,7 @@ export default function AdminUserDetailPanel({
                 </ActionGroup>
 
                 {showPlanForm && (
-                  <div className="mt-3 rounded-md border border-zinc-800/90 bg-zinc-950/50 p-3">
+                  <div className="mt-3 rounded-md border border-[var(--nord-hairline)] bg-[var(--nord-bg)] p-3">
                     <select
                       value={planDraft}
                       onChange={(e) => setPlanDraft(e.target.value as AdminUserTier)}
@@ -515,16 +515,16 @@ export default function AdminUserDetailPanel({
                 )}
 
                 {showRolesForm && (
-                  <div className="mt-3 rounded-md border border-zinc-800/90 bg-zinc-950/50 p-3">
+                  <div className="mt-3 rounded-md border border-[var(--nord-hairline)] bg-[var(--nord-bg)] p-3">
                     {ASSIGNABLE_ROLES.map((r) => (
-                      <label key={r} className="mb-1.5 flex items-center gap-2 text-sm text-zinc-300">
+                      <label key={r} className="mb-1.5 flex items-center gap-2 text-sm text-[var(--nord-ink)]">
                         <input
                           type="checkbox"
                           checked={rolesDraft.includes(r)}
                           onChange={(e) =>
                             setRolesDraft((prev) => (e.target.checked ? [...prev, r] : prev.filter((x) => x !== r)))
                           }
-                          className="rounded border-zinc-600"
+                          className="rounded border-[var(--nord-hairline)]"
                         />
                         {r}
                       </label>
@@ -563,13 +563,13 @@ export default function AdminUserDetailPanel({
 
               <DetailCard title="Recent activity">
                 {detail.recentJobs.length === 0 ? (
-                  <p className="text-sm text-zinc-500">No jobs yet.</p>
+                  <p className="text-sm text-[var(--nord-slate)]">No jobs yet.</p>
                 ) : (
-                  <ul className="divide-y divide-zinc-800/60">
+                  <ul className="divide-y divide-[var(--nord-hairline)]">
                     {detail.recentJobs.map((j) => (
                       <li key={j.sceneId} className="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
-                        <span className="truncate text-sm text-zinc-300">{j.name ?? j.sceneId}</span>
-                        <span className="shrink-0 rounded border border-zinc-700/60 bg-zinc-800/40 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-500">
+                        <span className="truncate text-sm text-[var(--nord-ink)]">{j.name ?? j.sceneId}</span>
+                        <span className="shrink-0 rounded border border-[var(--nord-hairline)] bg-[var(--nord-surface)] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--nord-slate)]">
                           {j.status}
                         </span>
                       </li>
@@ -579,7 +579,7 @@ export default function AdminUserDetailPanel({
               </DetailCard>
 
               <DetailCard title="Danger zone" variant="danger">
-                <p className="mb-3 text-xs leading-relaxed text-zinc-500">
+                <p className="mb-3 text-xs leading-relaxed text-[var(--nord-slate)]">
                   Destructive actions disable access and may remove the sign-in identity. Each requires confirmation
                   and is recorded in the audit log.
                 </p>

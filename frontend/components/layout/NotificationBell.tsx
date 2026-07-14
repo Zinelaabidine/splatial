@@ -87,12 +87,12 @@ export default function NotificationBell() {
         onClick={() => setOpen((o) => !o)}
         className={cn(
           "relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors",
-          open ? "bg-white/10 text-white" : "text-[#f1f1f1] hover:bg-white/10",
+          open ? "bg-[var(--nord-tint)] text-[var(--nord-ink)]" : "text-[var(--nord-ink)] hover:bg-[var(--nord-tint)]",
         )}
       >
         <Bell className="h-5 w-5" strokeWidth={open ? 2 : 1.5} />
         {unreadCount > 0 ? (
-          <span className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#3b82f6] px-1 text-[10px] font-bold leading-none text-white">
+          <span className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#3b82f6] px-1 text-[10px] font-bold leading-none text-[var(--nord-cta-fg)]">
             {unreadCount > 99 ? "99+" : unreadCount}
           </span>
         ) : null}
@@ -103,24 +103,24 @@ export default function NotificationBell() {
           aria-label="Notifications"
           className="sw-popover absolute right-0 top-full z-50 mt-2 w-96 overflow-hidden rounded-xl"
         >
-          <div className="border-b border-white/[0.06] px-4 py-3">
-            <h3 className="text-sm font-semibold text-white">Notifications</h3>
+          <div className="border-b border-[var(--nord-hairline)] px-4 py-3">
+            <h3 className="text-sm font-semibold text-[var(--nord-ink)]">Notifications</h3>
           </div>
 
           <div className="max-h-[420px] overflow-y-auto p-1">
             {error && (
-              <div className="mx-3 mt-3 rounded-lg border border-[#5b2626] bg-[#2a1414] px-3 py-2 text-xs text-[#f0a8a8]">
+              <div className="mx-3 mt-3 rounded-lg border border-[var(--nord-danger)] bg-[var(--nord-danger-tint)] px-3 py-2 text-xs text-[var(--nord-danger)]">
                 {error}
               </div>
             )}
 
             {loading && items.length === 0 ? (
-              <div className="flex h-32 items-center justify-center text-[#909090]">
+              <div className="flex h-32 items-center justify-center text-[var(--nord-slate)]">
                 <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                 Loading…
               </div>
             ) : items.length === 0 ? (
-              <div className="flex h-32 items-center justify-center px-4 text-center text-sm text-[#808080]">
+              <div className="flex h-32 items-center justify-center px-4 text-center text-sm text-[var(--nord-slate)]">
                 No notifications yet
               </div>
             ) : (
@@ -138,7 +138,7 @@ export default function NotificationBell() {
           <Link
             href="/notifications"
             onClick={() => setOpen(false)}
-            className="block border-t border-white/[0.06] px-4 py-2.5 text-center text-xs font-medium text-[#93c5fd] transition-colors hover:bg-white/[0.06]"
+            className="block border-t border-[var(--nord-hairline)] px-4 py-2.5 text-center text-xs font-medium text-[var(--nord-teal)] transition-colors hover:bg-[var(--nord-teal-tint)]"
           >
             See all notifications
           </Link>

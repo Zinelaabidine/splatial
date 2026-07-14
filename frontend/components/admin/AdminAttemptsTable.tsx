@@ -8,16 +8,16 @@ import type { AdminAttempt } from "@/types/admin";
 
 const STATUS_STYLES: Record<string, { label: string; className: string }> = {
   QUEUED: { label: "Queued", className: "bg-indigo-100 text-indigo-700" },
-  PROCESSING: { label: "Processing", className: "bg-yellow-100 text-yellow-700" },
+  PROCESSING: { label: "Processing", className: "bg-yellow-100 text-[#9a6b1f]" },
   READY: { label: "Ready", className: "bg-blue-100 text-blue-700" },
   FAILED: { label: "Failed", className: "bg-red-100 text-red-700" },
-  CANCELLED: { label: "Cancelled", className: "bg-slate-200 text-slate-600" },
+  CANCELLED: { label: "Cancelled", className: "bg-[var(--nord-surface-2)] text-[var(--nord-slate-soft)]" },
 };
 
 function StatusBadge({ status }: { status: string }) {
   const style = STATUS_STYLES[status] ?? {
     label: status || "—",
-    className: "bg-slate-200 text-slate-600",
+    className: "bg-[var(--nord-surface-2)] text-[var(--nord-slate-soft)]",
   };
   return (
     <span
@@ -51,14 +51,14 @@ function ProgressCell({ attempt }: { attempt: AdminAttempt }) {
       ? Math.max(0, Math.min(100, attempt.progressPercent))
       : null;
   const phase = attempt.progressPhase ?? null;
-  if (pct == null && !phase) return <span className="text-[#707070]">—</span>;
+  if (pct == null && !phase) return <span className="text-[var(--nord-slate-soft)]">—</span>;
   return (
     <div className="min-w-[120px]">
-      <div className="mb-1 flex items-center justify-between gap-2 text-xs text-[#b0b0b0]">
+      <div className="mb-1 flex items-center justify-between gap-2 text-xs text-[var(--nord-slate)]">
         <span className="truncate">{phase ?? ""}</span>
         {pct != null && <span className="tabular-nums">{pct}%</span>}
       </div>
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#2a2a2a]">
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--nord-surface)]">
         <div
           className="h-full rounded-full bg-[#3b82f6] transition-all"
           style={{ width: `${pct ?? 0}%` }}
@@ -71,7 +71,7 @@ function ProgressCell({ attempt }: { attempt: AdminAttempt }) {
 /** Expandable detail row. The CloudWatch log panel lands here in Phase 3. */
 function DetailPanel({ attempt }: { attempt: AdminAttempt }) {
   return (
-    <div className="space-y-3 bg-[#161616] px-4 py-4 text-sm">
+    <div className="space-y-3 bg-[var(--nord-bg)] px-4 py-4 text-sm">
       <div className="grid grid-cols-1 gap-x-8 gap-y-2 sm:grid-cols-2">
         <Detail label="Attempt ID" value={attempt.attemptId} mono />
         <Detail label="Parent scene" value={attempt.parentSceneId} mono />
@@ -83,8 +83,8 @@ function DetailPanel({ attempt }: { attempt: AdminAttempt }) {
       </div>
 
       {(attempt.failureReason || attempt.errorMessage) && (
-        <div className="rounded-lg border border-[#5b2626] bg-[#2a1414] px-3 py-2 text-[#f0a8a8]">
-          <div className="text-xs font-semibold uppercase tracking-wide text-[#d98a8a]">
+        <div className="rounded-lg border border-[var(--nord-danger)] bg-[var(--nord-danger-tint)] px-3 py-2 text-[var(--nord-danger)]">
+          <div className="text-xs font-semibold uppercase tracking-wide text-[var(--nord-danger)]">
             {attempt.failureReason ?? "Error"}
           </div>
           {attempt.errorMessage && (
@@ -111,11 +111,11 @@ function Detail({
 }) {
   return (
     <div className="flex items-baseline gap-2">
-      <span className="w-28 shrink-0 text-xs uppercase tracking-wide text-[#707070]">
+      <span className="w-28 shrink-0 text-xs uppercase tracking-wide text-[var(--nord-slate-soft)]">
         {label}
       </span>
       <span
-        className={`break-all text-[#d8d8d8] ${mono ? "font-mono text-xs" : ""}`}
+        className={`break-all text-[var(--nord-ink)] ${mono ? "font-mono text-xs" : ""}`}
       >
         {value ?? "—"}
       </span>
@@ -131,10 +131,10 @@ export default function AdminAttemptsTable({
   const [openId, setOpenId] = useState<string | null>(null);
 
   return (
-    <div className="overflow-hidden rounded-xl border border-[#2a2a2a]">
+    <div className="overflow-hidden rounded-xl border border-[var(--nord-hairline)]">
       <table className="w-full border-collapse text-left text-sm">
         <thead>
-          <tr className="bg-[#1a1a1a] text-xs uppercase tracking-wide text-[#808080]">
+          <tr className="bg-[var(--nord-surface)] text-xs uppercase tracking-wide text-[var(--nord-slate)]">
             <th className="w-8 px-3 py-3" />
             <th className="px-3 py-3 font-medium">Scene / attempt</th>
             <th className="px-3 py-3 font-medium">Status</th>
@@ -150,11 +150,11 @@ export default function AdminAttemptsTable({
               <Fragment key={a.attemptId}>
                 <tr
                   onClick={() => setOpenId(open ? null : a.attemptId)}
-                  className={`cursor-pointer border-t border-[#242424] transition-colors hover:bg-[#1c1c1c] ${
-                    open ? "bg-[#1c1c1c]" : ""
+                  className={`cursor-pointer border-t border-[var(--nord-hairline)] transition-colors hover:bg-[var(--nord-surface)] ${
+                    open ? "bg-[var(--nord-surface)]" : ""
                   }`}
                 >
-                  <td className="px-3 py-3 align-middle text-[#808080]">
+                  <td className="px-3 py-3 align-middle text-[var(--nord-slate)]">
                     {open ? (
                       <ChevronDown className="h-4 w-4" />
                     ) : (
@@ -162,13 +162,13 @@ export default function AdminAttemptsTable({
                     )}
                   </td>
                   <td className="px-3 py-3 align-middle">
-                    <div className="font-medium text-[#f1f1f1]">
+                    <div className="font-medium text-[var(--nord-ink)]">
                       {a.sceneName || shortId(a.parentSceneId)}
                     </div>
-                    <div className="font-mono text-xs text-[#808080]">
+                    <div className="font-mono text-xs text-[var(--nord-slate)]">
                       {shortId(a.attemptId)}
                       {a.attemptNumber != null && (
-                        <span className="ml-1 text-[#606060]">
+                        <span className="ml-1 text-[var(--nord-slate-soft)]">
                           · #{a.attemptNumber}
                         </span>
                       )}
@@ -182,21 +182,21 @@ export default function AdminAttemptsTable({
                   </td>
                   <td className="px-3 py-3 align-middle">
                     {a.ec2InstanceId ? (
-                      <span className="inline-flex items-center gap-1.5 font-mono text-xs text-[#b0b0b0]">
-                        <Server className="h-3.5 w-3.5 text-[#707070]" />
+                      <span className="inline-flex items-center gap-1.5 font-mono text-xs text-[var(--nord-slate)]">
+                        <Server className="h-3.5 w-3.5 text-[var(--nord-slate-soft)]" />
                         {shortId(a.ec2InstanceId, 12)}
                       </span>
                     ) : (
-                      <span className="text-[#707070]">—</span>
+                      <span className="text-[var(--nord-slate-soft)]">—</span>
                     )}
                   </td>
-                  <td className="px-3 py-3 align-middle whitespace-nowrap text-[#b0b0b0]">
+                  <td className="px-3 py-3 align-middle whitespace-nowrap text-[var(--nord-slate)]">
                     {formatWhen(a.updatedAt)}
                   </td>
                 </tr>
                 {open && (
                   <tr>
-                    <td colSpan={6} className="border-t border-[#242424] p-0">
+                    <td colSpan={6} className="border-t border-[var(--nord-hairline)] p-0">
                       <DetailPanel attempt={a} />
                     </td>
                   </tr>

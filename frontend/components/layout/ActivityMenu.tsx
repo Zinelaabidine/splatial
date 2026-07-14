@@ -143,7 +143,7 @@ export default function ActivityMenu() {
         onClick={() => setOpen((o) => !o)}
         className={cn(
           "flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors",
-          open ? "bg-white/10 text-white" : "text-[#f1f1f1] hover:bg-white/10",
+          open ? "bg-[var(--nord-tint)] text-[var(--nord-ink)]" : "text-[var(--nord-ink)] hover:bg-[var(--nord-tint)]",
         )}
       >
         <Clock className="h-5 w-5" strokeWidth={open ? 2 : 1.5} />
@@ -154,35 +154,35 @@ export default function ActivityMenu() {
           aria-label="Activity"
           className="sw-popover absolute right-0 top-full z-50 mt-2 w-96 overflow-hidden rounded-xl"
         >
-          <div className="border-b border-white/[0.06] px-4 py-3">
-            <h3 className="text-sm font-semibold text-white">Activity</h3>
+          <div className="border-b border-[var(--nord-hairline)] px-4 py-3">
+            <h3 className="text-sm font-semibold text-[var(--nord-ink)]">Activity</h3>
           </div>
 
           <div className="max-h-[420px] overflow-y-auto">
             {error && (
-              <div className="mx-4 mt-3 rounded-lg border border-[#5b2626] bg-[#2a1414] px-3 py-2 text-xs text-[#f0a8a8]">
+              <div className="mx-4 mt-3 rounded-lg border border-[var(--nord-danger)] bg-[var(--nord-danger-tint)] px-3 py-2 text-xs text-[var(--nord-danger)]">
                 {error}
               </div>
             )}
 
             {loading && events.length === 0 ? (
-              <div className="flex h-32 items-center justify-center text-[#909090]">
+              <div className="flex h-32 items-center justify-center text-[var(--nord-slate)]">
                 <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                 Loading…
               </div>
             ) : events.length === 0 ? (
-              <div className="flex h-32 items-center justify-center px-4 text-center text-sm text-[#808080]">
+              <div className="flex h-32 items-center justify-center px-4 text-center text-sm text-[var(--nord-slate)]">
                 No recent activity
               </div>
             ) : (
-              <ul className="divide-y divide-white/[0.06]">
+              <ul className="divide-y divide-[var(--nord-hairline)]">
                 {events.map((event) => {
                   const meta = EVENT_META[event.type];
                   const Icon = meta.icon;
                   return (
                     <li
                       key={event.id}
-                      className="flex gap-3 px-4 py-3 transition-colors hover:bg-white/[0.06]"
+                      className="flex gap-3 px-4 py-3 transition-colors hover:bg-[var(--nord-tint)]"
                     >
                       <Icon
                         className="mt-0.5 h-4 w-4 shrink-0"
@@ -190,9 +190,9 @@ export default function ActivityMenu() {
                         style={{ color: meta.color }}
                       />
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm text-white">{meta.label}</p>
-                        <p className="truncate text-xs text-[#b0b0b0]">{event.sceneName}</p>
-                        <p className="mt-0.5 font-sw-mono text-[11px] text-[#707070]">
+                        <p className="text-sm text-[var(--nord-ink)]">{meta.label}</p>
+                        <p className="truncate text-xs text-[var(--nord-slate)]">{event.sceneName}</p>
+                        <p className="mt-0.5 font-sw-mono text-[11px] text-[var(--nord-slate-soft)]">
                           {event.timestamp}
                         </p>
                       </div>

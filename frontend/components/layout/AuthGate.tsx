@@ -14,39 +14,38 @@ import React, { Suspense, useSyncExternalStore } from "react";
 import BrandMark from "@/components/marketing/BrandMark";
 
 /**
- * Dark theme override for the Amplify Authenticator, matching the
- * `sw-glass` graphite palette used across the marketing site and the app
- * shell (teal accent, near-black surfaces) instead of Amplify's default
- * light/AWS-orange look.
+ * Nordic light theme override for the Amplify Authenticator, matching the
+ * warm-ivory / pine-and-teal palette used across the marketing site and the
+ * app shell, instead of Amplify's default light/AWS-orange look.
  */
 const minimalTheme: Theme = {
-  name: "splatial-dark",
+  name: "splatial-nordic",
   tokens: {
     colors: {
       brand: {
         primary: {
-          10: { value: "#0d2622" },
-          20: { value: "#123a33" },
-          40: { value: "#19c2ad" },
-          60: { value: "#19c2ad" },
-          80: { value: "#19c2ad" },
-          90: { value: "#22d6bf" },
-          100: { value: "#7eead9" },
+          10: { value: "#e7ede9" },
+          20: { value: "#cfdcd4" },
+          40: { value: "#4e827c" },
+          60: { value: "#3f6b66" },
+          80: { value: "#23433a" },
+          90: { value: "#1c382f" },
+          100: { value: "#14261f" },
         },
       },
       font: {
-        interactive: { value: "#19c2ad" },
-        primary: { value: "#f4f4f5" },
-        secondary: { value: "#a4a4ae" },
+        interactive: { value: "#23433a" },
+        primary: { value: "#1c1f21" },
+        secondary: { value: "#45494c" },
       },
       background: {
-        primary: { value: "#131316" },
-        secondary: { value: "#0c0c0e" },
+        primary: { value: "#fefefd" },
+        secondary: { value: "#fbfaf8" },
       },
       border: {
-        primary: { value: "rgba(255, 255, 255, 0.12)" },
-        secondary: { value: "rgba(255, 255, 255, 0.08)" },
-        focus: { value: "#19c2ad" },
+        primary: { value: "rgba(52, 56, 59, 0.14)" },
+        secondary: { value: "rgba(52, 56, 59, 0.10)" },
+        focus: { value: "#4e827c" },
       },
     },
     radii: {
@@ -55,9 +54,9 @@ const minimalTheme: Theme = {
       large: { value: "1rem" },
     },
     shadows: {
-      small: { value: "0 1px 2px rgba(0, 0, 0, 0.3)" },
-      medium: { value: "0 4px 12px rgba(0, 0, 0, 0.35)" },
-      large: { value: "0 12px 32px rgba(0, 0, 0, 0.45)" },
+      small: { value: "0 1px 2px rgba(43, 42, 38, 0.06)" },
+      medium: { value: "0 4px 12px rgba(43, 42, 38, 0.08)" },
+      large: { value: "0 12px 32px rgba(43, 42, 38, 0.10)" },
     },
     components: {
       authenticator: {
@@ -69,7 +68,7 @@ const minimalTheme: Theme = {
       button: {
         primary: {
           backgroundColor: { value: "{colors.brand.primary.80.value}" },
-          color: { value: "#08110f" },
+          color: { value: "#f4f2ec" },
           _hover: {
             backgroundColor: { value: "{colors.brand.primary.90.value}" },
           },
@@ -89,7 +88,7 @@ const minimalTheme: Theme = {
         borderColor: { value: "{colors.border.primary.value}" },
         _focus: {
           borderColor: { value: "{colors.brand.primary.60.value}" },
-          boxShadow: { value: "0 0 0 3px rgba(25, 194, 173, 0.18)" },
+          boxShadow: { value: "0 0 0 3px rgba(78, 130, 124, 0.18)" },
         },
       },
       tabs: {
@@ -130,7 +129,7 @@ function AuthGateRouter({ children }: AuthGateProps) {
   // first client paint matches the server HTML.
   if (!isHydrated || authStatus === "configuring") {
     return (
-      <div className="auth-gate flex min-h-screen w-full items-center justify-center bg-[#0c0c0e] antialiased">
+      <div className="auth-gate flex min-h-screen w-full items-center justify-center bg-[var(--nord-bg)] antialiased">
         <AuthFallback />
       </div>
     );
@@ -141,7 +140,7 @@ function AuthGateRouter({ children }: AuthGateProps) {
   }
 
   return (
-    <div className="auth-gate min-h-screen w-full bg-[#0c0c0e] antialiased">
+    <div className="auth-gate min-h-screen w-full bg-[var(--nord-bg)] antialiased">
       <div className="grid min-h-screen lg:grid-cols-2">
         <div className="flex flex-col px-5 py-6 sm:px-8">
           <BrandMark />
@@ -185,7 +184,7 @@ export default function AuthGate({ children }: AuthGateProps) {
       <Authenticator.Provider>
         <Suspense
           fallback={
-            <div className="auth-gate flex min-h-screen w-full items-center justify-center bg-[#0c0c0e] antialiased">
+            <div className="auth-gate flex min-h-screen w-full items-center justify-center bg-[var(--nord-bg)] antialiased">
               <AuthFallback />
             </div>
           }
@@ -199,11 +198,11 @@ export default function AuthGate({ children }: AuthGateProps) {
 
 function AuthFallback() {
   return (
-    <div className="w-full max-w-sm animate-pulse rounded-2xl border border-white/8 bg-[#131316] p-8">
-      <div className="h-5 w-32 rounded bg-white/10" />
-      <div className="mt-6 h-10 w-full rounded bg-white/5" />
-      <div className="mt-3 h-10 w-full rounded bg-white/5" />
-      <div className="mt-6 h-10 w-full rounded bg-white/10" />
+    <div className="w-full max-w-sm animate-pulse rounded-2xl border border-[var(--nord-hairline)] bg-[var(--nord-bg)] p-8">
+      <div className="h-5 w-32 rounded bg-[var(--nord-tint)]" />
+      <div className="mt-6 h-10 w-full rounded bg-[var(--nord-tint)]" />
+      <div className="mt-3 h-10 w-full rounded bg-[var(--nord-tint)]" />
+      <div className="mt-6 h-10 w-full rounded bg-[var(--nord-tint)]" />
     </div>
   );
 }
@@ -220,13 +219,13 @@ const LOGIN_BADGES = [
  * the in-app viewer, without mounting the real WebGL viewer here. */
 function LoginVisualPanel() {
   return (
-    <div className="relative hidden overflow-hidden border-l border-white/8 lg:block">
+    <div className="relative hidden overflow-hidden border-l border-[var(--nord-hairline)] lg:block">
       <div
         className="absolute inset-0"
         style={{
-          backgroundColor: "#0a0a0c",
+          backgroundColor: "#eee9e0",
           backgroundImage:
-            "linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)",
+            "linear-gradient(rgba(52,56,59,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(52,56,59,0.05) 1px, transparent 1px)",
           backgroundSize: "48px 48px",
         }}
       />
@@ -234,19 +233,19 @@ function LoginVisualPanel() {
         className="absolute inset-0 opacity-80"
         style={{
           backgroundImage:
-            "radial-gradient(45% 45% at 30% 30%, rgba(25,194,173,.28), transparent 65%), radial-gradient(40% 40% at 75% 65%, rgba(99,102,241,.24), transparent 65%)",
+            "radial-gradient(45% 45% at 30% 30%, rgba(78,130,124,.20), transparent 65%), radial-gradient(40% 40% at 75% 65%, rgba(35,67,58,.16), transparent 65%)",
         }}
       />
 
       <div className="relative flex h-full flex-col items-center justify-center gap-8 px-12 text-center">
-        <span className="flex h-20 w-20 items-center justify-center rounded-3xl border border-white/10 bg-white/5 text-[#7eead9] backdrop-blur-sm">
+        <span className="flex h-20 w-20 items-center justify-center rounded-3xl border border-[var(--nord-hairline)] bg-[var(--nord-tint)] text-[var(--nord-teal)] backdrop-blur-sm">
           <Boxes className="h-9 w-9" strokeWidth={1.5} />
         </span>
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight text-white">
+          <h2 className="text-2xl font-semibold tracking-tight text-[var(--nord-ink)]">
             Fast cloud rendering, editable 3D scenes.
           </h2>
-          <p className="mt-2 max-w-sm text-sm leading-relaxed text-[#a4a4ae]">
+          <p className="mt-2 max-w-sm text-sm leading-relaxed text-[var(--nord-slate)]">
             Sign in to pick up your scenes, tours, and shots right where you left them.
           </p>
         </div>
@@ -258,8 +257,8 @@ function LoginVisualPanel() {
           className="sw-overlay-panel absolute rounded-xl px-3.5 py-2.5 text-left"
           style={{ top: badge.top, left: badge.left }}
         >
-          <p className="text-[11px] text-[#9a9aa4]">{badge.label}</p>
-          <p className="font-sw-mono text-sm font-semibold text-white">{badge.value}</p>
+          <p className="text-[11px] text-[var(--nord-slate)]">{badge.label}</p>
+          <p className="font-sw-mono text-sm font-semibold text-[var(--nord-ink)]">{badge.value}</p>
         </div>
       ))}
     </div>

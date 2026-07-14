@@ -18,7 +18,7 @@ export default function CommentCountBadge({
       className={cn(
         chip
           ? "sw-stat-chip"
-          : "inline-flex items-center gap-1 font-sw-mono text-[11px] text-[#c0c0c8]",
+          : "inline-flex items-center gap-1 font-sw-mono text-[11px] text-[var(--nord-ink)]",
         className,
       )}
       aria-label={`${commentsCount} comments`}

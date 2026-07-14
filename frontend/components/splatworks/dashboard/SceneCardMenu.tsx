@@ -57,8 +57,8 @@ export default function SceneCardMenu({
           setOpen((v) => !v);
         }}
         className={cn(
-          "rounded-md p-1 text-[#a8a8b2] transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/25",
-          open && "bg-white/10 text-white",
+          "rounded-md p-1 text-[var(--nord-slate)] transition-colors hover:bg-[var(--nord-tint)] hover:text-[var(--nord-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nord-hairline)]",
+          open && "bg-[var(--nord-tint)] text-[var(--nord-ink)]",
           buttonClassName,
         )}
       >
@@ -100,7 +100,7 @@ export default function SceneCardMenu({
           )}
           {onDelete && (
             <>
-              <div className="my-1 border-t border-white/8" />
+              <div className="my-1 border-t border-[var(--nord-hairline)]" />
               <MenuItem
                 icon={Trash2}
                 label="Delete"
@@ -140,8 +140,8 @@ function MenuItem({
       className={cn(
         "flex w-full items-center gap-2.5 px-3.5 py-2 text-left text-[13px] font-medium transition-colors disabled:opacity-50",
         destructive
-          ? "text-[#e0918f] hover:bg-white/10"
-          : "text-[#e8e8ec] hover:bg-white/10",
+          ? "text-[var(--nord-danger)] hover:bg-[var(--nord-tint)]"
+          : "text-[var(--nord-ink)] hover:bg-[var(--nord-tint)]",
       )}
     >
       <Icon className="h-3.5 w-3.5" strokeWidth={1.5} />

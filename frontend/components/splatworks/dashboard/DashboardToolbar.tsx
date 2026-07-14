@@ -54,13 +54,13 @@ function ToolbarDropdown({
       <button
         type="button"
         onClick={onToggle}
-        className="flex h-9 items-center gap-2 rounded-lg px-3 text-[13px] font-medium text-[#e8e8ec] transition-colors hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/25"
+        className="flex h-9 items-center gap-2 rounded-lg px-3 text-[13px] font-medium text-[var(--nord-ink)] transition-colors hover:bg-[var(--nord-tint)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nord-hairline)]"
       >
-        <span className="text-[#9a9aa4]">{label}</span>
+        <span className="text-[var(--nord-slate)]">{label}</span>
         <span>{value}</span>
         <ChevronDown
           className={cn(
-            "h-3.5 w-3.5 text-[#9a9aa4] transition-transform",
+            "h-3.5 w-3.5 text-[var(--nord-slate)] transition-transform",
             open && "rotate-180",
           )}
         />
@@ -73,8 +73,8 @@ function ToolbarDropdown({
               type="button"
               onClick={() => onSelect(option.key)}
               className={cn(
-                "block w-full px-3.5 py-2 text-left text-[13px] transition-colors hover:bg-white/10",
-                option.key === value ? "font-medium text-white" : "text-[#c8c8d0]",
+                "block w-full px-3.5 py-2 text-left text-[13px] transition-colors hover:bg-[var(--nord-tint)]",
+                option.key === value ? "font-medium text-[var(--nord-ink)]" : "text-[var(--nord-ink)]",
               )}
             >
               {option.label}
@@ -117,7 +117,7 @@ export default function DashboardToolbar({
         containerRef={statusRef}
       />
 
-      <span className="mx-0.5 h-5 w-px bg-white/10" aria-hidden />
+      <span className="mx-0.5 h-5 w-px bg-[var(--nord-tint)]" aria-hidden />
 
       <ToolbarDropdown
         label="Sort"
@@ -132,7 +132,7 @@ export default function DashboardToolbar({
         containerRef={sortRef}
       />
 
-      <span className="mx-0.5 h-5 w-px bg-white/10" aria-hidden />
+      <span className="mx-0.5 h-5 w-px bg-[var(--nord-tint)]" aria-hidden />
 
       <div
         className="flex h-9 items-center rounded-lg p-1"
@@ -145,10 +145,10 @@ export default function DashboardToolbar({
           aria-pressed={viewMode === "grid"}
           onClick={() => onViewModeChange("grid")}
           className={cn(
-            "flex h-7 w-8 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/25",
+            "flex h-7 w-8 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nord-hairline)]",
             viewMode === "grid"
-              ? "bg-white text-[#0c0c0e]"
-              : "text-[#9a9aa4] hover:bg-white/[0.06] hover:text-white",
+              ? "bg-[var(--nord-surface)] text-[var(--nord-ink)]"
+              : "text-[var(--nord-slate)] hover:bg-[var(--nord-tint)] hover:text-[var(--nord-ink)]",
           )}
         >
           <LayoutGrid className="h-3.5 w-3.5" />
@@ -159,10 +159,10 @@ export default function DashboardToolbar({
           aria-pressed={viewMode === "list"}
           onClick={() => onViewModeChange("list")}
           className={cn(
-            "flex h-7 w-8 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/25",
+            "flex h-7 w-8 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nord-hairline)]",
             viewMode === "list"
-              ? "bg-white text-[#0c0c0e]"
-              : "text-[#9a9aa4] hover:bg-white/[0.06] hover:text-white",
+              ? "bg-[var(--nord-surface)] text-[var(--nord-ink)]"
+              : "text-[var(--nord-slate)] hover:bg-[var(--nord-tint)] hover:text-[var(--nord-ink)]",
           )}
         >
           <List className="h-3.5 w-3.5" />

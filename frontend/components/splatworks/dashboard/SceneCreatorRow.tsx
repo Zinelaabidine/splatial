@@ -28,7 +28,7 @@ export default function SceneCreatorRow({
         )}
       >
         <UserAvatar initials={account.initials} size={18} />
-        <span className="truncate text-[11px] font-medium text-[#b8b8c2]">
+        <span className="truncate text-[11px] font-medium text-[var(--nord-ink)]">
           {account.name}
         </span>
       </span>
@@ -47,14 +47,14 @@ export default function SceneCreatorRow({
       <div className="min-w-0">
         <p
           className={cn(
-            "truncate font-medium text-white",
+            "truncate font-medium text-[var(--nord-ink)]",
             stacked ? "text-sm" : "text-xs",
           )}
         >
           {account.name}
         </p>
         {stacked && (
-          <p className="truncate font-sw-mono text-[11px] text-[#a0a0aa]">
+          <p className="truncate font-sw-mono text-[11px] text-[var(--nord-slate)]">
             Creator
           </p>
         )}

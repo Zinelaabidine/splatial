@@ -8,8 +8,8 @@ import { usePageSearch } from "@/components/layout/AppShellContext";
 const ViewerShell = dynamic(() => import("@/components/viewer/ViewerShell"), {
   ssr: false,
   loading: () => (
-    <div className="flex h-full items-center justify-center bg-[#0f0f0f]">
-      <p className="text-sm text-[#aaa]">Initialising viewer…</p>
+    <div className="flex h-full items-center justify-center bg-[var(--nord-bg)]">
+      <p className="text-sm text-[var(--nord-slate)]">Initialising viewer…</p>
     </div>
   ),
 });

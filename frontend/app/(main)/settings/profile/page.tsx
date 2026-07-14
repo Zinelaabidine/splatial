@@ -196,14 +196,14 @@ export default function ProfileSettingsPage() {
   if (loading) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-[#909090]" />
+        <Loader2 className="h-8 w-8 animate-spin text-[var(--nord-slate)]" />
       </div>
     );
   }
 
   if (loadError) {
     return (
-      <div className="mx-auto max-w-2xl py-8 text-center text-red-400">
+      <div className="mx-auto max-w-2xl py-8 text-center text-[var(--nord-danger)]">
         {loadError}
       </div>
     );
@@ -211,8 +211,8 @@ export default function ProfileSettingsPage() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <h1 className="mb-2 text-2xl font-semibold text-white">Profile settings</h1>
-      <p className="mb-8 text-sm text-[#909090]">
+      <h1 className="mb-2 text-2xl font-semibold text-[var(--nord-ink)]">Profile settings</h1>
+      <p className="mb-8 text-sm text-[var(--nord-slate)]">
         Update your public handle and profile details.
       </p>
 
@@ -227,11 +227,11 @@ export default function ProfileSettingsPage() {
         </p>
       ) : null}
 
-      <div className="space-y-5 rounded-2xl border border-[#303030] bg-[#0f0f0f] p-6">
+      <div className="space-y-5 rounded-2xl border border-[var(--nord-hairline)] bg-[var(--nord-bg)] p-6">
         <div>
           <label
             htmlFor="profile-username"
-            className="mb-1.5 block text-sm font-medium text-[#e8e8e8]"
+            className="mb-1.5 block text-sm font-medium text-[var(--nord-ink)]"
           >
             Username
           </label>
@@ -241,27 +241,27 @@ export default function ProfileSettingsPage() {
             autoComplete="username"
             value={username}
             onChange={(e) => setUsername(e.target.value.toLowerCase())}
-            className="h-10 w-full rounded-lg border border-[#404040] bg-[#1a1a1a] px-3 text-sm text-white outline-none transition focus:border-[#3b82f6] focus:ring-2 focus:ring-[#3b82f6]/30"
+            className="h-10 w-full rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-surface)] px-3 text-sm text-[var(--nord-ink)] outline-none transition focus:border-[#3b82f6] focus:ring-2 focus:ring-[#3b82f6]/30"
           />
-          <p className="mt-1 text-xs text-[#606060]">{USERNAME_HINT}</p>
+          <p className="mt-1 text-xs text-[var(--nord-slate-soft)]">{USERNAME_HINT}</p>
           {availability === "checking" && (
-            <p className="mt-1 text-xs text-[#909090]">Checking availability…</p>
+            <p className="mt-1 text-xs text-[var(--nord-slate)]">Checking availability…</p>
           )}
           {availability === "available" && (
-            <p className="mt-1 text-xs text-green-400">Username is available</p>
+            <p className="mt-1 text-xs text-[var(--nord-success)]">Username is available</p>
           )}
           {availability === "taken" && (
-            <p className="mt-1 text-xs text-red-400">Username is taken</p>
+            <p className="mt-1 text-xs text-[var(--nord-danger)]">Username is taken</p>
           )}
           {availability === "invalid" && username.trim() !== "" && (
-            <p className="mt-1 text-xs text-red-400">{USERNAME_HINT}</p>
+            <p className="mt-1 text-xs text-[var(--nord-danger)]">{USERNAME_HINT}</p>
           )}
         </div>
 
         <div>
           <label
             htmlFor="profile-display-name"
-            className="mb-1.5 block text-sm font-medium text-[#e8e8e8]"
+            className="mb-1.5 block text-sm font-medium text-[var(--nord-ink)]"
           >
             Display name
           </label>
@@ -271,14 +271,14 @@ export default function ProfileSettingsPage() {
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
             maxLength={50}
-            className="h-10 w-full rounded-lg border border-[#404040] bg-[#1a1a1a] px-3 text-sm text-white outline-none transition focus:border-[#3b82f6] focus:ring-2 focus:ring-[#3b82f6]/30"
+            className="h-10 w-full rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-surface)] px-3 text-sm text-[var(--nord-ink)] outline-none transition focus:border-[#3b82f6] focus:ring-2 focus:ring-[#3b82f6]/30"
           />
         </div>
 
         <div>
           <label
             htmlFor="profile-bio"
-            className="mb-1.5 block text-sm font-medium text-[#e8e8e8]"
+            className="mb-1.5 block text-sm font-medium text-[var(--nord-ink)]"
           >
             Bio
           </label>
@@ -288,17 +288,17 @@ export default function ProfileSettingsPage() {
             onChange={(e) => setBio(e.target.value)}
             maxLength={280}
             rows={4}
-            className="w-full resize-y rounded-lg border border-[#404040] bg-[#1a1a1a] px-3 py-2 text-sm text-white outline-none transition focus:border-[#3b82f6] focus:ring-2 focus:ring-[#3b82f6]/30"
+            className="w-full resize-y rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-surface)] px-3 py-2 text-sm text-[var(--nord-ink)] outline-none transition focus:border-[#3b82f6] focus:ring-2 focus:ring-[#3b82f6]/30"
           />
-          <p className="mt-1 text-xs text-[#606060]">{bio.length}/280</p>
+          <p className="mt-1 text-xs text-[var(--nord-slate-soft)]">{bio.length}/280</p>
         </div>
 
-        <div className="flex items-center justify-between border-t border-[#303030] pt-4">
+        <div className="flex items-center justify-between border-t border-[var(--nord-hairline)] pt-4">
           <div>
             {saveSuccess && (
-              <p className="text-sm text-green-400">Profile saved.</p>
+              <p className="text-sm text-[var(--nord-success)]">Profile saved.</p>
             )}
-            {saveError && <p className="text-sm text-red-400">{saveError}</p>}
+            {saveError && <p className="text-sm text-[var(--nord-danger)]">{saveError}</p>}
           </div>
           <Button type="button" onClick={handleSave} disabled={saving}>
             {saving ? (
@@ -313,10 +313,10 @@ export default function ProfileSettingsPage() {
         </div>
       </div>
 
-      <div className="mt-6 space-y-5 rounded-2xl border border-[#303030] bg-[#0f0f0f] p-6">
+      <div className="mt-6 space-y-5 rounded-2xl border border-[var(--nord-hairline)] bg-[var(--nord-bg)] p-6">
         <div>
-          <h2 className="text-base font-semibold text-white">Email notifications</h2>
-          <p className="mt-1 text-xs text-[#909090]">
+          <h2 className="text-base font-semibold text-[var(--nord-ink)]">Email notifications</h2>
+          <p className="mt-1 text-xs text-[var(--nord-slate)]">
             {profile?.email
               ? `Sent to ${profile.email}.`
               : "Sign in again to link an email address for notifications."}{" "}
@@ -327,7 +327,7 @@ export default function ProfileSettingsPage() {
           {(Object.keys(NOTIFY_EMAIL_LABELS) as (keyof NotifyEmailPrefs)[]).map((key) => (
             <label
               key={key}
-              className="flex items-center justify-between gap-3 text-sm text-[#e8e8e8]"
+              className="flex items-center justify-between gap-3 text-sm text-[var(--nord-ink)]"
             >
               <span>{NOTIFY_EMAIL_LABELS[key]}</span>
               <input
@@ -336,18 +336,18 @@ export default function ProfileSettingsPage() {
                 disabled={notifySaving === key}
                 onChange={(e) => void handleNotifyEmailToggle(key, e.target.checked)}
                 aria-label={NOTIFY_EMAIL_LABELS[key]}
-                className="h-4 w-4 shrink-0 cursor-pointer rounded border border-[#404040] bg-[#1a1a1a] accent-[#3b82f6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3b82f6]/50 disabled:opacity-50"
+                className="h-4 w-4 shrink-0 cursor-pointer rounded border border-[var(--nord-hairline)] bg-[var(--nord-surface)] accent-[#3b82f6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3b82f6]/50 disabled:opacity-50"
               />
             </label>
           ))}
         </div>
-        {notifyError && <p className="text-sm text-red-400">{notifyError}</p>}
+        {notifyError && <p className="text-sm text-[var(--nord-danger)]">{notifyError}</p>}
       </div>
 
-      <div className="mt-6 space-y-4 rounded-2xl border border-[#303030] bg-[#0f0f0f] p-6">
+      <div className="mt-6 space-y-4 rounded-2xl border border-[var(--nord-hairline)] bg-[var(--nord-bg)] p-6">
         <div>
-          <h2 className="text-base font-semibold text-white">Privacy</h2>
-          <p className="mt-1 text-xs text-[#909090]">
+          <h2 className="text-base font-semibold text-[var(--nord-ink)]">Privacy</h2>
+          <p className="mt-1 text-xs text-[var(--nord-slate)]">
             Default visibility applied to newly created scenes. You can still change it per scene.
           </p>
         </div>
@@ -357,8 +357,8 @@ export default function ProfileSettingsPage() {
               key={option}
               className={`flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${
                 defaultVisibility === option
-                  ? "border-[#3b82f6] bg-[#3b82f6]/10 text-white"
-                  : "border-[#404040] text-[#a0a0aa] hover:bg-[#1a1a1a]"
+                  ? "border-[#3b82f6] bg-[#3b82f6]/10 text-[var(--nord-ink)]"
+                  : "border-[var(--nord-hairline)] text-[var(--nord-slate)] hover:bg-[var(--nord-surface)]"
               }`}
             >
               <input
@@ -374,7 +374,7 @@ export default function ProfileSettingsPage() {
             </label>
           ))}
         </div>
-        {visibilityError && <p className="text-sm text-red-400">{visibilityError}</p>}
+        {visibilityError && <p className="text-sm text-[var(--nord-danger)]">{visibilityError}</p>}
       </div>
     </div>
   );

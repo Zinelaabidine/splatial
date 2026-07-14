@@ -95,7 +95,7 @@ export default function CommentReactionBar({
     <div ref={containerRef} className={cn("relative inline-flex items-center", className)}>
       {expanded ? (
         <div
-          className="absolute bottom-full left-0 z-10 mb-1.5 flex items-center gap-0.5 rounded-full border border-white/10 bg-[#1a1a1a] px-1.5 py-1 shadow-lg"
+          className="absolute bottom-full left-0 z-10 mb-1.5 flex items-center gap-0.5 rounded-full border border-[var(--nord-hairline)] bg-[var(--nord-surface)] px-1.5 py-1 shadow-lg"
           role="toolbar"
           aria-label="Comment reactions"
         >
@@ -112,8 +112,8 @@ export default function CommentReactionBar({
                 title={label}
                 onClick={() => void handleReactionClick(type)}
                 className={cn(
-                  "flex h-7 w-7 items-center justify-center rounded-full text-sm transition-colors hover:bg-white/10",
-                  selected && "bg-white/15 ring-1 ring-white/30",
+                  "flex h-7 w-7 items-center justify-center rounded-full text-sm transition-colors hover:bg-[var(--nord-tint)]",
+                  selected && "bg-[var(--nord-tint)] ring-1 ring-[var(--nord-hairline)]",
                 )}
               >
                 <span aria-hidden>{emoji}</span>
@@ -128,8 +128,8 @@ export default function CommentReactionBar({
         aria-expanded={expanded}
         onClick={() => setExpanded((v) => !v)}
         className={cn(
-          "flex items-center gap-1 font-sw-mono text-[11px] text-[#909090] hover:text-white",
-          summary.myReaction && "text-[#19c2ad] hover:text-[#19c2ad]",
+          "flex items-center gap-1 font-sw-mono text-[11px] text-[var(--nord-slate)] hover:text-[var(--nord-ink)]",
+          summary.myReaction && "text-[var(--nord-teal)] hover:text-[var(--nord-teal)]",
         )}
       >
         <span aria-hidden>{myReactionEmoji ?? "👍"}</span>
@@ -140,7 +140,7 @@ export default function CommentReactionBar({
       </button>
 
       {error ? (
-        <p className="absolute top-full left-0 mt-1 whitespace-nowrap text-[10px] text-red-400" role="alert">
+        <p className="absolute top-full left-0 mt-1 whitespace-nowrap text-[10px] text-[var(--nord-danger)]" role="alert">
           {error}
         </p>
       ) : null}

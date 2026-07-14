@@ -45,70 +45,70 @@ export default function ConfirmActionDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--nord-scrim)] p-4"
       onClick={onCancel}
     >
       <div
-        className="w-full max-w-md rounded-xl border border-zinc-800 bg-zinc-900 p-6 shadow-xl"
+        className="w-full max-w-md rounded-xl border border-[var(--nord-hairline)] bg-[var(--nord-surface)] p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-start gap-3">
           <div
             className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
               tone === "destructive"
-                ? "bg-red-950/50"
+                ? "bg-[var(--nord-danger-tint)]"
                 : tone === "warning"
-                  ? "bg-amber-950/40"
-                  : "bg-teal-950/30"
+                  ? "bg-[#f4ecd6]"
+                  : "bg-[var(--nord-pine-tint)]"
             }`}
           >
             <AlertTriangle
               className={`h-5 w-5 ${
                 tone === "destructive"
-                  ? "text-red-400"
+                  ? "text-[var(--nord-danger)]"
                   : tone === "warning"
                     ? "text-amber-400"
-                    : "text-teal-400"
+                    : "text-[var(--nord-teal)]"
               }`}
             />
           </div>
           <div>
-            <h2 className="text-base font-semibold text-zinc-100">{title}</h2>
-            <div className="mt-1 text-sm text-zinc-400">{description}</div>
+            <h2 className="text-base font-semibold text-[var(--nord-ink)]">{title}</h2>
+            <div className="mt-1 text-sm text-[var(--nord-slate)]">{description}</div>
           </div>
         </div>
 
         {requireReason && (
           <div className="mb-3">
-            <label className="mb-1 block text-xs font-medium text-zinc-500">
-              Reason {requireReason && <span className="text-red-400">*</span>}
+            <label className="mb-1 block text-xs font-medium text-[var(--nord-slate)]">
+              Reason {requireReason && <span className="text-[var(--nord-danger)]">*</span>}
             </label>
             <textarea
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               rows={3}
               placeholder="Why are you taking this action? (recorded in the audit log)"
-              className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-teal-500/60 focus:ring-1 focus:ring-teal-500/30"
+              className="w-full rounded-md border border-[var(--nord-hairline)] bg-[var(--nord-bg)] px-3 py-2 text-sm text-[var(--nord-ink)] outline-none placeholder:text-[var(--nord-slate-soft)] focus:border-[var(--nord-teal)] focus:ring-1 focus:ring-[var(--nord-teal)]"
             />
           </div>
         )}
 
         {requireTypedConfirmation && (
           <div className="mb-3">
-            <label className="mb-1 block text-xs font-medium text-zinc-500">
-              Type <span className="font-mono text-red-400">{requireTypedConfirmation}</span> to confirm
+            <label className="mb-1 block text-xs font-medium text-[var(--nord-slate)]">
+              Type <span className="font-mono text-[var(--nord-danger)]">{requireTypedConfirmation}</span> to confirm
             </label>
             <input
               type="text"
               value={typedConfirmation}
               onChange={(e) => setTypedConfirmation(e.target.value)}
-              className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-teal-500/60 focus:ring-1 focus:ring-teal-500/30"
+              className="w-full rounded-md border border-[var(--nord-hairline)] bg-[var(--nord-bg)] px-3 py-2 text-sm text-[var(--nord-ink)] outline-none focus:border-[var(--nord-teal)] focus:ring-1 focus:ring-[var(--nord-teal)]"
             />
           </div>
         )}
 
         {error && (
-          <p className="mb-3 rounded-md border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-300">
+          <p className="mb-3 rounded-md border border-[var(--nord-danger)] bg-[var(--nord-danger-tint)] px-3 py-2 text-sm text-[var(--nord-danger)]">
             {error}
           </p>
         )}
@@ -118,7 +118,7 @@ export default function ConfirmActionDialog({
             type="button"
             disabled={busy}
             onClick={onCancel}
-            className="rounded-md border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-300 transition-colors hover:bg-zinc-800 disabled:opacity-50"
+            className="rounded-md border border-[var(--nord-hairline)] bg-[var(--nord-surface)] px-4 py-2 text-sm font-medium text-[var(--nord-ink)] transition-colors hover:bg-[var(--nord-surface)] disabled:opacity-50"
           >
             Cancel
           </button>
@@ -128,10 +128,10 @@ export default function ConfirmActionDialog({
             onClick={() => onConfirm(reason.trim())}
             className={`inline-flex items-center justify-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${
               tone === "destructive"
-                ? "border border-red-700/50 bg-red-900/50 text-red-200 hover:bg-red-900/70"
+                ? "border border-[var(--nord-danger)] bg-[var(--nord-danger-tint)] text-[var(--nord-danger)] hover:bg-[var(--nord-danger-tint)]"
                 : tone === "warning"
-                  ? "border border-amber-600/40 bg-amber-950/40 text-amber-300 hover:bg-amber-950/60"
-                  : "border border-teal-600/40 bg-teal-600/20 text-teal-300 hover:bg-teal-600/30"
+                  ? "border border-amber-600/40 bg-[#f4ecd6] text-[#9a6b1f] hover:bg-[#f4ecd6]"
+                  : "border border-[var(--nord-teal)] bg-[var(--nord-pine)] text-[var(--nord-teal)] hover:bg-[var(--nord-pine)]"
             }`}
           >
             {busy && <Loader2 className="h-4 w-4 animate-spin" />}

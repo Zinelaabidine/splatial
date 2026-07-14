@@ -73,7 +73,7 @@ export default function AdminAttemptsView() {
 
   if (isAdmin === null) {
     return (
-      <div className="flex h-64 items-center justify-center text-[#909090]">
+      <div className="flex h-64 items-center justify-center text-[var(--nord-slate)]">
         <Loader2 className="mr-2 h-5 w-5 animate-spin" />
         Checking access…
       </div>
@@ -82,12 +82,12 @@ export default function AdminAttemptsView() {
 
   if (isAdmin === false) {
     return (
-      <div className="mx-auto mt-16 flex max-w-md flex-col items-center rounded-xl border border-[#2a2a2a] bg-[#161616] px-6 py-10 text-center">
-        <ShieldAlert className="mb-3 h-8 w-8 text-[#d98a8a]" />
-        <h2 className="text-lg font-semibold text-[#f1f1f1]">
+      <div className="mx-auto mt-16 flex max-w-md flex-col items-center rounded-xl border border-[var(--nord-hairline)] bg-[var(--nord-bg)] px-6 py-10 text-center">
+        <ShieldAlert className="mb-3 h-8 w-8 text-[var(--nord-danger)]" />
+        <h2 className="text-lg font-semibold text-[var(--nord-ink)]">
           Admin access required
         </h2>
-        <p className="mt-1 text-sm text-[#909090]">
+        <p className="mt-1 text-sm text-[var(--nord-slate)]">
           Your account isn’t in the admin group. Ask an operator to add you, then
           sign out and back in.
         </p>
@@ -99,10 +99,10 @@ export default function AdminAttemptsView() {
     <div className="mx-auto max-w-6xl">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-[#f1f1f1]">
+          <h1 className="text-xl font-semibold text-[var(--nord-ink)]">
             Attempts overview
           </h1>
-          <p className="text-sm text-[#909090]">
+          <p className="text-sm text-[var(--nord-slate)]">
             Every training run across all users. Click a row for details.
           </p>
         </div>
@@ -110,7 +110,7 @@ export default function AdminAttemptsView() {
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value)}
-            className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-2 text-sm text-[#e8e8e8] outline-none focus:border-[#3b82f6]"
+            className="rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-surface)] px-3 py-2 text-sm text-[var(--nord-ink)] outline-none focus:border-[#3b82f6]"
           >
             {STATUS_FILTERS.map((f) => (
               <option key={f.value} value={f.value}>
@@ -122,7 +122,7 @@ export default function AdminAttemptsView() {
             type="button"
             onClick={() => load({ status, cursor: undefined, append: false })}
             disabled={loading}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-2 text-sm text-[#e8e8e8] transition-colors hover:bg-[#222] disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-surface)] px-3 py-2 text-sm text-[var(--nord-ink)] transition-colors hover:bg-[var(--nord-surface)] disabled:opacity-50"
           >
             <RefreshCw
               className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
@@ -133,18 +133,18 @@ export default function AdminAttemptsView() {
       </div>
 
       {error && (
-        <div className="mb-4 rounded-lg border border-[#5b2626] bg-[#2a1414] px-4 py-3 text-sm text-[#f0a8a8]">
+        <div className="mb-4 rounded-lg border border-[var(--nord-danger)] bg-[var(--nord-danger-tint)] px-4 py-3 text-sm text-[var(--nord-danger)]">
           {error}
         </div>
       )}
 
       {loading ? (
-        <div className="flex h-64 items-center justify-center text-[#909090]">
+        <div className="flex h-64 items-center justify-center text-[var(--nord-slate)]">
           <Loader2 className="mr-2 h-5 w-5 animate-spin" />
           Loading attempts…
         </div>
       ) : attempts.length === 0 ? (
-        <div className="flex h-48 items-center justify-center rounded-xl border border-dashed border-[#2a2a2a] text-[#808080]">
+        <div className="flex h-48 items-center justify-center rounded-xl border border-dashed border-[var(--nord-hairline)] text-[var(--nord-slate)]">
           No attempts found.
         </div>
       ) : (
@@ -156,7 +156,7 @@ export default function AdminAttemptsView() {
                 type="button"
                 onClick={() => load({ status, cursor, append: true })}
                 disabled={loadingMore}
-                className="inline-flex items-center gap-2 rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-4 py-2 text-sm text-[#e8e8e8] transition-colors hover:bg-[#222] disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-surface)] px-4 py-2 text-sm text-[var(--nord-ink)] transition-colors hover:bg-[var(--nord-surface)] disabled:opacity-50"
               >
                 {loadingMore && <Loader2 className="h-4 w-4 animate-spin" />}
                 Load more

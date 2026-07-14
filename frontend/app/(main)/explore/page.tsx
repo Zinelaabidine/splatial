@@ -25,7 +25,7 @@ function buildExplorePath(category: string | null, tag: string | null): string {
 
 function ExplorePageTitle() {
   return (
-    <h1 className="mb-6 bg-gradient-to-r from-white via-sky-100 to-indigo-200 bg-clip-text text-xl font-bold tracking-tight text-transparent sm:text-2xl">
+    <h1 className="mb-6 bg-gradient-to-r from-[var(--nord-surface)] via-sky-100 to-indigo-200 bg-clip-text text-xl font-bold tracking-tight text-transparent sm:text-2xl">
       Splatworks: Explore
     </h1>
   );
@@ -155,7 +155,7 @@ export default function ExplorePage() {
   const filterBar = (
     <div className="mb-6 space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-medium uppercase tracking-wide text-[#737373]">
+        <span className="text-xs font-medium uppercase tracking-wide text-[var(--nord-slate)]">
           Category
         </span>
         <button
@@ -164,8 +164,8 @@ export default function ExplorePage() {
           className={cn(
             "rounded-full px-3 py-1 text-xs font-medium transition-colors",
             activeCategory === null
-              ? "bg-white text-black"
-              : "bg-[#303030] text-[#d4d4d4] hover:bg-[#363636] hover:text-white",
+              ? "bg-[var(--nord-surface)] text-[var(--nord-ink)]"
+              : "bg-[var(--nord-surface)] text-[var(--nord-ink)] hover:bg-[var(--nord-surface)] hover:text-[var(--nord-ink)]",
           )}
         >
           All
@@ -178,8 +178,8 @@ export default function ExplorePage() {
             className={cn(
               "rounded-full px-3 py-1 text-xs font-medium transition-colors",
               activeCategory === cat
-                ? "bg-violet-600 text-white"
-                : "bg-[#303030] text-[#d4d4d4] hover:bg-[#363636] hover:text-white",
+                ? "bg-violet-600 text-[var(--nord-ink)]"
+                : "bg-[var(--nord-surface)] text-[var(--nord-ink)] hover:bg-[var(--nord-surface)] hover:text-[var(--nord-ink)]",
             )}
           >
             {cat}
@@ -189,16 +189,16 @@ export default function ExplorePage() {
 
       {activeTag ? (
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-medium uppercase tracking-wide text-[#737373]">
+          <span className="text-xs font-medium uppercase tracking-wide text-[var(--nord-slate)]">
             Tag
           </span>
-          <span className="inline-flex items-center gap-1.5 rounded-md bg-[#303030] px-2.5 py-1 text-xs text-[#e5e5e5] ring-1 ring-[#404040]">
+          <span className="inline-flex items-center gap-1.5 rounded-md bg-[var(--nord-surface)] px-2.5 py-1 text-xs text-[var(--nord-ink)] ring-1 ring-[var(--nord-hairline)]">
             #{activeTag}
             <button
               type="button"
               aria-label="Clear tag filter"
               onClick={clearTagFilter}
-              className="rounded p-0.5 text-[#909090] transition-colors hover:bg-[#404040] hover:text-white"
+              className="rounded p-0.5 text-[var(--nord-slate)] transition-colors hover:bg-[var(--nord-hairline)] hover:text-[var(--nord-ink)]"
             >
               <X className="h-3 w-3" />
             </button>
@@ -227,7 +227,7 @@ export default function ExplorePage() {
       <div className="mx-auto w-full max-w-[1400px]">
         <ExplorePageTitle />
         {filterBar}
-        <div className="rounded-xl border border-red-900/50 bg-red-950/40 px-5 py-4 text-sm text-red-300">
+        <div className="rounded-xl border border-[var(--nord-danger)] bg-[var(--nord-danger-tint)] px-5 py-4 text-sm text-[var(--nord-danger)]">
           {error}{" "}
           <button
             type="button"
@@ -235,7 +235,7 @@ export default function ExplorePage() {
               const controller = new AbortController();
               void fetchExplore(controller.signal);
             }}
-            className="font-medium underline underline-offset-2 hover:text-red-200"
+            className="font-medium underline underline-offset-2 hover:text-[var(--nord-danger)]"
           >
             Retry
           </button>
@@ -250,13 +250,13 @@ export default function ExplorePage() {
       {filterBar}
 
       {loadMoreError ? (
-        <div className="mb-4 rounded-xl border border-red-900/50 bg-red-950/40 px-5 py-4 text-sm text-red-300">
+        <div className="mb-4 rounded-xl border border-[var(--nord-danger)] bg-[var(--nord-danger-tint)] px-5 py-4 text-sm text-[var(--nord-danger)]">
           {loadMoreError}{" "}
           <Button
             type="button"
             variant="link"
             onClick={() => void loadMore()}
-            className="h-auto p-0 text-red-300 underline underline-offset-2 hover:text-red-200"
+            className="h-auto p-0 text-[var(--nord-danger)] underline underline-offset-2 hover:text-[var(--nord-danger)]"
           >
             Retry
           </Button>
@@ -264,7 +264,7 @@ export default function ExplorePage() {
       ) : null}
 
       {items.length === 0 ? (
-        <p className="py-16 text-center text-sm text-[#909090]">{emptyMessage}</p>
+        <p className="py-16 text-center text-sm text-[var(--nord-slate)]">{emptyMessage}</p>
       ) : (
         <PublicSceneCardGrid
           items={items}

@@ -73,7 +73,7 @@ export default function PublicSceneCard({
           className="flex h-[180px] items-center justify-center rounded-t-2xl px-5 text-center"
           style={{ background: COMPLETED_TILE }}
         >
-          <span className="font-sw-mono text-[10px] font-semibold uppercase tracking-wider text-[#6ee7b7]">
+          <span className="font-sw-mono text-[10px] font-semibold uppercase tracking-wider text-[var(--nord-success)]">
             {scene.title}
           </span>
         </div>
@@ -88,7 +88,7 @@ export default function PublicSceneCard({
             className="mb-2.5"
           />
         ) : null}
-        <h3 className="truncate text-[15px] font-semibold text-white">{scene.title}</h3>
+        <h3 className="truncate text-[15px] font-semibold text-[var(--nord-ink)]">{scene.title}</h3>
         <SceneTaxonomyDisplay
           category={scene.category}
           tags={scene.tags}

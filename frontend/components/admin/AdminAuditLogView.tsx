@@ -48,14 +48,14 @@ export default function AdminAuditLogView() {
     <div className="mx-auto max-w-6xl">
       <div className="mb-5 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-[#f1f1f1]">Audit log</h1>
-          <p className="text-sm text-[#909090]">Every sensitive admin user-management action, newest first.</p>
+          <h1 className="text-xl font-semibold text-[var(--nord-ink)]">Audit log</h1>
+          <p className="text-sm text-[var(--nord-slate)]">Every sensitive admin user-management action, newest first.</p>
         </div>
         <button
           type="button"
           onClick={() => load({ cursor: undefined, append: false })}
           disabled={loading}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-2 text-sm text-[#e8e8e8] hover:bg-[#222] disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-surface)] px-3 py-2 text-sm text-[var(--nord-ink)] hover:bg-[var(--nord-surface)] disabled:opacity-50"
         >
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
           Refresh
@@ -63,19 +63,19 @@ export default function AdminAuditLogView() {
       </div>
 
       {error && (
-        <div className="mb-4 rounded-lg border border-[#5b2626] bg-[#2a1414] px-4 py-3 text-sm text-[#f0a8a8]">{error}</div>
+        <div className="mb-4 rounded-lg border border-[var(--nord-danger)] bg-[var(--nord-danger-tint)] px-4 py-3 text-sm text-[var(--nord-danger)]">{error}</div>
       )}
 
       {loading && items.length === 0 ? (
-        <div className="flex h-64 items-center justify-center text-[#909090]">
+        <div className="flex h-64 items-center justify-center text-[var(--nord-slate)]">
           <Loader2 className="mr-2 h-5 w-5 animate-spin" />
           Loading…
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-[#2a2a2a] bg-[#161616]">
+        <div className="overflow-hidden rounded-xl border border-[var(--nord-hairline)] bg-[var(--nord-bg)]">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-[#2a2a2a] bg-[#1a1a1a] text-left text-xs font-semibold uppercase tracking-wider text-[#808080]">
+              <tr className="border-b border-[var(--nord-hairline)] bg-[var(--nord-surface)] text-left text-xs font-semibold uppercase tracking-wider text-[var(--nord-slate)]">
                 <th className="px-4 py-3">When</th>
                 <th className="px-4 py-3">Action</th>
                 <th className="px-4 py-3">Actor</th>
@@ -83,14 +83,14 @@ export default function AdminAuditLogView() {
                 <th className="px-4 py-3">Reason</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#232323]">
+            <tbody className="divide-y divide-[var(--nord-hairline)]">
               {items.map((log) => (
                 <tr key={log.logId}>
-                  <td className="px-4 py-3 text-[#c8c8c8]">{formatWhen(log.createdAt)}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-[#e8e8e8]">{log.actionType}</td>
-                  <td className="px-4 py-3 text-xs text-[#a0a0a0]">{log.actorAdminId}</td>
-                  <td className="px-4 py-3 text-xs text-[#a0a0a0]">{log.targetUserId}</td>
-                  <td className="px-4 py-3 text-xs text-[#a0a0a0]">{log.reason ?? "—"}</td>
+                  <td className="px-4 py-3 text-[var(--nord-ink)]">{formatWhen(log.createdAt)}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-[var(--nord-ink)]">{log.actionType}</td>
+                  <td className="px-4 py-3 text-xs text-[var(--nord-slate)]">{log.actorAdminId}</td>
+                  <td className="px-4 py-3 text-xs text-[var(--nord-slate)]">{log.targetUserId}</td>
+                  <td className="px-4 py-3 text-xs text-[var(--nord-slate)]">{log.reason ?? "—"}</td>
                 </tr>
               ))}
             </tbody>
@@ -103,7 +103,7 @@ export default function AdminAuditLogView() {
           <button
             type="button"
             onClick={() => load({ cursor, append: true })}
-            className="inline-flex items-center gap-2 rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-4 py-2 text-sm text-[#e8e8e8] hover:bg-[#222]"
+            className="inline-flex items-center gap-2 rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-surface)] px-4 py-2 text-sm text-[var(--nord-ink)] hover:bg-[var(--nord-surface)]"
           >
             Load more
           </button>

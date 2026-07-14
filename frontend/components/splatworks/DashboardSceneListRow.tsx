@@ -76,12 +76,12 @@ export default function DashboardSceneListRow({
           : undefined
       }
       className={cn(
-        "group flex items-center gap-4 rounded-xl border border-white/8 bg-[#131316] px-3 py-3 transition-all",
-        isViewable && "cursor-pointer hover:border-white/18 hover:bg-[#1a1a1e] hover:shadow-lg hover:shadow-black/20",
-        scene.status === "failed" && "border-red-400/40",
+        "group flex items-center gap-4 rounded-xl border border-[var(--nord-hairline)] bg-[var(--nord-bg)] px-3 py-3 transition-all",
+        isViewable && "cursor-pointer hover:border-[var(--nord-hairline)] hover:bg-[var(--nord-surface)] hover:shadow-lg hover:shadow-black/20",
+        scene.status === "failed" && "border-[var(--nord-danger)]",
       )}
     >
-      <div className="h-14 w-[4.5rem] shrink-0 overflow-hidden rounded-lg bg-[#0e0e10] ring-1 ring-white/6">
+      <div className="h-14 w-[4.5rem] shrink-0 overflow-hidden rounded-lg bg-[var(--nord-bg)] ring-1 ring-[var(--nord-hairline)]">
         {scene.status === "completed" && scene.thumbnailUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={scene.thumbnailUrl} alt="" className="h-full w-full object-cover" />
@@ -96,12 +96,12 @@ export default function DashboardSceneListRow({
 
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <h3 className="min-w-0 truncate text-[14px] font-semibold text-white">
+          <h3 className="min-w-0 truncate text-[14px] font-semibold text-[var(--nord-ink)]">
             {scene.title}
           </h3>
           <SceneVisibilityBadge visibility={visibility} />
         </div>
-        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[#a8a8b2]">
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[var(--nord-slate)]">
           {scene.status !== "completed" && (
             <span className="inline-flex items-center gap-1 uppercase tracking-wide">
               <StatusDot status={scene.status} className="h-1.5 w-1.5" />
@@ -126,7 +126,7 @@ export default function DashboardSceneListRow({
             variant="outline"
             disabled={cancelling}
             onClick={() => onCancelScene?.(scene)}
-            className="rounded-lg border-white/12 bg-white/[0.04] text-[#e8e8ec] hover:bg-white/10 hover:text-white"
+            className="rounded-lg border-[var(--nord-hairline)] bg-[var(--nord-tint)] text-[var(--nord-ink)] hover:bg-[var(--nord-tint)] hover:text-[var(--nord-ink)]"
           >
             <XCircle data-icon="inline-start" />
             {cancelling ? "Cancelling…" : "Cancel"}
@@ -140,8 +140,8 @@ export default function DashboardSceneListRow({
             className={cn(
               "rounded-lg border text-[13px] font-medium",
               scene.apiStatus === "FAILED"
-                ? "border-white/12 bg-white/[0.04] text-[#e0918f] hover:bg-white/10"
-                : "border-transparent bg-[#f4f4f5] text-[#0c0c0e] hover:bg-[#e4e4e7]",
+                ? "border-[var(--nord-hairline)] bg-[var(--nord-tint)] text-[var(--nord-danger)] hover:bg-[var(--nord-tint)]"
+                : "border-transparent bg-[var(--nord-surface-2)] text-[var(--nord-ink)] hover:bg-[var(--nord-surface-2)]",
             )}
           >
             <Send data-icon="inline-start" />
@@ -155,8 +155,8 @@ export default function DashboardSceneListRow({
             aria-expanded={menuOpen}
             onClick={() => setMenuOpen((open) => !open)}
             className={cn(
-              "rounded-lg p-1.5 text-[#a8a8b2] transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/25",
-              menuOpen ? "bg-white/10 text-white opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
+              "rounded-lg p-1.5 text-[var(--nord-slate)] transition-colors hover:bg-[var(--nord-tint)] hover:text-[var(--nord-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nord-hairline)]",
+              menuOpen ? "bg-[var(--nord-tint)] text-[var(--nord-ink)] opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
             )}
           >
             <MoreVertical className="h-3.5 w-3.5" />
@@ -174,7 +174,7 @@ export default function DashboardSceneListRow({
                     setMenuOpen(false);
                     onEditScene?.(scene);
                   }}
-                  className="flex w-full items-center gap-2.5 px-3.5 py-2 text-left text-[13px] font-medium text-[#e8e8ec] transition-colors hover:bg-white/10"
+                  className="flex w-full items-center gap-2.5 px-3.5 py-2 text-left text-[13px] font-medium text-[var(--nord-ink)] transition-colors hover:bg-[var(--nord-tint)]"
                 >
                   <Pencil className="h-3.5 w-3.5" strokeWidth={1.5} />
                   Edit
@@ -187,7 +187,7 @@ export default function DashboardSceneListRow({
                   setMenuOpen(false);
                   onDeleteScene?.(scene);
                 }}
-                className="flex w-full items-center gap-2.5 px-3.5 py-2 text-left text-[13px] font-medium text-[#e0918f] transition-colors hover:bg-white/10"
+                className="flex w-full items-center gap-2.5 px-3.5 py-2 text-left text-[13px] font-medium text-[var(--nord-danger)] transition-colors hover:bg-[var(--nord-tint)]"
               >
                 <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
                 Delete

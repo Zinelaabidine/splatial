@@ -76,16 +76,16 @@ export default function ProfileOnboardingGate({
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#121212]">
-        <Loader2 className="h-8 w-8 animate-spin text-[#909090]" />
+      <div className="flex min-h-screen items-center justify-center bg-[var(--nord-bg)]">
+        <Loader2 className="h-8 w-8 animate-spin text-[var(--nord-slate)]" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#121212] px-6 text-center">
-        <p className="text-sm text-red-400">{error}</p>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[var(--nord-bg)] px-6 text-center">
+        <p className="text-sm text-[var(--nord-danger)]">{error}</p>
         <Button
           variant="outline"
           onClick={() => {
@@ -111,8 +111,8 @@ export default function ProfileOnboardingGate({
   if (needsOnboarding) {
     if (!onOnboarding) {
       return (
-        <div className="flex min-h-screen items-center justify-center bg-[#121212]">
-          <Loader2 className="h-8 w-8 animate-spin text-[#909090]" />
+        <div className="flex min-h-screen items-center justify-center bg-[var(--nord-bg)]">
+          <Loader2 className="h-8 w-8 animate-spin text-[var(--nord-slate)]" />
         </div>
       );
     }
@@ -194,10 +194,10 @@ function OnboardingPage({ onComplete }: OnboardingPageProps) {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#121212] px-4 py-10">
-      <div className="w-full max-w-md rounded-2xl border border-[#303030] bg-[#0f0f0f] p-8 shadow-xl">
-        <h1 className="text-2xl font-semibold text-white">Choose your username</h1>
-        <p className="mt-2 text-sm text-[#909090]">
+    <div className="flex min-h-screen items-center justify-center bg-[var(--nord-bg)] px-4 py-10">
+      <div className="w-full max-w-md rounded-2xl border border-[var(--nord-hairline)] bg-[var(--nord-bg)] p-8 shadow-xl">
+        <h1 className="text-2xl font-semibold text-[var(--nord-ink)]">Choose your username</h1>
+        <p className="mt-2 text-sm text-[var(--nord-slate)]">
           Your handle is public and unique across Splatial. {USERNAME_HINT}.
         </p>
 
@@ -205,7 +205,7 @@ function OnboardingPage({ onComplete }: OnboardingPageProps) {
           <div>
             <label
               htmlFor="onboarding-username"
-              className="mb-1.5 block text-sm font-medium text-[#e8e8e8]"
+              className="mb-1.5 block text-sm font-medium text-[var(--nord-ink)]"
             >
               Username
             </label>
@@ -215,42 +215,42 @@ function OnboardingPage({ onComplete }: OnboardingPageProps) {
               autoComplete="username"
               value={username}
               onChange={(e) => setUsername(e.target.value.toLowerCase())}
-              className="h-10 w-full rounded-lg border border-[#404040] bg-[#1a1a1a] px-3 text-sm text-white outline-none transition focus:border-[#3b82f6] focus:ring-2 focus:ring-[#3b82f6]/30"
+              className="h-10 w-full rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-surface)] px-3 text-sm text-[var(--nord-ink)] outline-none transition focus:border-[#3b82f6] focus:ring-2 focus:ring-[#3b82f6]/30"
               required
             />
             {availability === "checking" && (
-              <p className="mt-1.5 text-xs text-[#909090]">Checking availability…</p>
+              <p className="mt-1.5 text-xs text-[var(--nord-slate)]">Checking availability…</p>
             )}
             {availability === "available" && (
-              <p className="mt-1.5 text-xs text-green-400">Username is available</p>
+              <p className="mt-1.5 text-xs text-[var(--nord-success)]">Username is available</p>
             )}
             {availability === "taken" && (
-              <p className="mt-1.5 text-xs text-red-400">Username is taken</p>
+              <p className="mt-1.5 text-xs text-[var(--nord-danger)]">Username is taken</p>
             )}
             {availability === "invalid" && username.trim() !== "" && (
-              <p className="mt-1.5 text-xs text-red-400">{USERNAME_HINT}</p>
+              <p className="mt-1.5 text-xs text-[var(--nord-danger)]">{USERNAME_HINT}</p>
             )}
           </div>
 
           <div>
             <label
               htmlFor="onboarding-display-name"
-              className="mb-1.5 block text-sm font-medium text-[#e8e8e8]"
+              className="mb-1.5 block text-sm font-medium text-[var(--nord-ink)]"
             >
               Display name{" "}
-              <span className="font-normal text-[#606060]">(optional)</span>
+              <span className="font-normal text-[var(--nord-slate-soft)]">(optional)</span>
             </label>
             <input
               id="onboarding-display-name"
               type="text"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              className="h-10 w-full rounded-lg border border-[#404040] bg-[#1a1a1a] px-3 text-sm text-white outline-none transition focus:border-[#3b82f6] focus:ring-2 focus:ring-[#3b82f6]/30"
+              className="h-10 w-full rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-surface)] px-3 text-sm text-[var(--nord-ink)] outline-none transition focus:border-[#3b82f6] focus:ring-2 focus:ring-[#3b82f6]/30"
             />
           </div>
 
           {submitError && (
-            <p className="text-sm text-red-400">{submitError}</p>
+            <p className="text-sm text-[var(--nord-danger)]">{submitError}</p>
           )}
 
           <Button

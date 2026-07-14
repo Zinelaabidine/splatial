@@ -33,7 +33,7 @@ function buildCommentBodyNodes(body: string, mentions?: string[]): ReactNode[] {
         <Link
           key={`mention-${match.index}-${handleLower}`}
           href={`/u/${encodeURIComponent(handleLower)}`}
-          className="text-[#19c2ad] hover:underline"
+          className="text-[var(--nord-teal)] hover:underline"
         >
           {token}
         </Link>,

@@ -36,7 +36,7 @@ export default function EditButton({ sceneId }: EditButtonProps) {
         title="Edit"
         onClick={handleEdit}
         className={cn(
-          "h-auto gap-1.5 rounded-full border border-white/10 bg-black/70 px-3 py-2 text-white shadow-lg backdrop-blur-md hover:bg-white/10",
+          "h-auto gap-1.5 rounded-full border border-[var(--nord-hairline)] bg-[var(--nord-scrim)] px-3 py-2 text-[var(--nord-cta-fg)] shadow-lg backdrop-blur-md hover:bg-[var(--nord-tint)]",
         )}
       >
         <Pencil className="h-4 w-4" strokeWidth={1.75} />

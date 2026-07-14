@@ -32,7 +32,7 @@ type TopNavBarProps = {
 };
 
 const NAV_LINK_CLASS =
-  "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900";
+  "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-[var(--nord-slate-soft)] transition-colors hover:bg-[var(--nord-surface-2)] hover:text-[var(--nord-ink)]";
 
 /** Derive display name and 2-letter initials from a Cognito email / username. */
 function parseUser(loginId: string): { displayName: string; initials: string } {
@@ -79,22 +79,22 @@ export default function TopNavBar({
   }, [menuOpen]);
 
   return (
-    <header className="sticky top-0 z-50 flex h-16 shrink-0 items-center gap-4 border-b border-gray-200 bg-white px-5">
+    <header className="sticky top-0 z-50 flex h-16 shrink-0 items-center gap-4 border-b border-[var(--nord-hairline)] bg-[var(--nord-surface)] px-5">
       {/* Brand */}
       <div className="flex shrink-0 items-center gap-2.5">
-        <div className="grid h-8 w-8 place-items-center rounded-lg bg-purple-600 text-sm font-bold text-white">
+        <div className="grid h-8 w-8 place-items-center rounded-lg bg-purple-600 text-sm font-bold text-[var(--nord-ink)]">
           3
         </div>
-        <span className="text-base font-bold tracking-tight text-gray-900">Splatal</span>
+        <span className="text-base font-bold tracking-tight text-[var(--nord-ink)]">Splatal</span>
       </div>
 
       {/* Search */}
       <div className="relative hidden min-w-0 flex-1 sm:block sm:max-w-xs lg:max-w-sm">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--nord-slate)]" />
         <input
           type="search"
           placeholder="Search"
-          className="h-9 w-full rounded-full border border-gray-200 bg-gray-50 pl-9 pr-4 text-sm text-gray-900 placeholder:text-gray-400 outline-none transition focus:border-purple-300 focus:bg-white focus:ring-2 focus:ring-purple-100"
+          className="h-9 w-full rounded-full border border-[var(--nord-hairline)] bg-[var(--nord-surface-2)] pl-9 pr-4 text-sm text-[var(--nord-ink)] placeholder:text-[var(--nord-slate)] outline-none transition focus:border-purple-300 focus:bg-[var(--nord-surface)] focus:ring-2 focus:ring-purple-100"
         />
       </div>
 
@@ -142,7 +142,7 @@ export default function TopNavBar({
         {/* Viewer-only scene actions */}
         {mode === "viewer" && (
           <nav
-            className="ml-3 flex items-center gap-0.5 border-l border-gray-200 pl-3"
+            className="ml-3 flex items-center gap-0.5 border-l border-[var(--nord-hairline)] pl-3"
             aria-label="Scene actions"
           >
             <button type="button" className={NAV_LINK_CLASS}>
@@ -157,11 +157,11 @@ export default function TopNavBar({
         )}
 
         {/* User profile dropdown */}
-        <div ref={menuRef} className="relative ml-3 border-l border-gray-200 pl-3">
+        <div ref={menuRef} className="relative ml-3 border-l border-[var(--nord-hairline)] pl-3">
           <button
             type="button"
             onClick={() => setMenuOpen((open) => !open)}
-            className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-gray-50"
+            className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-[var(--nord-surface-2)]"
             aria-expanded={menuOpen}
             aria-haspopup="menu"
           >
@@ -169,14 +169,14 @@ export default function TopNavBar({
               {initials}
             </div>
             <div className="hidden text-left lg:block">
-              <p className="text-sm font-medium leading-tight text-gray-900">
+              <p className="text-sm font-medium leading-tight text-[var(--nord-ink)]">
                 {displayName}
               </p>
-              <p className="text-xs leading-tight text-gray-500">{email}</p>
+              <p className="text-xs leading-tight text-[var(--nord-slate)]">{email}</p>
             </div>
             <ChevronDown
               className={cn(
-                "hidden h-4 w-4 text-gray-400 transition-transform lg:block",
+                "hidden h-4 w-4 text-[var(--nord-slate)] transition-transform lg:block",
                 menuOpen && "rotate-180",
               )}
             />
@@ -185,7 +185,7 @@ export default function TopNavBar({
           {menuOpen && (
             <div
               role="menu"
-              className="absolute right-0 top-full mt-1 min-w-[168px] rounded-lg border border-gray-200 bg-white py-1 shadow-lg"
+              className="absolute right-0 top-full mt-1 min-w-[168px] rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-surface)] py-1 shadow-lg"
             >
               <button
                 type="button"
@@ -194,21 +194,21 @@ export default function TopNavBar({
                   setMenuOpen(false);
                   onProfileClick?.();
                 }}
-                className="flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-gray-50"
+                className="flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm text-[var(--nord-ink)] transition-colors hover:bg-[var(--nord-surface-2)]"
               >
-                <User className="h-4 w-4 text-gray-400" />
+                <User className="h-4 w-4 text-[var(--nord-slate)]" />
                 My Profile
               </button>
               <button
                 type="button"
                 role="menuitem"
                 onClick={() => setMenuOpen(false)}
-                className="flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-gray-50"
+                className="flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm text-[var(--nord-ink)] transition-colors hover:bg-[var(--nord-surface-2)]"
               >
-                <SlidersHorizontal className="h-4 w-4 text-gray-400" />
+                <SlidersHorizontal className="h-4 w-4 text-[var(--nord-slate)]" />
                 Preferences
               </button>
-              <div className="my-1 border-t border-gray-100" />
+              <div className="my-1 border-t border-[var(--nord-hairline)]" />
               <button
                 type="button"
                 role="menuitem"
@@ -216,7 +216,7 @@ export default function TopNavBar({
                   setMenuOpen(false);
                   signOut();
                 }}
-                className="w-full px-4 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-gray-50"
+                className="w-full px-4 py-2 text-left text-sm text-[var(--nord-ink)] transition-colors hover:bg-[var(--nord-surface-2)]"
               >
                 Sign Out
               </button>

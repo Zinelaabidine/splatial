@@ -56,8 +56,8 @@ export default function TrainingMenu() {
           className={cn(
             "hidden shrink-0 rounded-full px-2.5 py-1 font-sw-mono text-[11px] font-medium transition-colors sm:inline-flex",
             failedCount > 0
-              ? "bg-red-950/40 text-red-300 hover:bg-red-950/60"
-              : "bg-white/[0.06] text-[#c4c4cc] hover:bg-white/10",
+              ? "bg-[var(--nord-danger-tint)] text-[var(--nord-danger)] hover:bg-[var(--nord-danger-tint)]"
+              : "bg-[var(--nord-tint)] text-[var(--nord-ink)] hover:bg-[var(--nord-tint)]",
           )}
         >
           {label}
@@ -71,14 +71,14 @@ export default function TrainingMenu() {
         onClick={() => setOpen((o) => !o)}
         className={cn(
           "relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors",
-          open ? "bg-white/10 text-white" : "text-[#f1f1f1] hover:bg-white/10",
+          open ? "bg-[var(--nord-tint)] text-[var(--nord-ink)]" : "text-[var(--nord-ink)] hover:bg-[var(--nord-tint)]",
         )}
       >
         <TrendingUp className="h-5 w-5" strokeWidth={open ? 2 : 1.5} />
         {activeCount > 0 || failedCount > 0 ? (
           <span
             className={cn(
-              "absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-bold leading-none text-white",
+              "absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-bold leading-none text-[var(--nord-ink)]",
               failedCount > 0 && activeCount === 0 ? "bg-red-500" : "bg-[#d97706]",
             )}
           >
@@ -92,20 +92,20 @@ export default function TrainingMenu() {
           aria-label="Training"
           className="sw-popover absolute right-0 top-full z-50 mt-2 w-96 overflow-hidden rounded-xl"
         >
-          <div className="flex items-center justify-between gap-2 border-b border-white/[0.06] px-4 py-3">
-            <h3 className="text-sm font-semibold text-white">Training</h3>
+          <div className="flex items-center justify-between gap-2 border-b border-[var(--nord-hairline)] px-4 py-3">
+            <h3 className="text-sm font-semibold text-[var(--nord-ink)]">Training</h3>
             {label ? (
-              <span className="font-sw-mono text-[11px] text-[#909090]">{label}</span>
+              <span className="font-sw-mono text-[11px] text-[var(--nord-slate)]">{label}</span>
             ) : null}
           </div>
 
           <div className="max-h-[420px] overflow-y-auto">
             {jobs.length === 0 ? (
-              <div className="flex h-32 items-center justify-center px-4 text-center text-sm text-[#808080]">
+              <div className="flex h-32 items-center justify-center px-4 text-center text-sm text-[var(--nord-slate)]">
                 No training runs yet.
               </div>
             ) : (
-              <ul className="divide-y divide-white/[0.06]">
+              <ul className="divide-y divide-[var(--nord-hairline)]">
                 {jobs.map((job) => (
                   <JobRow key={job.sceneId} job={job} />
                 ))}
@@ -130,9 +130,9 @@ function JobRow({ job }: { job: JobStatusJob }) {
       : null;
 
   return (
-    <li className="px-4 py-3 transition-colors hover:bg-white/[0.06]">
+    <li className="px-4 py-3 transition-colors hover:bg-[var(--nord-tint)]">
       <div className="flex items-start justify-between gap-2">
-        <p className="min-w-0 flex-1 truncate text-sm font-medium text-white">
+        <p className="min-w-0 flex-1 truncate text-sm font-medium text-[var(--nord-ink)]">
           {truncateName(job.name)}
         </p>
         <span
@@ -144,14 +144,14 @@ function JobRow({ job }: { job: JobStatusJob }) {
       </div>
 
       {job.status === "QUEUED" ? (
-        <p className="mt-1.5 font-sw-mono text-xs text-[#909090]">
+        <p className="mt-1.5 font-sw-mono text-xs text-[var(--nord-slate)]">
           Queued {formatRelativeTime(job.createdAt)}
         </p>
       ) : null}
 
       {job.status === "PROCESSING" ? (
         <div className="mt-1.5 space-y-1">
-          <div className="flex items-center justify-between gap-2 text-xs text-[#909090]">
+          <div className="flex items-center justify-between gap-2 text-xs text-[var(--nord-slate)]">
             <span className="font-sw-mono tabular-nums">{pct != null ? `${pct}%` : "—"}</span>
             <span className="font-sw-mono">
               {job.progressEtaSeconds != null
@@ -159,7 +159,7 @@ function JobRow({ job }: { job: JobStatusJob }) {
                 : "Estimating…"}
             </span>
           </div>
-          <p className="font-sw-mono text-[11px] text-[#707070]">
+          <p className="font-sw-mono text-[11px] text-[var(--nord-slate-soft)]">
             {formatProgressSubPhase(job.progressSubPhase) ??
               formatProgressPhase(job.progressPhase) ??
               "Processing"}
@@ -171,11 +171,11 @@ function JobRow({ job }: { job: JobStatusJob }) {
 
       {job.status === "FAILED" ? (
         <div className="mt-1.5 space-y-0.5">
-          <p className="font-sw-mono text-xs text-red-400">
+          <p className="font-sw-mono text-xs text-[var(--nord-danger)]">
             Failed {formatRelativeTime(job.updatedAt)}
           </p>
           {job.errorMessage || job.failureReason ? (
-            <p className="truncate text-[11px] text-[#909090]" title={job.errorMessage ?? job.failureReason}>
+            <p className="truncate text-[11px] text-[var(--nord-slate)]" title={job.errorMessage ?? job.failureReason}>
               {job.errorMessage ?? job.failureReason}
             </p>
           ) : null}

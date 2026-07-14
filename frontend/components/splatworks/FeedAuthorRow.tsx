@@ -33,7 +33,7 @@ export default function FeedAuthorRow({
     return (
       <div className={cn("flex items-center gap-2.5", className)}>
         <UserAvatar initials={initials} size={32} />
-        <span className="truncate text-sm font-medium text-white">
+        <span className="truncate text-sm font-medium text-[var(--nord-ink)]">
           {ownerDisplayName || "Unknown creator"}
         </span>
       </div>
@@ -45,7 +45,7 @@ export default function FeedAuthorRow({
       href={`/u/${encodeURIComponent(handle)}`}
       onClick={(e) => e.stopPropagation()}
       className={cn(
-        "flex items-center gap-2.5 rounded-lg transition-colors hover:bg-white/5",
+        "flex items-center gap-2.5 rounded-lg transition-colors hover:bg-[var(--nord-tint)]",
         className,
       )}
     >
@@ -63,10 +63,10 @@ export default function FeedAuthorRow({
         <UserAvatar initials={initials} size={32} />
       )}
       <div className="min-w-0">
-        <p className="truncate text-sm font-medium text-white">
+        <p className="truncate text-sm font-medium text-[var(--nord-ink)]">
           {ownerDisplayName || handle}
         </p>
-        <p className="font-sw-mono truncate text-xs text-[#909090]">@{handle}</p>
+        <p className="font-sw-mono truncate text-xs text-[var(--nord-slate)]">@{handle}</p>
       </div>
     </Link>
   );

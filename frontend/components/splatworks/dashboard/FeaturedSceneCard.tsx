@@ -61,27 +61,27 @@ export default function FeaturedSceneCard({
               className="h-full w-full"
             />
           ) : (
-            <div className="flex h-full w-full items-center justify-center bg-[#18181c]">
-              <span className="font-sw-mono text-xs uppercase tracking-wider text-[#9a9aa4]">
+            <div className="flex h-full w-full items-center justify-center bg-[var(--nord-bg)]">
+              <span className="font-sw-mono text-xs uppercase tracking-wider text-[var(--nord-slate)]">
                 {scene.title}
               </span>
             </div>
           )}
-          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent md:bg-gradient-to-r md:from-transparent md:to-[#151518]/90" />
-          <span className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full border border-[#19c2ad]/30 bg-[#19c2ad]/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#7ee8d8]">
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[var(--nord-scrim)] via-transparent to-transparent md:bg-gradient-to-r md:from-transparent md:to-[var(--nord-scrim)]" />
+          <span className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full border border-[var(--nord-teal)] bg-[var(--nord-pine)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--nord-teal)]">
             <Sparkles className="h-3 w-3" strokeWidth={2} />
             Featured
           </span>
         </div>
 
-        <div className="flex flex-col justify-between bg-[#151518] p-4 sm:p-5">
+        <div className="flex flex-col justify-between bg-[var(--nord-bg)] p-4 sm:p-5">
           <div>
             <div className="mb-3 flex items-center justify-between gap-2">
               <SceneCreatorRow stacked />
               <SceneVisibilityBadge visibility={visibility} />
             </div>
 
-            <h2 className="text-lg font-semibold leading-snug text-white sm:text-[1.35rem]">
+            <h2 className="text-lg font-semibold leading-snug text-[var(--nord-ink)] sm:text-[1.35rem]">
               {scene.title}
             </h2>
 
@@ -102,11 +102,11 @@ export default function FeaturedSceneCard({
             />
           </div>
 
-          <div className="mt-4 flex items-center justify-between gap-3 border-t border-white/8 pt-4">
-            <p className="text-xs leading-relaxed text-[#9a9aa4]">
+          <div className="mt-4 flex items-center justify-between gap-3 border-t border-[var(--nord-hairline)] pt-4">
+            <p className="text-xs leading-relaxed text-[var(--nord-slate)]">
               Highest engagement in your library
             </p>
-            <span className="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-white transition-colors group-hover:text-[#7ee8d8]">
+            <span className="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-[var(--nord-ink)] transition-colors group-hover:text-[var(--nord-teal)]">
               Open scene
               <ArrowUpRight
                 className="h-4 w-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5"

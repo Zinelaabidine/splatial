@@ -55,7 +55,7 @@ export default function OverlayPanel({
           aria-label="Close panel"
           className={cn(
             "fixed inset-x-0 bottom-0 top-[3.25rem] z-[var(--z-app-overlay-backdrop)] transition-opacity duration-300",
-            isFloating ? "bg-black/15 backdrop-blur-[2px]" : "bg-black/20 backdrop-blur-[1px]",
+            isFloating ? "bg-[var(--nord-scrim)] backdrop-blur-[2px]" : "bg-[var(--nord-scrim)] backdrop-blur-[1px]",
             open ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0",
           )}
           onClick={onClose}

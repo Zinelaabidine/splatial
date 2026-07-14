@@ -66,8 +66,8 @@ function CompleteThumbnail({ hue = 260 }: { hue?: number }) {
 
 function DraftThumbnail() {
   return (
-    <div className="flex h-full w-full items-center justify-center rounded-lg border border-dashed border-gray-300 bg-gray-50">
-      <svg viewBox="0 0 80 64" className="h-12 w-16 text-gray-400" aria-hidden>
+    <div className="flex h-full w-full items-center justify-center rounded-lg border border-dashed border-[var(--nord-hairline)] bg-[var(--nord-surface-2)]">
+      <svg viewBox="0 0 80 64" className="h-12 w-16 text-[var(--nord-slate)]" aria-hidden>
         <path
           d="M8 52 L24 20 L40 36 L56 12 L72 52 Z"
           fill="none"
@@ -88,23 +88,23 @@ function ProcessingThumbnail({ hue = 200 }: { hue?: number }) {
       <div className="absolute inset-0 scale-105 blur-md">
         <CompleteThumbnail hue={hue} />
       </div>
-      <div className="absolute inset-0 bg-white/20" />
+      <div className="absolute inset-0 bg-[var(--nord-tint)]" />
     </div>
   );
 }
 
 function PreprocessingThumbnail() {
   return (
-    <div className="flex h-full w-full items-center justify-center rounded-lg bg-gray-100">
-      <FileText className="h-10 w-10 text-gray-400" strokeWidth={1.25} />
+    <div className="flex h-full w-full items-center justify-center rounded-lg bg-[var(--nord-surface-2)]">
+      <FileText className="h-10 w-10 text-[var(--nord-slate)]" strokeWidth={1.25} />
     </div>
   );
 }
 
 function UploadedThumbnail() {
   return (
-    <div className="flex h-full w-full items-center justify-center rounded-lg bg-emerald-50 border border-dashed border-emerald-200">
-      <CheckCircle2 className="h-10 w-10 text-emerald-400" strokeWidth={1.25} />
+    <div className="flex h-full w-full items-center justify-center rounded-lg bg-[var(--nord-success)] border border-dashed border-[var(--nord-success)]">
+      <CheckCircle2 className="h-10 w-10 text-[var(--nord-success)]" strokeWidth={1.25} />
     </div>
   );
 }
@@ -113,14 +113,14 @@ function StatusIndicator({ scene }: { scene: MockScene }) {
   switch (scene.state) {
     case "complete":
       return (
-        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-green-600">
+        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--nord-success)]">
           <CheckCircle2 className="h-4 w-4" />
           Complete
         </span>
       );
     case "draft":
       return (
-        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500">
+        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--nord-slate)]">
           <Pencil className="h-3.5 w-3.5" />
           Draft
         </span>
@@ -152,7 +152,7 @@ function StatusIndicator({ scene }: { scene: MockScene }) {
       );
     case "preprocessing":
       return (
-        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500">
+        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--nord-slate)]">
           <span className="relative flex h-2 w-2">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-purple-400 opacity-60" />
             <span className="relative inline-flex h-2 w-2 rounded-full bg-purple-500" />
@@ -162,7 +162,7 @@ function StatusIndicator({ scene }: { scene: MockScene }) {
       );
     case "uploaded":
       return (
-        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600">
+        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--nord-success)]">
           <CheckCircle2 className="h-3.5 w-3.5" />
           Uploaded
         </span>
@@ -176,7 +176,7 @@ function StatusIndicator({ scene }: { scene: MockScene }) {
       );
     case "cancelled":
       return (
-        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500">
+        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--nord-slate)]">
           Cancelled
         </span>
       );
@@ -201,7 +201,7 @@ function PrimaryAction({
       return (
         <Button
           size="sm"
-          className="bg-purple-600 text-white hover:bg-purple-700"
+          className="bg-purple-600 text-[var(--nord-ink)] hover:bg-purple-700"
           onClick={() => onViewScene?.(scene)}
         >
           View Scene
@@ -211,7 +211,7 @@ function PrimaryAction({
       return (
         <Button
           size="sm"
-          className="bg-emerald-600 text-white hover:bg-emerald-700"
+          className="bg-[var(--nord-success)] text-[var(--nord-cta-fg)] hover:bg-[var(--nord-success-tint)]"
           onClick={() => onSubmitScene?.(scene)}
         >
           <Send className="mr-1.5 h-3.5 w-3.5" />
@@ -220,7 +220,7 @@ function PrimaryAction({
       );
     case "draft":
       return (
-        <Button size="sm" className="bg-purple-600 text-white hover:bg-purple-700">
+        <Button size="sm" className="bg-purple-600 text-[var(--nord-ink)] hover:bg-purple-700">
           Continue Editing
         </Button>
       );
@@ -230,7 +230,7 @@ function PrimaryAction({
           size="sm"
           variant="outline"
           disabled={cancelling}
-          className="border-amber-200 text-amber-700 hover:bg-amber-50"
+          className="border-amber-200 text-[#9a6b1f] hover:bg-amber-50"
           onClick={() => onCancelScene?.(scene)}
         >
           {cancelling ? "Cancelling…" : "Cancel processing"}
@@ -242,7 +242,7 @@ function PrimaryAction({
           size="sm"
           variant="outline"
           disabled={cancelling}
-          className="border-amber-200 text-amber-700 hover:bg-amber-50"
+          className="border-amber-200 text-[#9a6b1f] hover:bg-amber-50"
           onClick={() => onCancelScene?.(scene)}
         >
           {cancelling ? "Cancelling…" : "Cancel processing"}
@@ -252,7 +252,7 @@ function PrimaryAction({
       return (
         <Button
           size="sm"
-          className="border border-red-200 bg-red-50 text-red-600 hover:bg-red-100"
+          className="border border-[var(--nord-danger)] bg-red-50 text-red-600 hover:bg-red-100"
           onClick={() => onSubmitScene?.(scene)}
         >
           Retry
@@ -262,7 +262,7 @@ function PrimaryAction({
       return (
         <Button
           size="sm"
-          className="bg-emerald-600 text-white hover:bg-emerald-700"
+          className="bg-[var(--nord-success)] text-[var(--nord-cta-fg)] hover:bg-[var(--nord-success-tint)]"
           onClick={() => onSubmitScene?.(scene)}
         >
           <Send className="mr-1.5 h-3.5 w-3.5" />
@@ -297,7 +297,7 @@ export default function SceneCard({
   }, [menuOpen]);
 
   return (
-    <article className="flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm transition-shadow hover:shadow-md">
+    <article className="flex flex-col overflow-hidden rounded-xl border border-[var(--nord-hairline)] bg-[var(--nord-surface)] shadow-sm transition-shadow hover:shadow-md">
       <div className="flex gap-4 p-4">
         <div className="h-24 w-28 shrink-0">
           {scene.state === "complete" && <CompleteThumbnail hue={scene.thumbnailHue} />}
@@ -313,7 +313,7 @@ export default function SceneCard({
 
         <div className="flex min-w-0 flex-1 flex-col gap-2">
           <div>
-            <h3 className="truncate text-sm font-semibold text-gray-900">{scene.title}</h3>
+            <h3 className="truncate text-sm font-semibold text-[var(--nord-ink)]">{scene.title}</h3>
             <div className="mt-1">
               <StatusIndicator scene={scene} />
             </div>
@@ -355,10 +355,10 @@ export default function SceneCard({
                 aria-expanded={menuOpen}
                 onClick={() => setMenuOpen((o) => !o)}
               >
-                <MoreHorizontal className="h-4 w-4 text-gray-500" />
+                <MoreHorizontal className="h-4 w-4 text-[var(--nord-slate)]" />
               </Button>
               {menuOpen && (
-                <div className="absolute right-0 top-full z-20 mt-1 min-w-[140px] rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+                <div className="absolute right-0 top-full z-20 mt-1 min-w-[140px] rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-surface)] py-1 shadow-lg">
                   <button
                     type="button"
                     onClick={() => {
@@ -377,15 +377,15 @@ export default function SceneCard({
         </div>
       </div>
 
-      <footer className="border-t border-gray-100 px-4 py-3">
-        <div className="space-y-0.5 text-xs text-gray-500">
+      <footer className="border-t border-[var(--nord-hairline)] px-4 py-3">
+        <div className="space-y-0.5 text-xs text-[var(--nord-slate)]">
           <p>
-            <span className="text-gray-400">Created:</span>{" "}
-            <span className="font-medium text-gray-600">{scene.createdAt}</span>
+            <span className="text-[var(--nord-slate)]">Created:</span>{" "}
+            <span className="font-medium text-[var(--nord-slate-soft)]">{scene.createdAt}</span>
           </p>
           <p>
-            <span className="text-gray-400">Last Modified:</span>{" "}
-            <span className="font-medium text-gray-600">{scene.lastModified}</span>
+            <span className="text-[var(--nord-slate)]">Last Modified:</span>{" "}
+            <span className="font-medium text-[var(--nord-slate-soft)]">{scene.lastModified}</span>
           </p>
         </div>
       </footer>

@@ -78,13 +78,13 @@ function StatusBadge({ status }: { status: UserStatus }) {
     { dot: string; text: string; bg: string }
   > = {
     Active: {
-      dot: "bg-green-500",
-      text: "text-green-700",
-      bg: "bg-green-50",
+      dot: "bg-[var(--nord-success)]",
+      text: "text-[var(--nord-success)]",
+      bg: "bg-[var(--nord-success)]",
     },
     Invited: {
       dot: "bg-yellow-400",
-      text: "text-yellow-700",
+      text: "text-[#9a6b1f]",
       bg: "bg-yellow-50",
     },
     Suspended: {
@@ -115,7 +115,7 @@ function RoleBadge({ role }: { role: UserRole }) {
         "inline-flex items-center rounded-md px-2.5 py-0.5 text-xs font-medium",
         role === "Admin"
           ? "bg-purple-100 text-purple-700"
-          : "bg-gray-100 text-gray-600",
+          : "bg-[var(--nord-surface-2)] text-[var(--nord-slate-soft)]",
       )}
     >
       {role}
@@ -133,21 +133,21 @@ export default function AdminConsolePage() {
   );
 
   return (
-    <div className="min-h-full bg-gray-50 p-6">
+    <div className="min-h-full bg-[var(--nord-surface-2)] p-6">
       <div className="mx-auto max-w-6xl">
         {/* ── Page header ──────────────────────────────────────────── */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">
+            <h1 className="text-2xl font-bold text-[var(--nord-ink)]">
               User Management
             </h1>
-            <p className="mt-0.5 text-sm text-gray-500">
+            <p className="mt-0.5 text-sm text-[var(--nord-slate)]">
               {MOCK_USERS.length} total users
             </p>
           </div>
           <button
             type="button"
-            className="inline-flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-purple-700"
+            className="inline-flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2.5 text-sm font-semibold text-[var(--nord-ink)] shadow-sm transition hover:bg-purple-700"
           >
             <UserPlus className="h-4 w-4" />
             Invite User
@@ -156,27 +156,27 @@ export default function AdminConsolePage() {
 
         {/* ── Search ───────────────────────────────────────────────── */}
         <div className="relative mb-4 max-w-sm">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--nord-slate)]" />
           <input
             type="search"
             placeholder="Search users..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-4 text-sm text-gray-900 placeholder:text-gray-400 outline-none transition focus:border-purple-400 focus:ring-2 focus:ring-purple-100"
+            className="h-10 w-full rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-surface)] pl-9 pr-4 text-sm text-[var(--nord-ink)] placeholder:text-[var(--nord-slate)] outline-none transition focus:border-purple-400 focus:ring-2 focus:ring-purple-100"
           />
         </div>
 
         {/* ── Table ────────────────────────────────────────────────── */}
-        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-xl border border-[var(--nord-hairline)] bg-[var(--nord-surface)] shadow-sm">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-100 bg-gray-50">
+              <tr className="border-b border-[var(--nord-hairline)] bg-[var(--nord-surface-2)]">
                 {["User", "Role", "Status", "Joined Date", "Actions"].map(
                   (heading) => (
                     <th
                       key={heading}
                       className={cn(
-                        "px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500",
+                        "px-4 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--nord-slate)]",
                         heading === "Actions" ? "text-right" : "text-left",
                       )}
                     >
@@ -187,24 +187,24 @@ export default function AdminConsolePage() {
               </tr>
             </thead>
 
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-[var(--nord-hairline)]">
               {filtered.map((u) => (
                 <tr
                   key={u.id}
-                  className="transition-colors hover:bg-gray-50/60"
+                  className="transition-colors hover:bg-[var(--nord-surface-2)]"
                 >
                   {/* User */}
                   <td className="px-4 py-3.5">
                     <div className="flex items-center gap-3">
                       <div
-                        className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-xs font-bold text-white"
+                        className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-xs font-bold text-[var(--nord-ink)]"
                         style={{ background: `hsl(${u.hue} 60% 55%)` }}
                       >
                         {u.initials}
                       </div>
                       <div>
-                        <p className="font-medium text-gray-900">{u.name}</p>
-                        <p className="text-xs text-gray-500">{u.email}</p>
+                        <p className="font-medium text-[var(--nord-ink)]">{u.name}</p>
+                        <p className="text-xs text-[var(--nord-slate)]">{u.email}</p>
                       </div>
                     </div>
                   </td>
@@ -220,28 +220,28 @@ export default function AdminConsolePage() {
                   </td>
 
                   {/* Joined Date */}
-                  <td className="px-4 py-3.5 text-gray-600">{u.joinedDate}</td>
+                  <td className="px-4 py-3.5 text-[var(--nord-slate-soft)]">{u.joinedDate}</td>
 
                   {/* Actions */}
                   <td className="px-4 py-3.5">
                     <div className="flex items-center justify-end gap-1">
                       <button
                         type="button"
-                        className="rounded-md p-1.5 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700"
+                        className="rounded-md p-1.5 text-[var(--nord-slate)] transition hover:bg-[var(--nord-surface-2)] hover:text-[var(--nord-ink)]"
                         aria-label={`Edit ${u.name}`}
                       >
                         <Edit2 className="h-4 w-4" />
                       </button>
                       <button
                         type="button"
-                        className="rounded-md p-1.5 text-gray-400 transition hover:bg-yellow-50 hover:text-yellow-600"
+                        className="rounded-md p-1.5 text-[var(--nord-slate)] transition hover:bg-yellow-50 hover:text-yellow-600"
                         aria-label={`Suspend ${u.name}`}
                       >
                         <Lock className="h-4 w-4" />
                       </button>
                       <button
                         type="button"
-                        className="rounded-md p-1.5 text-gray-400 transition hover:bg-red-50 hover:text-red-600"
+                        className="rounded-md p-1.5 text-[var(--nord-slate)] transition hover:bg-red-50 hover:text-red-600"
                         aria-label={`Delete ${u.name}`}
                       >
                         <Trash2 className="h-4 w-4" />
@@ -255,7 +255,7 @@ export default function AdminConsolePage() {
                 <tr>
                   <td
                     colSpan={5}
-                    className="px-4 py-12 text-center text-sm text-gray-400"
+                    className="px-4 py-12 text-center text-sm text-[var(--nord-slate)]"
                   >
                     No users match your search.
                   </td>

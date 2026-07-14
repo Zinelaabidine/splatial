@@ -143,13 +143,13 @@ export default function ScenesDashboardView() {
 
   return (
     <div className="sw-content-surface w-full rounded-2xl px-4 py-5 sm:px-5">
-      <header className="mb-5 border-b border-white/6 pb-5">
+      <header className="mb-5 border-b border-[var(--nord-hairline)] pb-5">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="min-w-0">
-            <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
+            <h1 className="text-xl font-bold tracking-tight text-[var(--nord-ink)] sm:text-2xl">
               Your Scenes
             </h1>
-            <p className="mt-1 text-sm text-[#a8a8b2]">
+            <p className="mt-1 text-sm text-[var(--nord-slate)]">
               Browse, manage, and publish your Gaussian Splatting work.
             </p>
 
@@ -203,12 +203,12 @@ export default function ScenesDashboardView() {
       </header>
 
       {actionMessage ? (
-        <div className="mb-4 rounded-xl border border-emerald-500/25 bg-emerald-950/35 px-5 py-4 text-sm text-emerald-100">
+        <div className="mb-4 rounded-xl border border-[var(--nord-success)] bg-[var(--nord-success-tint)] px-5 py-4 text-sm text-[var(--nord-success)]">
           {actionMessage}{" "}
           <button
             type="button"
             onClick={clearActionMessage}
-            className="font-medium underline underline-offset-2 hover:text-white"
+            className="font-medium underline underline-offset-2 hover:text-[var(--nord-ink)]"
           >
             Dismiss
           </button>
@@ -216,23 +216,23 @@ export default function ScenesDashboardView() {
       ) : null}
 
       {error ? (
-        <div className="rounded-xl border border-red-500/25 bg-red-950/35 px-5 py-4 text-sm text-red-200">
+        <div className="rounded-xl border border-[var(--nord-danger)] bg-[var(--nord-danger-tint)] px-5 py-4 text-sm text-[var(--nord-danger)]">
           {error}{" "}
           <button
             type="button"
             onClick={() => fetchScenes()}
-            className="font-medium underline underline-offset-2 hover:text-red-100"
+            className="font-medium underline underline-offset-2 hover:text-[var(--nord-danger)]"
           >
             Retry
           </button>
         </div>
       ) : actionError ? (
-        <div className="mb-4 rounded-xl border border-red-500/25 bg-red-950/35 px-5 py-4 text-sm text-red-200">
+        <div className="mb-4 rounded-xl border border-[var(--nord-danger)] bg-[var(--nord-danger-tint)] px-5 py-4 text-sm text-[var(--nord-danger)]">
           {actionError}{" "}
           <button
             type="button"
             onClick={clearActionError}
-            className="font-medium underline underline-offset-2 hover:text-red-100"
+            className="font-medium underline underline-offset-2 hover:text-[var(--nord-danger)]"
           >
             Dismiss
           </button>
@@ -246,8 +246,8 @@ export default function ScenesDashboardView() {
           ))}
         </div>
       ) : !error && !loading && scenes.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-white/12 bg-white/[0.02] px-6 py-16 text-center">
-          <p className="text-sm text-[#a8a8b2]">{emptyMessage}</p>
+        <div className="rounded-2xl border border-dashed border-[var(--nord-hairline)] bg-[var(--nord-tint)] px-6 py-16 text-center">
+          <p className="text-sm text-[var(--nord-slate)]">{emptyMessage}</p>
         </div>
       ) : !error && scenes.length > 0 ? (
         viewMode === "grid" ? (

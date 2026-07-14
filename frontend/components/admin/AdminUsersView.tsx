@@ -34,22 +34,22 @@ const ROLE_OPTIONS: { value: AdminUserRole | ""; label: string }[] = [
 ];
 
 const STATUS_STYLES: Record<AdminUserStatus, string> = {
-  ACTIVE: "border-emerald-500/30 bg-emerald-500/10 text-emerald-400",
+  ACTIVE: "border-[var(--nord-success)] bg-[var(--nord-success)] text-[var(--nord-success)]",
   SUSPENDED: "border-amber-500/30 bg-amber-500/10 text-amber-400",
-  BANNED: "border-red-500/30 bg-red-500/10 text-red-400",
-  SOFT_DELETED: "border-zinc-600/40 bg-zinc-800/60 text-zinc-400",
-  HARD_DELETED: "border-zinc-600/40 bg-zinc-800/60 text-zinc-500",
+  BANNED: "border-[var(--nord-danger)] bg-red-500/10 text-[var(--nord-danger)]",
+  SOFT_DELETED: "border-[var(--nord-hairline)] bg-[var(--nord-surface)] text-[var(--nord-slate)]",
+  HARD_DELETED: "border-[var(--nord-hairline)] bg-[var(--nord-surface)] text-[var(--nord-slate)]",
 };
 
 const ROLE_STYLES: Record<string, string> = {
-  admin: "border-teal-500/25 bg-teal-500/10 text-teal-400",
+  admin: "border-[var(--nord-teal)] bg-[var(--nord-pine)] text-[var(--nord-teal)]",
   moderator: "border-sky-500/25 bg-sky-500/10 text-sky-400",
-  beta_tester: "border-zinc-600/40 bg-zinc-800/50 text-zinc-300",
-  user: "border-zinc-700/50 bg-zinc-800/40 text-zinc-400",
+  beta_tester: "border-[var(--nord-hairline)] bg-[var(--nord-surface)] text-[var(--nord-ink)]",
+  user: "border-[var(--nord-hairline)] bg-[var(--nord-surface)] text-[var(--nord-slate)]",
 };
 
 const FILTER_SELECT_CLASS =
-  "h-9 w-full rounded-md border border-zinc-700/80 bg-zinc-900/80 px-3 text-sm text-zinc-100 outline-none transition-colors focus:border-teal-500/60 focus:ring-1 focus:ring-teal-500/30";
+  "h-9 w-full rounded-md border border-[var(--nord-hairline)] bg-[var(--nord-surface)] px-3 text-sm text-[var(--nord-ink)] outline-none transition-colors focus:border-[var(--nord-teal)] focus:ring-1 focus:ring-[var(--nord-teal)]";
 
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
@@ -67,7 +67,7 @@ type SortField = "joinedAt" | "email" | "status" | "tier" | "displayName";
 function FilterField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="min-w-0">
-      <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-zinc-500">{label}</label>
+      <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-[var(--nord-slate)]">{label}</label>
       {children}
     </div>
   );
@@ -92,7 +92,7 @@ function SortHeader({
   return (
     <th
       className={cn(
-        "cursor-pointer select-none px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-zinc-300 transition-colors hover:text-zinc-100",
+        "cursor-pointer select-none px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--nord-ink)] transition-colors hover:text-[var(--nord-ink)]",
         className,
       )}
       onClick={() => onSort(field)}
@@ -100,7 +100,7 @@ function SortHeader({
       <span className="inline-flex items-center gap-1">
         {label}
         {active &&
-          (sortDir === "asc" ? <ArrowUp className="h-3 w-3 text-teal-400" /> : <ArrowDown className="h-3 w-3 text-teal-400" />)}
+          (sortDir === "asc" ? <ArrowUp className="h-3 w-3 text-[var(--nord-teal)]" /> : <ArrowDown className="h-3 w-3 text-[var(--nord-teal)]" />)}
       </span>
     </th>
   );
@@ -189,8 +189,8 @@ export default function AdminUsersView() {
 
   if (isAdmin === null) {
     return (
-      <div className="flex h-64 items-center justify-center text-zinc-500">
-        <Loader2 className="mr-2 h-5 w-5 animate-spin text-teal-500" />
+      <div className="flex h-64 items-center justify-center text-[var(--nord-slate)]">
+        <Loader2 className="mr-2 h-5 w-5 animate-spin text-[var(--nord-teal)]" />
         Checking access…
       </div>
     );
@@ -198,10 +198,10 @@ export default function AdminUsersView() {
 
   if (isAdmin === false) {
     return (
-      <div className="mx-auto mt-16 flex max-w-md flex-col items-center rounded-xl border border-zinc-800 bg-zinc-900/60 px-6 py-10 text-center">
-        <ShieldAlert className="mb-3 h-8 w-8 text-red-400" />
-        <h2 className="text-lg font-semibold text-zinc-100">Admin access required</h2>
-        <p className="mt-1 text-sm text-zinc-500">
+      <div className="mx-auto mt-16 flex max-w-md flex-col items-center rounded-xl border border-[var(--nord-hairline)] bg-[var(--nord-surface)] px-6 py-10 text-center">
+        <ShieldAlert className="mb-3 h-8 w-8 text-[var(--nord-danger)]" />
+        <h2 className="text-lg font-semibold text-[var(--nord-ink)]">Admin access required</h2>
+        <p className="mt-1 text-sm text-[var(--nord-slate)]">
           Your account isn’t in the admin group. Ask an operator to add you, then sign out and back in.
         </p>
       </div>
@@ -214,8 +214,8 @@ export default function AdminUsersView() {
       <div className="flex min-w-0 flex-1 flex-col pr-5">
         <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-zinc-50">User management</h1>
-            <p className="mt-1 max-w-xl text-sm leading-relaxed text-zinc-400">
+            <h1 className="text-2xl font-semibold tracking-tight text-[var(--nord-ink)]">User management</h1>
+            <p className="mt-1 max-w-xl text-sm leading-relaxed text-[var(--nord-slate)]">
               Search, filter, and take account actions across your user directory. Every action is audit-logged.
             </p>
           </div>
@@ -223,7 +223,7 @@ export default function AdminUsersView() {
             type="button"
             onClick={() => load({ cursor: undefined, append: false })}
             disabled={loading}
-            className="inline-flex shrink-0 items-center gap-2 rounded-md border border-zinc-700/80 bg-zinc-900/80 px-3.5 py-2 text-sm font-medium text-zinc-200 transition-colors hover:border-zinc-600 hover:bg-zinc-800/80 disabled:opacity-50"
+            className="inline-flex shrink-0 items-center gap-2 rounded-md border border-[var(--nord-hairline)] bg-[var(--nord-surface)] px-3.5 py-2 text-sm font-medium text-[var(--nord-ink)] transition-colors hover:border-[var(--nord-hairline)] hover:bg-[var(--nord-surface)] disabled:opacity-50"
           >
             <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
             Refresh
@@ -231,18 +231,18 @@ export default function AdminUsersView() {
         </div>
 
         <div className="relative mb-4">
-          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--nord-slate)]" />
           <input
             type="search"
             placeholder="Search by email, username, or display name…"
             value={emailInput}
             onChange={(e) => setEmailInput(e.target.value)}
-            className="h-11 w-full rounded-lg border border-zinc-700/80 bg-zinc-900/90 pl-10 pr-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 transition-colors focus:border-teal-500/60 focus:ring-2 focus:ring-teal-500/20"
+            className="h-11 w-full rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-surface)] pl-10 pr-4 text-sm text-[var(--nord-ink)] outline-none placeholder:text-[var(--nord-slate-soft)] transition-colors focus:border-[var(--nord-teal)] focus:ring-2 focus:ring-[var(--nord-teal)]"
           />
         </div>
 
-        <div className="mb-5 rounded-lg border border-zinc-800/90 bg-zinc-900/40 p-4">
-          <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Filters</p>
+        <div className="mb-5 rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-surface)] p-4">
+          <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-[var(--nord-slate)]">Filters</p>
           <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3 lg:grid-cols-5">
             <FilterField label="Status">
               <select
@@ -303,30 +303,30 @@ export default function AdminUsersView() {
         </div>
 
         {error && (
-          <div className="mb-4 rounded-lg border border-red-900/50 bg-red-950/30 px-4 py-3 text-sm text-red-300">
+          <div className="mb-4 rounded-lg border border-[var(--nord-danger)] bg-[var(--nord-danger-tint)] px-4 py-3 text-sm text-[var(--nord-danger)]">
             {error}
           </div>
         )}
 
         {loading ? (
-          <div className="flex flex-1 items-center justify-center rounded-lg border border-zinc-800/80 bg-zinc-900/30 py-24 text-zinc-500">
-            <Loader2 className="mr-2 h-5 w-5 animate-spin text-teal-500" />
+          <div className="flex flex-1 items-center justify-center rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-surface)] py-24 text-[var(--nord-slate)]">
+            <Loader2 className="mr-2 h-5 w-5 animate-spin text-[var(--nord-teal)]" />
             Loading users…
           </div>
         ) : users.length === 0 ? (
-          <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-zinc-700/80 bg-zinc-900/20 py-24 text-sm text-zinc-500">
+          <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-[var(--nord-hairline)] bg-[var(--nord-surface)] py-24 text-sm text-[var(--nord-slate)]">
             No users match your filters.
           </div>
         ) : (
           <>
-            <div className="overflow-hidden rounded-lg border border-zinc-800/90 bg-zinc-900/30">
+            <div className="overflow-hidden rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-surface)]">
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[640px] text-sm">
                   <thead>
-                    <tr className="border-b border-zinc-700/80 bg-zinc-900/80">
+                    <tr className="border-b border-[var(--nord-hairline)] bg-[var(--nord-surface)]">
                       <SortHeader label="User" field="displayName" activeField={sortField} sortDir={sortDir} onSort={toggleSort} />
                       <SortHeader label="Status" field="status" activeField={sortField} sortDir={sortDir} onSort={toggleSort} />
-                      <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-zinc-300">
+                      <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--nord-ink)]">
                         Roles
                       </th>
                       <SortHeader label="Plan" field="tier" activeField={sortField} sortDir={sortDir} onSort={toggleSort} />
@@ -337,7 +337,7 @@ export default function AdminUsersView() {
                         sortDir={sortDir}
                         onSort={toggleSort}
                       />
-                      <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-zinc-300">
+                      <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-[var(--nord-ink)]">
                         Scenes
                       </th>
                     </tr>
@@ -350,15 +350,15 @@ export default function AdminUsersView() {
                           key={u.userId}
                           onClick={() => setSelectedUserId(u.userId)}
                           className={cn(
-                            "cursor-pointer border-b border-zinc-800/80 transition-colors last:border-b-0",
+                            "cursor-pointer border-b border-[var(--nord-hairline)] transition-colors last:border-b-0",
                             selected
-                              ? "bg-teal-500/[0.08] hover:bg-teal-500/[0.1]"
-                              : "hover:bg-zinc-800/40",
+                              ? "bg-[var(--nord-pine)]/[0.08] hover:bg-[var(--nord-pine)]/[0.1]"
+                              : "hover:bg-[var(--nord-surface)]",
                           )}
                         >
                           <td className="px-4 py-3.5">
-                            <p className="font-medium text-zinc-100">{u.displayName || u.username || "—"}</p>
-                            <p className="mt-0.5 text-xs text-zinc-500">{u.email ?? u.username ?? u.userId}</p>
+                            <p className="font-medium text-[var(--nord-ink)]">{u.displayName || u.username || "—"}</p>
+                            <p className="mt-0.5 text-xs text-[var(--nord-slate)]">{u.email ?? u.username ?? u.userId}</p>
                           </td>
                           <td className="px-4 py-3.5">
                             <span
@@ -389,14 +389,14 @@ export default function AdminUsersView() {
                             <span
                               className={cn(
                                 "font-medium capitalize",
-                                u.tier === "pro" ? "text-teal-400" : "text-zinc-300",
+                                u.tier === "pro" ? "text-[var(--nord-teal)]" : "text-[var(--nord-ink)]",
                               )}
                             >
                               {u.tier}
                             </span>
                           </td>
-                          <td className="px-4 py-3.5 tabular-nums text-zinc-400">{formatDate(u.joinedAt)}</td>
-                          <td className="px-4 py-3.5 text-right tabular-nums text-zinc-400">{u.scenesCount}</td>
+                          <td className="px-4 py-3.5 tabular-nums text-[var(--nord-slate)]">{formatDate(u.joinedAt)}</td>
+                          <td className="px-4 py-3.5 text-right tabular-nums text-[var(--nord-slate)]">{u.scenesCount}</td>
                         </tr>
                       );
                     })}
@@ -410,7 +410,7 @@ export default function AdminUsersView() {
                   type="button"
                   onClick={() => load({ cursor, append: true })}
                   disabled={loadingMore}
-                  className="inline-flex items-center gap-2 rounded-md border border-zinc-700/80 bg-zinc-900/80 px-4 py-2 text-sm font-medium text-zinc-200 transition-colors hover:border-zinc-600 hover:bg-zinc-800/80 disabled:opacity-50"
+                  className="inline-flex items-center gap-2 rounded-md border border-[var(--nord-hairline)] bg-[var(--nord-surface)] px-4 py-2 text-sm font-medium text-[var(--nord-ink)] transition-colors hover:border-[var(--nord-hairline)] hover:bg-[var(--nord-surface)] disabled:opacity-50"
                 >
                   {loadingMore && <Loader2 className="h-4 w-4 animate-spin" />}
                   Load more
@@ -422,7 +422,7 @@ export default function AdminUsersView() {
       </div>
 
       {/* Detail pane — selected user or empty state */}
-      <aside className="flex w-[min(100%,400px)] shrink-0 flex-col border-l border-zinc-800/90 bg-zinc-950/50 xl:w-[420px]">
+      <aside className="flex w-[min(100%,400px)] shrink-0 flex-col border-l border-[var(--nord-hairline)] bg-[var(--nord-bg)] xl:w-[420px]">
         {selectedUserId ? (
           <AdminUserDetailPanel
             userId={selectedUserId}
@@ -431,11 +431,11 @@ export default function AdminUsersView() {
           />
         ) : (
           <div className="flex flex-1 flex-col items-center justify-center px-8 text-center">
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900/60">
-              <Users className="h-5 w-5 text-zinc-600" />
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-surface)]">
+              <Users className="h-5 w-5 text-[var(--nord-slate-soft)]" />
             </div>
-            <p className="text-sm font-medium text-zinc-400">No user selected</p>
-            <p className="mt-1 max-w-[220px] text-xs leading-relaxed text-zinc-600">
+            <p className="text-sm font-medium text-[var(--nord-slate)]">No user selected</p>
+            <p className="mt-1 max-w-[220px] text-xs leading-relaxed text-[var(--nord-slate-soft)]">
               Select a row from the table to review profile, standing, and take account actions.
             </p>
           </div>

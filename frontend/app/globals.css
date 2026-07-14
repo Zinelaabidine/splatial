@@ -69,11 +69,11 @@ body {
  * owns full-viewport centering — that's the shell's job).
  * ------------------------------------------------------------------------- */
 .auth-gate [data-amplify-authenticator] {
-  --amplify-components-authenticator-router-background-color: #131316;
-  --amplify-components-authenticator-router-border-color: rgba(255, 255, 255, 0.08);
+  --amplify-components-authenticator-router-background-color: var(--nord-surface);
+  --amplify-components-authenticator-router-border-color: rgba(52, 56, 59, 0.08);
   --amplify-components-authenticator-router-border-width: 1px;
   --amplify-components-authenticator-router-box-shadow:
-    0 20px 40px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
+    0 20px 40px rgba(43, 42, 38, 0.10), 0 2px 8px rgba(43, 42, 38, 0.07);
   --amplify-components-authenticator-router-border-radius: 1rem;
 
   width: 100%;
@@ -93,11 +93,11 @@ body {
   font-weight: 600;
   font-size: 1.125rem;
   letter-spacing: -0.01em;
-  color: #f4f4f5;
+  color: var(--nord-ink);
 }
 
 .auth-gate [data-amplify-authenticator] .amplify-tabs__list {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(52, 56, 59, 0.08);
   background: transparent;
 }
 
@@ -105,29 +105,29 @@ body {
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
-  color: #a4a4ae;
+  color: #8a9096;
   font-size: 0.875rem;
   font-weight: 500;
   padding: 0.875rem 1rem;
 }
 
 .auth-gate [data-amplify-authenticator] .amplify-tabs__item[data-state="active"] {
-  color: #19c2ad;
-  border-bottom-color: #19c2ad;
+  color: #4e827c;
+  border-bottom-color: #4e827c;
 }
 
 .auth-gate [data-amplify-authenticator] .amplify-label,
 .auth-gate [data-amplify-authenticator] .amplify-field__show-password {
   font-size: 0.8125rem;
-  color: #a4a4ae;
+  color: #8a9096;
 }
 
 .auth-gate [data-amplify-authenticator] .amplify-input,
 .auth-gate [data-amplify-authenticator] .amplify-select {
   border-radius: 0.625rem;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: #0c0c0e;
-  color: #f4f4f5;
+  border: 1px solid rgba(52, 56, 59, 0.10);
+  background: var(--nord-bg);
+  color: var(--nord-ink);
   font-size: 0.875rem;
   padding: 0.625rem 0.75rem;
   transition: border-color 120ms ease, box-shadow 120ms ease;
@@ -136,13 +136,13 @@ body {
 .auth-gate [data-amplify-authenticator] .amplify-input:focus,
 .auth-gate [data-amplify-authenticator] .amplify-select:focus {
   outline: none;
-  border-color: #19c2ad;
-  box-shadow: 0 0 0 3px rgba(25, 194, 173, 0.18);
+  border-color: #4e827c;
+  box-shadow: 0 0 0 3px rgba(78, 130, 124, 0.18);
 }
 
 .auth-gate [data-amplify-authenticator] .amplify-button--primary {
-  background: #19c2ad;
-  color: #08110f;
+  background: #4e827c;
+  color: #f4f2ec;
   border: none;
   border-radius: 0.625rem;
   font-weight: 600;
@@ -152,78 +152,105 @@ body {
 }
 
 .auth-gate [data-amplify-authenticator] .amplify-button--primary:hover {
-  background: #22d6bf;
+  background: #3f6b66;
 }
 
 .auth-gate [data-amplify-authenticator] .amplify-button--link {
-  color: #19c2ad;
+  color: #4e827c;
   font-size: 0.8125rem;
 }
 
 .auth-gate [data-amplify-authenticator] .amplify-button--link:hover {
-  color: #22d6bf;
+  color: #3f6b66;
   background: transparent;
   text-decoration: underline;
 }
 
 .auth-gate [data-amplify-authenticator] .federated-sign-in-container,
 .auth-gate [data-amplify-authenticator] [data-amplify-footer] {
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid rgba(52, 56, 59, 0.08);
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.511 0.262 276.966);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  /* Retuned to the Nordic light palette (see --nord-* block below). */
+  --background: #fbfaf8;
+  --foreground: #1c1f21;
+  --card: #fefefd;
+  --card-foreground: #1c1f21;
+  --popover: #fefefd;
+  --popover-foreground: #1c1f21;
+  --primary: #23433a;
+  --primary-foreground: #f4f2ec;
+  --secondary: #f1f0ec;
+  --secondary-foreground: #1c1f21;
+  --muted: #f0ede6;
+  --muted-foreground: #45494c;
+  --accent: #e7ede9;
+  --accent-foreground: #23433a;
+  --destructive: #b3564d;
+  --border: var(--nord-hairline);
+  --input: var(--nord-hairline);
+  --ring: #4e827c;
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: #f8f6f2;
+  --sidebar-foreground: #1c1f21;
+  --sidebar-primary: #23433a;
+  --sidebar-primary-foreground: #f4f2ec;
+  --sidebar-accent: #e7ede9;
+  --sidebar-accent-foreground: #23433a;
+  --sidebar-border: var(--nord-hairline);
+  --sidebar-ring: #4e827c;
 
-  /* ─── Nordic top-navigation palette ──────────────────────────────────────
-     Warm, light, architectural theme scoped to the app top bar (AppTopBar).
-     These tokens intentionally live apart from the graphite --primary/--card
-     scale so the reskin is contained to the navigation surface: minimalist
-     ivory bar, cool-charcoal text, muted pine primary, desaturated teal
-     for selected/hover states. Referenced from components via
-     bg-[var(--nav-*)] / text-[var(--nav-*)] Tailwind arbitrary values. */
-  --nav-surface: #f7f4ee;        /* nav bar background — soft warm off-white */
-  --nav-hairline: #e5e0d6;       /* low-contrast warm-gray border */
-  --nav-icon-surface: #fbfaf6;   /* inputs / bordered controls fill */
-  --nav-ink: #34383b;            /* cool charcoal — primary text */
-  --nav-slate: #5c6469;          /* slate — inactive nav text */
-  --nav-slate-soft: #8a9096;     /* muted labels, placeholders, inactive icons */
-  --nav-pine: #23433a;           /* confident dark-pine — primary CTA + active text */
-  --nav-pine-hover: #1c382f;     /* pine hover */
-  --nav-pine-tint: #e7ede9;      /* selected nav-link fill */
-  --nav-teal: #4e827c;           /* desaturated teal — active icon accent */
-  --nav-teal-tint: rgba(78, 130, 124, 0.08); /* hover wash */
-  --nav-cta-fg: #f4f2ec;         /* text on pine CTA */
+  /* ─── Nordic light theme palette ─────────────────────────────────────────
+     Warm, minimalist, architectural theme applied across the whole app.
+     Cool-charcoal text on warm ivory/stone, muted pine primary, desaturated
+     teal for selection/hover, warm-gray hairlines. Components reference these
+     via bg-[var(--nord-*)] / text-[var(--nord-*)] Tailwind arbitrary values;
+     the shadcn :root tokens above are also retuned to this palette so
+     token-driven primitives (Button, etc.) inherit it automatically. */
+  --nord-bg: #fbfaf8;            /* page canvas — near-white */
+  --nord-bg-2: #f3f1ec;          /* deeper canvas / gradient edge */
+  --nord-surface: #fefefd;       /* cards, panels, menus */
+  --nord-surface-2: #f8f6f2;     /* secondary surface, nav bar, toolbars */
+  --nord-card: #fefefd;          /* elevated card face */
+  --nord-hairline: #e2ddd2;      /* low-contrast warm-gray border */
+  --nord-hairline-2: #ece8e0;    /* softer inner divider */
+  --nord-ink: #1c1f21;           /* near-black — primary text */
+  --nord-slate: #45494c;         /* dark slate — secondary text */
+  --nord-slate-soft: #6f7478;    /* muted labels, inactive icons */
+  --nord-muted: #82878b;         /* faint captions / placeholders */
+  --nord-pine: #23433a;          /* confident dark-pine — primary CTA + active */
+  --nord-pine-hover: #1c382f;    /* pine hover */
+  --nord-pine-tint: #e7ede9;     /* selected / active fill */
+  --nord-teal: #4e827c;          /* desaturated teal — accent, focus ring */
+  --nord-teal-tint: rgba(78, 130, 124, 0.10);  /* hover / subtle wash */
+  --nord-tint: rgba(52, 56, 59, 0.05);          /* neutral raised fill (glass) */
+  --nord-cta-fg: #f4f2ec;        /* text/icon on pine or accent fills */
+  --nord-scrim: rgba(38, 44, 42, 0.55);         /* dark scrim over imagery */
+  --nord-success: #3f7d63;       /* success / live green */
+  --nord-success-tint: #e6efe8;  /* success fill */
+  --nord-danger: #b3564d;        /* error red */
+  --nord-danger-tint: #f4e7e4;   /* error fill */
+
+  /* Legacy --nav-* aliases retained so AppTopBar keeps working; now point at
+     the unified --nord palette. */
+  --nav-surface: var(--nord-surface-2);
+  --nav-hairline: var(--nord-hairline);
+  --nav-icon-surface: var(--nord-surface);
+  --nav-ink: var(--nord-ink);
+  --nav-slate: var(--nord-slate);
+  --nav-slate-soft: var(--nord-slate-soft);
+  --nav-pine: var(--nord-pine);
+  --nav-pine-hover: var(--nord-pine-hover);
+  --nav-pine-tint: var(--nord-pine-tint);
+  --nav-teal: var(--nord-teal);
+  --nav-teal-tint: var(--nord-teal-tint);
+  --nav-cta-fg: var(--nord-cta-fg);
 }
 
 .dark {
@@ -382,7 +409,7 @@ body {
   touch-action: none;
 }
 .splat-viewer-container #instructions {
-  background: rgba(0,0,0,0.6);
+  background: rgba(251, 250, 246, 0.90);
   white-space: pre-wrap;
   padding: 10px;
   border-radius: 10px;
@@ -398,8 +425,8 @@ body {
   pointer-events: none;
 }
 .splat-viewer-container .download-box {
-  background: rgba(0,0,0,0.7);
-  color: #fff;
+  background: rgba(251, 250, 246, 0.94);
+  color: var(--nord-ink);
   padding: 18px 22px;
   border-radius: 10px;
   min-width: 280px;
@@ -409,7 +436,7 @@ body {
 .splat-viewer-container .download-percentage { font-weight: 600; margin-bottom: 8px; }
 .splat-viewer-container .download-bar {
   height: 10px;
-  background: rgba(255,255,255,0.12);
+  background: rgba(52, 56, 59, 0.10);
   border-radius: 6px;
   overflow: hidden;
 }
@@ -427,13 +454,13 @@ body {
   bottom: 10px;
   left: 10px;
   z-index: 999;
-  background: rgba(0, 0, 0, 0.65);
+  background: rgba(251, 250, 246, 0.92);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(52, 56, 59, 0.10);
   border-radius: 8px;
   padding: 7px 10px;
-  color: #e2e8f0;
+  color: var(--nord-ink);
   font-size: 11px;
   font-family: ui-monospace, 'Cascadia Code', monospace;
   min-width: 160px;
@@ -447,7 +474,7 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #94a3b8;
+  color: #8a9096;
 }
 .traj-label { flex: 1; }
 .traj-dot {
@@ -466,7 +493,7 @@ body {
 }
 .traj-track {
   height: 3px;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(52, 56, 59, 0.08);
   border-radius: 2px;
   overflow: hidden;
 }
@@ -483,21 +510,21 @@ body {
 .traj-btn {
   padding: 2px 7px;
   border-radius: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.06);
-  color: #e2e8f0;
+  border: 1px solid rgba(52, 56, 59, 0.10);
+  background: rgba(52, 56, 59, 0.05);
+  color: var(--nord-ink);
   font-size: 11px;
   font-family: inherit;
   cursor: pointer;
   transition: background 100ms;
   line-height: 1.6;
 }
-.traj-btn:hover    { background: rgba(255, 255, 255, 0.14); }
-.traj-btn--rec     { border-color: rgba(239,68,68,0.6);  color: #fca5a5; }
-.traj-btn--play    { border-color: rgba(34,197,94,0.6);  color: #86efac; }
-.traj-btn--export  { border-color: rgba(59,130,246,0.6); color: #93c5fd; }
-.traj-btn--stop    { border-color: rgba(249,115,22,0.6); color: #fdba74; }
-.traj-btn--clear   { border-color: rgba(255,255,255,0.14); color: #64748b; }
+.traj-btn:hover    { background: rgba(52, 56, 59, 0.10); }
+.traj-btn--rec     { border-color: rgba(239,68,68,0.6);  color: #b3564d; }
+.traj-btn--play    { border-color: rgba(34,197,94,0.6);  color: #3f7d63; }
+.traj-btn--export  { border-color: rgba(59,130,246,0.6); color: #3b6ea5; }
+.traj-btn--stop    { border-color: rgba(249,115,22,0.6); color: #b5701f; }
+.traj-btn--clear   { border-color: rgba(52, 56, 59, 0.10); color: #8a9096; }
 
 /* ─── Viewer dock (unified bottom control bar) ──────────────────────────────
    Replaces three independently-floating widgets (Shots top-right, Tours
@@ -514,10 +541,10 @@ body {
   display: flex;
   align-items: center;
   gap: 4px;
-  background: rgba(0, 0, 0, 0.65);
+  background: rgba(251, 250, 246, 0.92);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(52, 56, 59, 0.10);
   border-radius: 10px;
   padding: 6px;
   pointer-events: auto;
@@ -531,18 +558,18 @@ body {
   border-radius: 7px;
   border: 1px solid transparent;
   background: transparent;
-  color: #cbd5e1;
+  color: #5c6469;
   font-size: 11px;
   font-family: ui-monospace, 'Cascadia Code', monospace;
   cursor: pointer;
   transition: background 100ms, color 100ms, border-color 100ms;
   white-space: nowrap;
 }
-.viewer-dock-btn:hover { background: rgba(255, 255, 255, 0.1); color: #f1f5f9; }
+.viewer-dock-btn:hover { background: rgba(52, 56, 59, 0.08); color: var(--nord-ink); }
 .viewer-dock-btn--active {
-  background: rgba(25, 194, 173, 0.16);
-  border-color: rgba(25, 194, 173, 0.4);
-  color: #7eead9;
+  background: rgba(78, 130, 124, 0.16);
+  border-color: rgba(78, 130, 124, 0.4);
+  color: #4e827c;
 }
 .viewer-dock-dot {
   position: absolute;
@@ -582,13 +609,13 @@ body {
   top: 10px;
   right: 10px;
   z-index: 999;
-  background: rgba(0, 0, 0, 0.65);
+  background: rgba(251, 250, 246, 0.92);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(52, 56, 59, 0.10);
   border-radius: 8px;
   padding: 8px 10px;
-  color: #e2e8f0;
+  color: var(--nord-ink);
   font-size: 11px;
   font-family: ui-monospace, 'Cascadia Code', monospace;
   width: min(280px, calc(100% - 20px));
@@ -608,15 +635,15 @@ body {
 }
 .shots-title {
   font-weight: 600;
-  color: #f1f5f9;
+  color: var(--nord-ink);
   letter-spacing: 0.02em;
 }
 .shots-btn {
   padding: 2px 7px;
   border-radius: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.06);
-  color: #e2e8f0;
+  border: 1px solid rgba(52, 56, 59, 0.10);
+  background: rgba(52, 56, 59, 0.05);
+  color: var(--nord-ink);
   font-size: 11px;
   font-family: inherit;
   cursor: pointer;
@@ -624,23 +651,23 @@ body {
   line-height: 1.6;
   white-space: nowrap;
 }
-.shots-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.14); }
+.shots-btn:hover:not(:disabled) { background: rgba(52, 56, 59, 0.10); }
 .shots-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.shots-btn--save { border-color: rgba(25, 194, 173, 0.55); color: #7eead9; }
+.shots-btn--save { border-color: rgba(78, 130, 124, 0.55); color: #4e827c; }
 .shots-btn--load { align-self: center; margin-top: 2px; }
 .shots-save-form { display: flex; flex-direction: column; gap: 5px; }
 .shots-input {
   width: 100%;
   padding: 4px 6px;
   border-radius: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(0, 0, 0, 0.35);
-  color: #f8fafc;
+  border: 1px solid rgba(52, 56, 59, 0.12);
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--nord-ink);
   font-size: 11px;
   font-family: inherit;
   outline: none;
 }
-.shots-input:focus { border-color: rgba(25, 194, 173, 0.55); }
+.shots-input:focus { border-color: rgba(78, 130, 124, 0.55); }
 .shots-save-actions { display: flex; gap: 4px; flex-wrap: wrap; }
 .shots-list {
   list-style: none;
@@ -656,7 +683,7 @@ body {
   align-items: stretch;
   gap: 2px;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(52, 56, 59, 0.04);
 }
 .shots-row-main {
   flex: 1;
@@ -674,10 +701,10 @@ body {
   cursor: pointer;
   border-radius: 4px 0 0 4px;
 }
-.shots-row-main:hover { background: rgba(255, 255, 255, 0.08); }
+.shots-row-main:hover { background: rgba(52, 56, 59, 0.08); }
 .shots-label {
   font-weight: 500;
-  color: #f1f5f9;
+  color: var(--nord-ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -685,7 +712,7 @@ body {
 }
 .shots-creator {
   font-size: 10px;
-  color: #19c2ad;
+  color: #4e827c;
   text-decoration: none;
 }
 .shots-creator:hover { text-decoration: underline; }
@@ -695,12 +722,12 @@ body {
   padding-right: 2px;
 }
 .shots-icon-btn {
-  color: #94a3b8 !important;
+  color: #8a9096 !important;
   min-width: 24px !important;
   height: 24px !important;
 }
-.shots-icon-btn:hover { color: #e2e8f0 !important; }
-.shots-icon-btn--delete:hover { color: #fca5a5 !important; }
+.shots-icon-btn:hover { color: var(--nord-ink) !important; }
+.shots-icon-btn--delete:hover { color: #b3564d !important; }
 .shots-empty,
 .shots-notice,
 .shots-error {
@@ -708,14 +735,14 @@ body {
   font-size: 10px;
   line-height: 1.4;
 }
-.shots-empty { color: #64748b; }
-.shots-notice { color: #94a3b8; }
-.shots-error { color: #fca5a5; }
+.shots-empty { color: #8a9096; }
+.shots-notice { color: #8a9096; }
+.shots-error { color: #b3564d; }
 .shots-loading {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #64748b;
+  color: #8a9096;
 }
 
 /* ─── Tours panel (guided camera flythroughs) ───────────────────────────── */
@@ -724,13 +751,13 @@ body {
   bottom: 60px;
   right: 10px;
   z-index: 999;
-  background: rgba(0, 0, 0, 0.65);
+  background: rgba(251, 250, 246, 0.92);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(52, 56, 59, 0.10);
   border-radius: 8px;
   padding: 8px 10px;
-  color: #e2e8f0;
+  color: var(--nord-ink);
   font-size: 11px;
   font-family: ui-monospace, 'Cascadia Code', monospace;
   width: min(300px, calc(100% - 20px));
@@ -750,15 +777,15 @@ body {
 }
 .tours-title {
   font-weight: 600;
-  color: #f1f5f9;
+  color: var(--nord-ink);
   letter-spacing: 0.02em;
 }
 .tours-btn {
   padding: 2px 7px;
   border-radius: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.06);
-  color: #e2e8f0;
+  border: 1px solid rgba(52, 56, 59, 0.10);
+  background: rgba(52, 56, 59, 0.05);
+  color: var(--nord-ink);
   font-size: 11px;
   font-family: inherit;
   cursor: pointer;
@@ -766,10 +793,10 @@ body {
   line-height: 1.6;
   white-space: nowrap;
 }
-.tours-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.14); }
+.tours-btn:hover:not(:disabled) { background: rgba(52, 56, 59, 0.10); }
 .tours-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.tours-btn--new { border-color: rgba(147, 197, 253, 0.55); color: #93c5fd; }
-.tours-btn--save { border-color: rgba(25, 194, 173, 0.55); color: #7eead9; align-self: flex-start; }
+.tours-btn--new { border-color: rgba(147, 197, 253, 0.55); color: #3b6ea5; }
+.tours-btn--save { border-color: rgba(78, 130, 124, 0.55); color: #4e827c; align-self: flex-start; }
 .tours-btn--load { align-self: center; margin-top: 2px; }
 .tours-btn--small { font-size: 10px; padding: 1px 5px; }
 .tours-builder { display: flex; flex-direction: column; gap: 5px; overflow-y: auto; }
@@ -777,9 +804,9 @@ body {
   width: 100%;
   padding: 4px 6px;
   border-radius: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(0, 0, 0, 0.35);
-  color: #f8fafc;
+  border: 1px solid rgba(52, 56, 59, 0.12);
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--nord-ink);
   font-size: 11px;
   font-family: inherit;
   outline: none;
@@ -793,7 +820,7 @@ body {
   justify-content: space-between;
   gap: 8px;
   font-size: 10px;
-  color: #94a3b8;
+  color: #8a9096;
 }
 .tours-stops-header {
   display: flex;
@@ -801,10 +828,10 @@ body {
   justify-content: space-between;
   gap: 6px;
 }
-.tours-stops-label { font-size: 10px; color: #94a3b8; }
+.tours-stops-label { font-size: 10px; color: #8a9096; }
 .tours-stops-actions { display: flex; gap: 4px; }
 .tours-shot-picker { display: flex; flex-direction: column; gap: 4px; }
-.tours-shot-picker-label { font-size: 10px; color: #64748b; }
+.tours-shot-picker-label { font-size: 10px; color: #8a9096; }
 .tours-shot-picker-list {
   display: flex;
   flex-wrap: wrap;
@@ -826,7 +853,7 @@ body {
   display: flex;
   align-items: center;
   gap: 4px;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(52, 56, 59, 0.04);
   border-radius: 4px;
   padding: 2px 4px;
 }
@@ -834,7 +861,7 @@ body {
   flex-shrink: 0;
   width: 1rem;
   text-align: center;
-  color: #64748b;
+  color: #8a9096;
   font-size: 10px;
 }
 .tours-stop-controls { display: flex; align-items: center; flex-shrink: 0; }
@@ -852,7 +879,7 @@ body {
   align-items: stretch;
   gap: 2px;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(52, 56, 59, 0.04);
 }
 .tours-row-main {
   flex: 1;
@@ -865,16 +892,16 @@ body {
 }
 .tours-row-title {
   font-weight: 500;
-  color: #f1f5f9;
+  color: var(--nord-ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 100%;
 }
-.tours-row-meta { font-size: 10px; color: #64748b; }
+.tours-row-meta { font-size: 10px; color: #8a9096; }
 .tours-creator {
   font-size: 10px;
-  color: #19c2ad;
+  color: #4e827c;
   text-decoration: none;
 }
 .tours-creator:hover { text-decoration: underline; }
@@ -884,17 +911,17 @@ body {
   padding-right: 2px;
 }
 .tours-icon-btn {
-  color: #94a3b8 !important;
+  color: #8a9096 !important;
   min-width: 24px !important;
   height: 24px !important;
 }
-.tours-icon-btn:hover { color: #e2e8f0 !important; }
-.tours-icon-btn--play:hover { color: #86efac !important; }
-.tours-icon-btn--delete:hover { color: #fca5a5 !important; }
+.tours-icon-btn:hover { color: var(--nord-ink) !important; }
+.tours-icon-btn--play:hover { color: #3f7d63 !important; }
+.tours-icon-btn--delete:hover { color: #b3564d !important; }
 .tours-playback { width: 100%; margin-top: 3px; }
 .tours-track {
   height: 3px;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(52, 56, 59, 0.08);
   border-radius: 2px;
   overflow: hidden;
 }
@@ -910,14 +937,14 @@ body {
   font-size: 10px;
   line-height: 1.4;
 }
-.tours-empty { color: #64748b; }
-.tours-notice { color: #94a3b8; }
-.tours-error { color: #fca5a5; }
+.tours-empty { color: #8a9096; }
+.tours-notice { color: #8a9096; }
+.tours-error { color: #b3564d; }
 .tours-loading {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #64748b;
+  color: #8a9096;
 }
 
 /* Dashboard sculpture viewport — multi-ring animation */
@@ -988,10 +1015,10 @@ body {
 
 /* Deep charcoal canvas — subtle radial lift, not pure black. */
 .sw-field {
-  background-color: #0c0c0e;
+  background-color: var(--nord-bg);
   background-image:
-    radial-gradient(ellipse 90% 60% at 50% -15%, rgba(255, 255, 255, 0.035), transparent 55%),
-    radial-gradient(ellipse 50% 40% at 100% 100%, rgba(25, 194, 173, 0.04), transparent 50%);
+    radial-gradient(ellipse 90% 60% at 50% -15%, rgba(52, 56, 59, 0.03), transparent 55%),
+    radial-gradient(ellipse 50% 40% at 100% 100%, rgba(35, 67, 58, 0.05), transparent 50%);
 }
 
 /* Decorative atmosphere layers are retired in the graphite theme. */
@@ -1013,23 +1040,23 @@ body {
 
 /* Flat panel — sidebar, menus, modals. No blur, no translucency layering. */
 .sw-glass {
-  background: #131316;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--nord-surface);
+  border: 1px solid rgba(52, 56, 59, 0.08);
   box-shadow: none;
 }
 
 /* Top bar — restrained glass framing for the shell chrome only. */
 .sw-glass-bar {
-  background: rgba(12, 12, 14, 0.82);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(247, 244, 238, 0.85);
+  border-bottom: 1px solid rgba(52, 56, 59, 0.08);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
 }
 
 /* Scene card — dense, quiet container; the thumbnail carries the weight. */
 .sw-glass-card {
-  background: #131316;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--nord-surface);
+  border: 1px solid rgba(52, 56, 59, 0.08);
   box-shadow: none;
   transition:
     border-color 180ms ease,
@@ -1039,9 +1066,9 @@ body {
 }
 
 .sw-glass-card-hover:hover {
-  border-color: rgba(255, 255, 255, 0.22);
-  background: #1a1a1e;
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.32);
+  border-color: rgba(52, 56, 59, 0.14);
+  background: #f2eee6;
+  box-shadow: 0 10px 28px rgba(43, 42, 38, 0.08);
   transform: translateY(-2px);
 }
 
@@ -1061,19 +1088,19 @@ body {
 }
 
 .sw-top-nav-active {
-  background: rgba(255, 255, 255, 0.1);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  background: rgba(52, 56, 59, 0.08);
+  box-shadow: inset 0 1px 0 rgba(52, 56, 59, 0.05);
 }
 
 /* Header primary CTA — "New Scene" in the top bar. */
 .sw-header-cta {
-  background: #19c2ad;
-  color: #08110f;
-  box-shadow: 0 2px 8px rgba(25, 194, 173, 0.28);
+  background: #4e827c;
+  color: #f4f2ec;
+  box-shadow: 0 2px 8px rgba(78, 130, 124, 0.28);
 }
 
 .sw-header-cta:hover {
-  background: #22d6bf;
+  background: #3f6b66;
 }
 
 /* Viewer scene actions — unified floating pill on the canvas. */
@@ -1081,11 +1108,11 @@ body {
   gap: 2px;
   padding: 4px 6px;
   border-radius: 9999px;
-  background: rgba(8, 8, 10, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(251, 250, 246, 0.90);
+  border: 1px solid rgba(52, 56, 59, 0.08);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 8px 24px rgba(255, 255, 255, 0.6);
 }
 
 .sw-scene-actions-pill > .pointer-events-auto > button,
@@ -1099,7 +1126,7 @@ body {
 
 .sw-scene-actions-pill > .pointer-events-auto > button:hover,
 .sw-scene-actions-pill > .pointer-events-auto.relative > button:hover {
-  background: rgba(255, 255, 255, 0.1) !important;
+  background: rgba(52, 56, 59, 0.08) !important;
 }
 
 .sw-scene-actions-pill > .pointer-events-auto:not(:last-child) {
@@ -1114,41 +1141,41 @@ body {
   transform: translateY(-50%);
   width: 1px;
   height: 18px;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(52, 56, 59, 0.10);
 }
 
 /* Viewer overlay panels — frosted dark glass floating above the canvas. */
 .sw-overlay-panel {
-  background: rgba(10, 10, 12, 0.78);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(251, 250, 246, 0.92);
+  border: 1px solid rgba(52, 56, 59, 0.08);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   box-shadow:
-    0 16px 48px rgba(0, 0, 0, 0.42),
-    0 2px 8px rgba(0, 0, 0, 0.28);
+    0 16px 48px rgba(43, 42, 38, 0.09),
+    0 2px 8px rgba(43, 42, 38, 0.07);
 }
 
 /* Floating card variant — inset panel with lifted shadow for comments overlay. */
 .sw-overlay-panel-floating {
-  background: rgba(8, 8, 10, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(251, 250, 246, 0.90);
+  border: 1px solid rgba(52, 56, 59, 0.10);
   backdrop-filter: blur(20px) saturate(1.2);
   -webkit-backdrop-filter: blur(20px) saturate(1.2);
   box-shadow:
-    0 24px 64px rgba(0, 0, 0, 0.55),
-    0 8px 24px rgba(0, 0, 0, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    0 24px 64px rgba(43, 42, 38, 0.10),
+    0 8px 24px rgba(255, 255, 255, 0.6),
+    inset 0 1px 0 rgba(52, 56, 59, 0.05);
 }
 
 /* Anchored popovers that float over busy content (account menu off the
    top-bar avatar) — the one deliberate use of a lifted shadow in this
    theme, so the card visibly separates from what's behind it. */
 .sw-popover {
-  background: #131316;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--nord-surface);
+  border: 1px solid rgba(52, 56, 59, 0.08);
   box-shadow:
-    0 20px 40px rgba(0, 0, 0, 0.45),
-    0 2px 8px rgba(0, 0, 0, 0.3);
+    0 20px 40px rgba(43, 42, 38, 0.10),
+    0 2px 8px rgba(43, 42, 38, 0.07);
 }
 
 /* "New scene" — the primary CTA, pinned to the top of the sidebar.
@@ -1156,28 +1183,28 @@ body {
    floating "Compose" button, not just another row in the list. */
 .sw-new-scene {
   position: relative;
-  background: linear-gradient(180deg, #f8f8f9 0%, #ececee 100%);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: linear-gradient(180deg, #2a4d43 0%, #23433a 100%);
+  border: 1px solid rgba(35, 67, 58, 0.55);
   box-shadow:
-    0 2px 8px rgba(0, 0, 0, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5);
-  color: #0c0c0e;
+    0 2px 8px rgba(35, 67, 58, 0.20),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  color: #f4f2ec;
   transition: background-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
 }
 
 .sw-new-scene:hover {
-  background: linear-gradient(180deg, #ffffff 0%, #e8e8ec 100%);
+  background: linear-gradient(180deg, #2f5548 0%, #1c382f 100%);
   filter: none;
   box-shadow:
-    0 4px 12px rgba(0, 0, 0, 0.32),
+    0 4px 12px rgba(43, 42, 38, 0.08),
     inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }
 
 /* Active nav item — flush pill with a leading accent bar. */
 .sw-nav-active {
   position: relative;
-  background: rgba(255, 255, 255, 0.11);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  background: rgba(52, 56, 59, 0.09);
+  box-shadow: inset 0 1px 0 rgba(52, 56, 59, 0.05);
 }
 
 .sw-nav-active::before {
@@ -1189,7 +1216,7 @@ body {
   width: 3px;
   height: 60%;
   border-radius: 0 3px 3px 0;
-  background: linear-gradient(180deg, #19c2ad, rgba(25, 194, 173, 0.45));
+  background: linear-gradient(180deg, #4e827c, rgba(78, 130, 124, 0.45));
 }
 
 /* Active nav icon — plain white, no drop-shadow glow. */
@@ -1203,9 +1230,9 @@ body {
   align-items: center;
   gap: 0.375rem;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(52, 56, 59, 0.05);
   padding: 0.125rem 0.4375rem;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(52, 56, 59, 0.08);
 }
 
 .sw-training-dot {
@@ -1228,8 +1255,8 @@ body {
 
 /* Flat control surface — pills, toggles, badges. No blur. */
 .sw-control {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(52, 56, 59, 0.05);
+  border: 1px solid rgba(52, 56, 59, 0.08);
 }
 
 /* Dashboard toolbar — grouped filter/sort cluster. */
@@ -1238,10 +1265,10 @@ body {
   align-items: center;
   gap: 0.125rem;
   border-radius: 0.75rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(52, 56, 59, 0.08);
+  background: rgba(52, 56, 59, 0.03);
   padding: 0.2rem;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 1px 0 rgba(52, 56, 59, 0.04);
 }
 
 /* Social stat chip — readable mono pill on cards. */
@@ -1250,21 +1277,21 @@ body {
   align-items: center;
   gap: 0.3rem;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(52, 56, 59, 0.08);
+  background: rgba(52, 56, 59, 0.05);
   padding: 0.2rem 0.55rem;
   font-family: var(--font-jetbrains), ui-monospace, monospace;
   font-size: 11px;
   font-weight: 500;
-  color: #c8c8d0;
+  color: #5c6469;
   line-height: 1;
 }
 
 /* Featured scene hero — editorial surface with subtle depth. */
 .sw-featured-card {
-  background: #141416;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.28);
+  background: var(--nord-surface);
+  border: 1px solid rgba(52, 56, 59, 0.08);
+  box-shadow: 0 8px 32px rgba(43, 42, 38, 0.07);
   transition:
     border-color 180ms ease,
     box-shadow 180ms ease,
@@ -1272,21 +1299,21 @@ body {
 }
 
 .sw-featured-card:hover {
-  border-color: rgba(255, 255, 255, 0.16);
-  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.34);
+  border-color: rgba(52, 56, 59, 0.10);
+  box-shadow: 0 14px 40px rgba(43, 42, 38, 0.08);
   transform: translateY(-1px);
 }
 
 /* Card body — lifted from thumbnail for metadata separation. */
 .sw-card-body {
-  background: #151518;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: #fdfcf9;
+  border-top: 1px solid rgba(52, 56, 59, 0.05);
 }
 
 /* Main content surface — subtle panel lift from page canvas. */
 .sw-content-surface {
-  background: rgba(255, 255, 255, 0.015);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(52, 56, 59, 0.03);
+  border: 1px solid rgba(52, 56, 59, 0.05);
 }
 
 /* Dashboard stat pill in the page header strip. */
@@ -1295,16 +1322,16 @@ body {
   align-items: center;
   gap: 0.4rem;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(52, 56, 59, 0.06);
+  background: rgba(52, 56, 59, 0.04);
   padding: 0.3rem 0.65rem;
   font-size: 11px;
-  color: #b0b0ba;
+  color: #5c6469;
 }
 
 .sw-dash-stat strong {
   font-weight: 600;
-  color: #f4f4f5;
+  color: var(--nord-ink);
 }
 
 /* Profile card — flat block, quiet border states only. */
@@ -1315,7 +1342,7 @@ body {
 
 .sw-profile-avatar-ring {
   border-radius: 999px;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14);
+  box-shadow: 0 0 0 1px rgba(52, 56, 59, 0.10);
 }
 
 /* Amber attention border on profile card when jobs are in progress. */

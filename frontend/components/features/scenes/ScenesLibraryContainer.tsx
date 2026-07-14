@@ -36,12 +36,12 @@ export default function ScenesLibraryContainer() {
   return (
     <>
       {actionMessage ? (
-        <div className="mx-auto mb-4 flex max-w-7xl items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800">
+        <div className="mx-auto mb-4 flex max-w-7xl items-center justify-between rounded-lg border border-[var(--nord-success)] bg-[var(--nord-success)] px-4 py-2.5 text-sm text-[var(--nord-success)]">
           <span>{actionMessage}</span>
           <button
             type="button"
             onClick={clearActionMessage}
-            className="ml-3 font-medium text-emerald-600 hover:text-emerald-800"
+            className="ml-3 font-medium text-[var(--nord-success)] hover:text-[var(--nord-success)]"
           >
             Dismiss
           </button>

@@ -82,25 +82,25 @@ export default function CreateSceneFormView({
         <button
           type="button"
           onClick={onBack}
-          className="mb-6 inline-flex items-center gap-2 text-sm text-[#606060] transition-colors hover:text-[#0f0f0f]"
+          className="mb-6 inline-flex items-center gap-2 text-sm text-[var(--nord-slate-soft)] transition-colors hover:text-[var(--nord-ink)]"
         >
           <ArrowLeft className="h-4 w-4" />
           Back to Home
         </button>
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <div className="rounded-2xl border border-[#1a2535] bg-[#0d1422] p-8">
+            <div className="rounded-2xl border border-[var(--nord-hairline)] bg-[var(--nord-bg)] p-8">
               <div className="mb-8 flex items-center gap-3">
                 <div className="h-6 w-1 rounded-full bg-blue-500" />
-                <h2 className="text-lg font-semibold text-white">Scene Details</h2>
+                <h2 className="text-lg font-semibold text-[var(--nord-ink)]">Scene Details</h2>
               </div>
 
               <div className="mb-6 flex flex-col gap-2">
                 <label
                   htmlFor="scene-name"
-                  className="text-sm font-medium text-slate-300"
+                  className="text-sm font-medium text-[var(--nord-ink)]"
                 >
-                  Scene Name <span className="text-red-400">*</span>
+                  Scene Name <span className="text-[var(--nord-danger)]">*</span>
                 </label>
                 <input
                   id="scene-name"
@@ -111,23 +111,23 @@ export default function CreateSceneFormView({
                   value={name}
                   onChange={(e) => onNameChange(e.target.value)}
                   placeholder="e.g., Golden Gate Bridge"
-                  className="rounded-xl border border-[#1e2d45] bg-[#080d18] px-4 py-3 text-sm text-white placeholder:text-slate-600 outline-none transition focus:border-blue-500/60 focus:ring-2 focus:ring-blue-500/20 disabled:opacity-50"
+                  className="rounded-xl border border-[var(--nord-hairline)] bg-[var(--nord-bg)] px-4 py-3 text-sm text-[var(--nord-ink)] placeholder:text-[var(--nord-slate-soft)] outline-none transition focus:border-blue-500/60 focus:ring-2 focus:ring-blue-500/20 disabled:opacity-50"
                 />
               </div>
 
               <div className="mb-4 flex flex-col gap-2">
-                <span className="text-sm font-medium text-slate-300">
+                <span className="text-sm font-medium text-[var(--nord-ink)]">
                   Visibility
                 </span>
-                <div className="flex rounded-xl bg-[#080d18] p-1 border border-[#1e2d45]">
+                <div className="flex rounded-xl bg-[var(--nord-bg)] p-1 border border-[var(--nord-hairline)]">
                   <button
                     type="button"
                     disabled={uploading}
                     onClick={() => onVisibilityChange("private")}
                     className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 px-4 text-sm font-medium transition-colors ${
                       visibility === "private"
-                        ? "bg-blue-600 text-white shadow"
-                        : "text-slate-400 hover:text-slate-300"
+                        ? "bg-blue-600 text-[var(--nord-ink)] shadow"
+                        : "text-[var(--nord-slate)] hover:text-[var(--nord-ink)]"
                     }`}
                   >
                     <EyeOff className="h-4 w-4" />
@@ -139,8 +139,8 @@ export default function CreateSceneFormView({
                     onClick={() => onVisibilityChange("public")}
                     className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 px-4 text-sm font-medium transition-colors ${
                       visibility === "public"
-                        ? "bg-blue-600 text-white shadow"
-                        : "text-slate-400 hover:text-slate-300"
+                        ? "bg-blue-600 text-[var(--nord-ink)] shadow"
+                        : "text-[var(--nord-slate)] hover:text-[var(--nord-ink)]"
                     }`}
                   >
                     <Eye className="h-4 w-4" />
@@ -149,28 +149,28 @@ export default function CreateSceneFormView({
                 </div>
               </div>
 
-              <p className="mb-8 flex items-center gap-2 text-xs text-slate-500">
+              <p className="mb-8 flex items-center gap-2 text-xs text-[var(--nord-slate)]">
                 <Lock className="h-3.5 w-3.5 shrink-0" />
                 {visibility === "private"
                   ? "Only you can view this scene"
                   : "Anyone with the link can view this scene"}
               </p>
 
-              <hr className="mb-8 border-[#1a2535]" />
+              <hr className="mb-8 border-[var(--nord-hairline)]" />
 
               <div>
                 <div className="mb-5 flex items-center gap-3">
                   <div className="h-6 w-1 rounded-full bg-purple-500" />
-                  <h3 className="text-sm font-semibold text-white">
+                  <h3 className="text-sm font-semibold text-[var(--nord-ink)]">
                     Upload Requirements
                   </h3>
                 </div>
-                <ul className="space-y-3 text-sm text-slate-400">
+                <ul className="space-y-3 text-sm text-[var(--nord-slate)]">
                   <li className="flex items-start gap-2.5">
                     <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
                     <span>
                       File must be a{" "}
-                      <strong className="font-semibold text-white">
+                      <strong className="font-semibold text-[var(--nord-ink)]">
                         ZIP archive
                       </strong>{" "}
                       containing JPG or PNG images
@@ -180,7 +180,7 @@ export default function CreateSceneFormView({
                     <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
                     <span>
                       Recommended:{" "}
-                      <strong className="font-semibold text-white">
+                      <strong className="font-semibold text-[var(--nord-ink)]">
                         50-200 images
                       </strong>{" "}
                       captured from multiple angles
@@ -190,14 +190,14 @@ export default function CreateSceneFormView({
                     <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
                     <span>
                       Maximum file size:{" "}
-                      <strong className="font-semibold text-white">500 MB</strong>
+                      <strong className="font-semibold text-[var(--nord-ink)]">500 MB</strong>
                     </span>
                   </li>
                   <li className="flex items-start gap-2.5">
                     <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
                     <span>
                       Processing time:{" "}
-                      <strong className="font-semibold text-white">
+                      <strong className="font-semibold text-[var(--nord-ink)]">
                         30-60 minutes
                       </strong>{" "}
                       depending on dataset size
@@ -207,23 +207,23 @@ export default function CreateSceneFormView({
               </div>
             </div>
 
-            <div className="rounded-2xl border border-[#1a2535] bg-[#0d1422] p-8">
+            <div className="rounded-2xl border border-[var(--nord-hairline)] bg-[var(--nord-bg)] p-8">
               <div className="mb-6 flex items-center gap-3">
-                <div className="h-6 w-1 rounded-full bg-emerald-500" />
-                <h2 className="text-lg font-semibold text-white">
+                <div className="h-6 w-1 rounded-full bg-[var(--nord-success)]" />
+                <h2 className="text-lg font-semibold text-[var(--nord-ink)]">
                   Upload Dataset
                 </h2>
               </div>
 
-              <div className="mb-6 flex rounded-xl bg-[#080d18] p-1 border border-[#1e2d45]">
+              <div className="mb-6 flex rounded-xl bg-[var(--nord-bg)] p-1 border border-[var(--nord-hairline)]">
                 <button
                   type="button"
                   disabled={uploading}
                   onClick={() => onTabChange("file")}
                   className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 px-4 text-sm font-medium transition-colors ${
                     activeTab === "file"
-                      ? "bg-blue-600 text-white shadow"
-                      : "text-slate-400 hover:text-slate-300"
+                      ? "bg-blue-600 text-[var(--nord-ink)] shadow"
+                      : "text-[var(--nord-slate)] hover:text-[var(--nord-ink)]"
                   }`}
                 >
                   <FileArchive className="h-4 w-4" />
@@ -235,8 +235,8 @@ export default function CreateSceneFormView({
                   onClick={() => onTabChange("gdrive")}
                   className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 px-4 text-sm font-medium transition-colors ${
                     activeTab === "gdrive"
-                      ? "bg-blue-600 text-white shadow"
-                      : "text-slate-400 hover:text-slate-300"
+                      ? "bg-blue-600 text-[var(--nord-ink)] shadow"
+                      : "text-[var(--nord-slate)] hover:text-[var(--nord-ink)]"
                   }`}
                 >
                   <Link className="h-4 w-4" />
@@ -255,29 +255,29 @@ export default function CreateSceneFormView({
                       isDragging
                         ? "border-blue-500/70 bg-blue-500/5"
                         : file
-                          ? "border-emerald-500/50 bg-emerald-500/5"
-                          : "border-[#1e3a5f] bg-[#080d18] hover:border-blue-500/40 hover:bg-blue-500/5"
+                          ? "border-[var(--nord-success)] bg-[var(--nord-success)]"
+                          : "border-[var(--nord-hairline)] bg-[var(--nord-bg)] hover:border-blue-500/40 hover:bg-blue-500/5"
                     } ${uploading ? "pointer-events-none opacity-60" : ""}`}
                   >
-                    <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-[#1a2a4a]">
+                    <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-[var(--nord-surface)]">
                       <FileArchive className="h-12 w-12 text-blue-400" />
                     </div>
 
                     {file ? (
                       <>
                         <div className="text-center">
-                          <p className="font-semibold text-white">{file.name}</p>
-                          <p className="mt-1 text-sm text-slate-400">
+                          <p className="font-semibold text-[var(--nord-ink)]">{file.name}</p>
+                          <p className="mt-1 text-sm text-[var(--nord-slate)]">
                             {(file.size / (1024 * 1024)).toFixed(1)} MB
                           </p>
                         </div>
                         {stage === "uploading" && (
                           <div className="w-full max-w-xs">
-                            <div className="mb-1.5 flex justify-between text-xs text-slate-400">
+                            <div className="mb-1.5 flex justify-between text-xs text-[var(--nord-slate)]">
                               <span>{stageLabel}</span>
                               <span>{progress}%</span>
                             </div>
-                            <div className="h-1.5 overflow-hidden rounded-full bg-[#1a2535]">
+                            <div className="h-1.5 overflow-hidden rounded-full bg-[var(--nord-surface)]">
                               <div
                                 className="h-full rounded-full bg-blue-500 transition-all duration-300"
                                 style={{ width: `${progress}%` }}
@@ -291,10 +291,10 @@ export default function CreateSceneFormView({
                       </>
                     ) : (
                       <div className="text-center">
-                        <p className="text-lg font-semibold text-white">
+                        <p className="text-lg font-semibold text-[var(--nord-ink)]">
                           Drag &amp; drop your ZIP file here
                         </p>
-                        <p className="mt-1.5 text-sm text-slate-400">
+                        <p className="mt-1.5 text-sm text-[var(--nord-slate)]">
                           or click to browse your files
                         </p>
                       </div>
@@ -307,14 +307,14 @@ export default function CreateSceneFormView({
                           e.stopPropagation();
                           onOpenFilePicker();
                         }}
-                        className="inline-flex items-center gap-2 rounded-full bg-blue-600 px-8 py-3 text-sm font-semibold text-white shadow-lg transition-colors hover:bg-blue-700"
+                        className="inline-flex items-center gap-2 rounded-full bg-blue-600 px-8 py-3 text-sm font-semibold text-[var(--nord-ink)] shadow-lg transition-colors hover:bg-blue-700"
                       >
                         <Upload className="h-4 w-4" />
                         Choose ZIP File
                       </button>
                     )}
 
-                    <p className="flex items-center gap-2 text-xs text-slate-500">
+                    <p className="flex items-center gap-2 text-xs text-[var(--nord-slate)]">
                       <FileArchive className="h-3.5 w-3.5" />
                       ZIP only
                       <span className="mx-0.5">·</span>
@@ -337,10 +337,10 @@ export default function CreateSceneFormView({
                   <div className="flex flex-col gap-2">
                     <label
                       htmlFor="gdrive-url"
-                      className="text-sm font-medium text-slate-300"
+                      className="text-sm font-medium text-[var(--nord-ink)]"
                     >
                       Google Drive share link{" "}
-                      <span className="text-red-400">*</span>
+                      <span className="text-[var(--nord-danger)]">*</span>
                     </label>
                     <input
                       id="gdrive-url"
@@ -350,14 +350,14 @@ export default function CreateSceneFormView({
                       value={gdriveUrl}
                       onChange={(e) => onGdriveUrlChange(e.target.value)}
                       placeholder="https://drive.google.com/file/d/<ID>/view?usp=sharing"
-                      className="rounded-xl border border-[#1e2d45] bg-[#080d18] px-4 py-3 text-sm text-white placeholder:text-slate-600 outline-none transition focus:border-blue-500/60 focus:ring-2 focus:ring-blue-500/20 disabled:opacity-50"
+                      className="rounded-xl border border-[var(--nord-hairline)] bg-[var(--nord-bg)] px-4 py-3 text-sm text-[var(--nord-ink)] placeholder:text-[var(--nord-slate-soft)] outline-none transition focus:border-blue-500/60 focus:ring-2 focus:ring-blue-500/20 disabled:opacity-50"
                     />
                   </div>
-                  <div className="rounded-xl border border-[#1e2d45] bg-[#080d18] px-4 py-4 space-y-2">
-                    <p className="text-xs font-medium text-slate-400">
+                  <div className="rounded-xl border border-[var(--nord-hairline)] bg-[var(--nord-bg)] px-4 py-4 space-y-2">
+                    <p className="text-xs font-medium text-[var(--nord-slate)]">
                       Requirements
                     </p>
-                    <ul className="space-y-1.5 text-xs text-slate-500">
+                    <ul className="space-y-1.5 text-xs text-[var(--nord-slate)]">
                       <li className="flex items-start gap-2">
                         <span className="mt-1 h-1 w-1 shrink-0 rounded-full bg-blue-500" />
                         The file must be shared publicly (Anyone with the link)
@@ -381,7 +381,7 @@ export default function CreateSceneFormView({
               )}
 
               {error && (
-                <p className="mt-4 rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-400 border border-red-500/20">
+                <p className="mt-4 rounded-xl bg-red-500/10 px-4 py-3 text-sm text-[var(--nord-danger)] border border-[var(--nord-danger)]">
                   {error}
                 </p>
               )}
@@ -393,7 +393,7 @@ export default function CreateSceneFormView({
                   (activeTab === "file" ? !file : !gdriveUrl.trim()) ||
                   uploading
                 }
-                className="mt-6 w-full rounded-xl bg-blue-600 py-3.5 text-sm font-semibold text-white shadow-lg transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+                className="mt-6 w-full rounded-xl bg-blue-600 py-3.5 text-sm font-semibold text-[var(--nord-ink)] shadow-lg transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {uploading
                   ? stageLabel

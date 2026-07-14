@@ -19,8 +19,8 @@ export function SceneVisibilityBadge({ visibility, className }: SceneVisibilityB
       className={cn(
         "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ring-1",
         isPublic
-          ? "bg-emerald-500/15 text-emerald-200 ring-emerald-400/25"
-          : "bg-white/[0.06] text-[#c8c8d0] ring-white/12",
+          ? "bg-[var(--nord-success)] text-[var(--nord-success)] ring-[var(--nord-success)]"
+          : "bg-[var(--nord-tint)] text-[var(--nord-ink)] ring-[var(--nord-hairline)]",
         className,
       )}
     >
@@ -67,8 +67,8 @@ export function SceneVisibilityToggle({
         className={cn(
           "h-6 flex-1 rounded-full px-3 text-[11px] font-medium",
           !isPublic
-            ? "bg-white text-[#0a0a0b] hover:bg-white"
-            : "text-[#84848c] hover:bg-transparent hover:text-white",
+            ? "bg-[var(--nord-surface)] text-[var(--nord-ink)] hover:bg-[var(--nord-surface)]"
+            : "text-[var(--nord-slate)] hover:bg-transparent hover:text-[var(--nord-ink)]",
         )}
       >
         Private
@@ -83,8 +83,8 @@ export function SceneVisibilityToggle({
         className={cn(
           "h-6 flex-1 rounded-full px-3 text-[11px] font-medium",
           isPublic
-            ? "bg-white text-[#0a0a0b] hover:bg-white"
-            : "text-[#84848c] hover:bg-transparent hover:text-white",
+            ? "bg-[var(--nord-surface)] text-[var(--nord-ink)] hover:bg-[var(--nord-surface)]"
+            : "text-[var(--nord-slate)] hover:bg-transparent hover:text-[var(--nord-ink)]",
         )}
       >
         Public
@@ -100,8 +100,8 @@ export function SceneVisibilityToggle({
     <div className={cn("flex flex-col gap-1.5", className)}>
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-medium text-[#d4d4d4]">Visibility</p>
-          <p className="text-[11px] text-[#909090]">
+          <p className="text-xs font-medium text-[var(--nord-ink)]">Visibility</p>
+          <p className="text-[11px] text-[var(--nord-slate)]">
             {isPublic ? "Anyone can discover this scene." : "Only you can see this scene."}
           </p>
         </div>

@@ -145,11 +145,11 @@ export default function DashboardSceneCard({
 
         <SceneVisibilityBadge
           visibility={visibility}
-          className="absolute left-2 top-2 border-white/10 bg-black/50 text-[9px] backdrop-blur-sm"
+          className="absolute left-2 top-2 border-[var(--nord-hairline)] bg-[var(--nord-scrim)] text-[9px] backdrop-blur-sm"
         />
 
         {scene.status !== "completed" && (
-          <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full border border-white/10 bg-black/50 px-1.5 py-0.5 font-sw-mono text-[9px] font-medium uppercase tracking-wide text-[#d8d8e0] backdrop-blur-sm">
+          <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full border border-[var(--nord-hairline)] bg-[var(--nord-scrim)] px-1.5 py-0.5 font-sw-mono text-[9px] font-medium uppercase tracking-wide text-[var(--nord-ink)] backdrop-blur-sm">
             <StatusDot status={scene.status} pulse={styles.pulse} className="h-1.5 w-1.5" />
             {scene.apiStatus === "UPLOADED"
               ? "Ready"
@@ -168,7 +168,7 @@ export default function DashboardSceneCard({
             <div className="flex items-center gap-2">
               <h3
                 className={cn(
-                  "min-w-0 flex-1 truncate font-semibold text-white",
+                  "min-w-0 flex-1 truncate font-semibold text-[var(--nord-ink)]",
                   isCompact ? "text-[13px]" : "text-[14px]",
                 )}
               >
@@ -195,7 +195,7 @@ export default function DashboardSceneCard({
         </div>
 
         <div className="mt-2 flex items-end justify-between gap-2">
-          <p className="min-w-0 truncate font-sw-mono text-[10px] text-[#a8a8b2]">
+          <p className="min-w-0 truncate font-sw-mono text-[10px] text-[var(--nord-slate)]">
             {scene.caption}
           </p>
         </div>
@@ -218,7 +218,7 @@ export default function DashboardSceneCard({
 
         {showProcessingFooter && (
           <div
-            className="mt-2.5 space-y-2 border-t border-white/8 pt-2.5"
+            className="mt-2.5 space-y-2 border-t border-[var(--nord-hairline)] pt-2.5"
             onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.stopPropagation()}
           >
@@ -228,7 +228,7 @@ export default function DashboardSceneCard({
                 variant="outline"
                 disabled={cancelling}
                 onClick={() => onCancelScene?.(scene)}
-                className="h-7 w-full rounded-md border-white/12 bg-white/[0.03] text-xs text-[#d8d8e0] hover:bg-white/10 hover:text-white"
+                className="h-7 w-full rounded-md border-[var(--nord-hairline)] bg-[var(--nord-tint)] text-xs text-[var(--nord-ink)] hover:bg-[var(--nord-tint)] hover:text-[var(--nord-ink)]"
               >
                 <XCircle data-icon="inline-start" />
                 {cancelling ? "Cancelling…" : "Cancel"}
@@ -244,8 +244,8 @@ export default function DashboardSceneCard({
                     className={cn(
                       "h-7 flex-1 rounded-md border text-xs font-medium",
                       scene.apiStatus === "FAILED"
-                        ? "border-white/12 bg-white/[0.04] text-[#e0918f] hover:bg-white/10"
-                        : "border-transparent bg-[#f4f4f5] text-[#0c0c0e] hover:bg-[#e4e4e7]",
+                        ? "border-[var(--nord-hairline)] bg-[var(--nord-tint)] text-[var(--nord-danger)] hover:bg-[var(--nord-tint)]"
+                        : "border-transparent bg-[var(--nord-surface-2)] text-[var(--nord-ink)] hover:bg-[var(--nord-surface-2)]",
                     )}
                   >
                     <Send data-icon="inline-start" />
@@ -262,8 +262,8 @@ export default function DashboardSceneCard({
                     aria-label="Advanced training settings"
                     onClick={() => setShowAdvanced((v) => !v)}
                     className={cn(
-                      "h-7 rounded-md border-white/12 bg-white/[0.03] text-[#a8a8b2] hover:bg-white/10 hover:text-white",
-                      showAdvanced && "bg-white/10 text-white",
+                      "h-7 rounded-md border-[var(--nord-hairline)] bg-[var(--nord-tint)] text-[var(--nord-slate)] hover:bg-[var(--nord-tint)] hover:text-[var(--nord-ink)]",
+                      showAdvanced && "bg-[var(--nord-tint)] text-[var(--nord-ink)]",
                     )}
                   >
                     <Settings2 className="h-3.5 w-3.5" />
@@ -309,7 +309,7 @@ function StatusTile({
       {scene.status === "training" && scene.progressPercent != null && (
         <>
           {scene.progressSubPhase && (
-            <p className="mb-1.5 max-w-full truncate font-sw-mono text-[9px] uppercase tracking-wide text-[#a8a8b2]">
+            <p className="mb-1.5 max-w-full truncate font-sw-mono text-[9px] uppercase tracking-wide text-[var(--nord-slate)]">
               {formatProgressSubPhase(scene.progressSubPhase)}
             </p>
           )}
@@ -322,14 +322,14 @@ function StatusTile({
           >
             {scene.progressPercent}%
           </div>
-          <div className="mt-2 h-1 w-full max-w-[120px] overflow-hidden rounded-full bg-white/10">
+          <div className="mt-2 h-1 w-full max-w-[120px] overflow-hidden rounded-full bg-[var(--nord-tint)]">
             <div
-              className="h-full rounded-full bg-white/75"
+              className="h-full rounded-full bg-[var(--nord-tint)]"
               style={{ width: `${scene.progressPercent}%` }}
             />
           </div>
           {scene.eta && (
-            <p className="mt-1.5 font-sw-mono text-[10px] text-[#a8a8b2]">
+            <p className="mt-1.5 font-sw-mono text-[10px] text-[var(--nord-slate)]">
               ~{scene.eta} left
             </p>
           )}
@@ -347,7 +347,7 @@ function StatusTile({
           >
             #{scene.queuePosition}
           </div>
-          <div className="mt-1 font-sw-mono text-[10px] text-[#a8a8b2]">
+          <div className="mt-1 font-sw-mono text-[10px] text-[var(--nord-slate)]">
             in queue · {scene.queueEta}
           </div>
         </>
@@ -364,18 +364,18 @@ function StatusTile({
           >
             {scene.uploadedImageCount}
           </div>
-          <div className="mt-1 font-sw-mono text-[10px] text-[#a8a8b2]">images</div>
+          <div className="mt-1 font-sw-mono text-[10px] text-[var(--nord-slate)]">images</div>
         </>
       )}
 
       {scene.status === "failed" && scene.errorMessage && (
-        <div className="max-w-[160px] font-sw-mono text-[10px] leading-snug text-[#c0c0c8]">
+        <div className="max-w-[160px] font-sw-mono text-[10px] leading-snug text-[var(--nord-ink)]">
           {scene.errorMessage}
         </div>
       )}
 
       {scene.status === "failed" && (
-        <div className="mt-1.5 flex items-center gap-1 font-sw-mono text-[10px] text-[#a8a8b2]">
+        <div className="mt-1.5 flex items-center gap-1 font-sw-mono text-[10px] text-[var(--nord-slate)]">
           <RefreshCw className="h-3 w-3" strokeWidth={1.5} />
           Retry below
         </div>

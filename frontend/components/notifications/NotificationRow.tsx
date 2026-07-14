@@ -27,8 +27,8 @@ export default function NotificationRow({ notification }: NotificationRowProps) 
     <Link
       href={href}
       className={cn(
-        "flex gap-3 rounded-xl px-3 py-3 transition-colors hover:bg-[#1a1a1a]",
-        !notification.read && "bg-[#1a2433]/80 ring-1 ring-[#3b82f6]/25",
+        "flex gap-3 rounded-xl px-3 py-3 transition-colors hover:bg-[var(--nord-surface)]",
+        !notification.read && "bg-[var(--nord-surface)] ring-1 ring-[#3b82f6]/25",
       )}
     >
       {notification.actorAvatarUrl ? (
@@ -46,13 +46,13 @@ export default function NotificationRow({ notification }: NotificationRowProps) 
       )}
 
       <div className="min-w-0 flex-1">
-        <p className="text-sm leading-snug text-[#e8e8e8]">
-          <span className="font-semibold text-white">{actorLabel}</span>
+        <p className="text-sm leading-snug text-[var(--nord-ink)]">
+          <span className="font-semibold text-[var(--nord-ink)]">{actorLabel}</span>
           {suffix}
         </p>
         <time
           dateTime={notification.createdAt}
-          className="mt-1 block font-sw-mono text-[11px] text-[#737373]"
+          className="mt-1 block font-sw-mono text-[11px] text-[var(--nord-slate)]"
           title={notification.createdAt}
         >
           {formatRelativeTime(notification.createdAt)}

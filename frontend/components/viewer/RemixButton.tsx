@@ -91,7 +91,7 @@ export default function RemixButton({ sceneId, sceneName }: RemixButtonProps) {
           title="Remix"
           onClick={openModal}
           className={cn(
-            "h-auto gap-1.5 rounded-full border border-white/10 bg-black/70 px-3 py-2 text-white shadow-lg backdrop-blur-md hover:bg-white/10",
+            "h-auto gap-1.5 rounded-full border border-[var(--nord-hairline)] bg-[var(--nord-scrim)] px-3 py-2 text-[var(--nord-cta-fg)] shadow-lg backdrop-blur-md hover:bg-[var(--nord-tint)]",
             forking && "opacity-70",
           )}
         >
@@ -106,22 +106,22 @@ export default function RemixButton({ sceneId, sceneName }: RemixButtonProps) {
 
       {modalOpen ? (
         <div
-          className="pointer-events-auto fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          className="pointer-events-auto fixed inset-0 z-[70] flex items-center justify-center bg-[var(--nord-scrim)] p-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
           aria-labelledby="remix-scene-title"
           onClick={closeModal}
         >
           <div
-            className="w-full max-w-md overflow-hidden rounded-2xl border border-[#404040] bg-[#1a1a1a] shadow-2xl"
+            className="w-full max-w-md overflow-hidden rounded-2xl border border-[var(--nord-hairline)] bg-[var(--nord-surface)] shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <header className="flex items-center justify-between border-b border-[#303030] px-5 py-4">
+            <header className="flex items-center justify-between border-b border-[var(--nord-hairline)] px-5 py-4">
               <div>
-                <h2 id="remix-scene-title" className="text-base font-semibold text-white">
+                <h2 id="remix-scene-title" className="text-base font-semibold text-[var(--nord-ink)]">
                   Remix scene
                 </h2>
-                <p className="mt-0.5 text-xs text-[#909090]">
+                <p className="mt-0.5 text-xs text-[var(--nord-slate)]">
                   Creates a copy in your account (private by default).
                 </p>
               </div>
@@ -130,7 +130,7 @@ export default function RemixButton({ sceneId, sceneName }: RemixButtonProps) {
                 onClick={closeModal}
                 disabled={forking}
                 aria-label="Close"
-                className="rounded-lg p-1.5 text-[#909090] transition-colors hover:bg-[#303030] hover:text-white disabled:opacity-40"
+                className="rounded-lg p-1.5 text-[var(--nord-slate)] transition-colors hover:bg-[var(--nord-surface)] hover:text-[var(--nord-ink)] disabled:opacity-40"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -138,7 +138,7 @@ export default function RemixButton({ sceneId, sceneName }: RemixButtonProps) {
 
             <div className="flex flex-col gap-3 px-5 py-4">
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="remix-scene-name" className="text-xs font-medium text-[#d4d4d4]">
+                <label htmlFor="remix-scene-name" className="text-xs font-medium text-[var(--nord-ink)]">
                   Name (optional)
                 </label>
                 <input
@@ -148,24 +148,24 @@ export default function RemixButton({ sceneId, sceneName }: RemixButtonProps) {
                   disabled={forking}
                   placeholder={defaultName || "Fork of …"}
                   onChange={(e) => setName(e.target.value)}
-                  className="rounded-lg border border-[#404040] bg-[#262626] px-3 py-2 text-sm text-white outline-none transition focus:border-[#6366f1] focus:ring-2 focus:ring-[#6366f1]/20 disabled:opacity-50"
+                  className="rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-surface)] px-3 py-2 text-sm text-[var(--nord-ink)] outline-none transition focus:border-[#6366f1] focus:ring-2 focus:ring-[#6366f1]/20 disabled:opacity-50"
                 />
               </div>
 
               {error ? (
-                <p className="text-sm text-red-400" role="alert">
+                <p className="text-sm text-[var(--nord-danger)]" role="alert">
                   {error}
                 </p>
               ) : null}
             </div>
 
-            <footer className="flex justify-end gap-2 border-t border-[#303030] px-5 py-4">
+            <footer className="flex justify-end gap-2 border-t border-[var(--nord-hairline)] px-5 py-4">
               <Button
                 type="button"
                 variant="outline"
                 disabled={forking}
                 onClick={closeModal}
-                className="border-[#404040] bg-transparent text-[#d4d4d4] hover:bg-[#303030] hover:text-white"
+                className="border-[var(--nord-hairline)] bg-transparent text-[var(--nord-ink)] hover:bg-[var(--nord-surface)] hover:text-[var(--nord-ink)]"
               >
                 Cancel
               </Button>

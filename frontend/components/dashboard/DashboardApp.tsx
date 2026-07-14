@@ -15,7 +15,7 @@ export default function DashboardApp() {
   const [currentMode, setCurrentMode] = useState<LocalMode>("dashboard");
 
   return (
-    <div className="flex h-screen flex-col bg-gray-50 text-gray-900">
+    <div className="flex h-screen flex-col bg-[var(--nord-surface-2)] text-[var(--nord-ink)]">
       <TopNavBar
         mode={currentMode}
         onCreateClick={() => router.push("/scenes/create")}

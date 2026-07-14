@@ -99,7 +99,7 @@ export default function ReactionBar({ sceneId, initialSummary }: ReactionBarProp
     <div ref={containerRef} className="pointer-events-auto relative flex flex-col items-center gap-1.5">
       {expanded ? (
         <div
-          className="absolute bottom-full mb-2 flex items-center gap-1 rounded-full border border-white/10 bg-black/70 px-2 py-1.5 shadow-lg backdrop-blur-md"
+          className="absolute bottom-full mb-2 flex items-center gap-1 rounded-full border border-[var(--nord-hairline)] bg-[var(--nord-scrim)] px-2 py-1.5 shadow-lg backdrop-blur-md"
           role="toolbar"
           aria-label="Scene reactions"
         >
@@ -120,14 +120,14 @@ export default function ReactionBar({ sceneId, initialSummary }: ReactionBarProp
                 title={label}
                 onClick={() => void handleReactionClick(type)}
                 className={cn(
-                  "h-auto min-w-[2.75rem] flex-col gap-0 rounded-full px-2 py-1 text-white hover:bg-white/10",
-                  selected && "bg-white/15 ring-1 ring-white/30",
+                  "h-auto min-w-[2.75rem] flex-col gap-0 rounded-full px-2 py-1 text-[var(--nord-ink)] hover:bg-[var(--nord-tint)]",
+                  selected && "bg-[var(--nord-tint)] ring-1 ring-[var(--nord-hairline)]",
                 )}
               >
                 <span className="text-lg leading-none" aria-hidden>
                   {emoji}
                 </span>
-                <span className="font-sw-mono text-[10px] leading-tight text-white/80">
+                <span className="font-sw-mono text-[10px] leading-tight text-[var(--nord-ink)]">
                   {count}
                 </span>
               </Button>
@@ -150,8 +150,8 @@ export default function ReactionBar({ sceneId, initialSummary }: ReactionBarProp
         title="React"
         onClick={() => setExpanded((v) => !v)}
         className={cn(
-          "h-auto gap-1.5 rounded-full border border-white/10 bg-black/70 px-3 py-2 text-white shadow-lg backdrop-blur-md hover:bg-white/10",
-          expanded && "bg-white/15 ring-1 ring-white/30",
+          "h-auto gap-1.5 rounded-full border border-[var(--nord-hairline)] bg-[var(--nord-scrim)] px-3 py-2 text-[var(--nord-cta-fg)] shadow-lg backdrop-blur-md hover:bg-[var(--nord-tint)]",
+          expanded && "bg-[var(--nord-tint)] ring-1 ring-[var(--nord-hairline)]",
         )}
       >
         <span className="text-base leading-none" aria-hidden>
@@ -163,7 +163,7 @@ export default function ReactionBar({ sceneId, initialSummary }: ReactionBarProp
       </Button>
 
       {error ? (
-        <p className="max-w-xs rounded-md bg-black/80 px-2 py-1 text-center text-xs text-red-400">
+        <p className="max-w-xs rounded-md bg-[var(--nord-scrim)] px-2 py-1 text-center text-xs text-[var(--nord-danger)]">
           {error}
         </p>
       ) : null}

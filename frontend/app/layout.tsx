@@ -38,7 +38,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${hankenGrotesk.variable} ${jetbrainsMono.variable} font-[family-name:var(--font-hanken)] bg-[#121212] text-[#f1f1f1] antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${hankenGrotesk.variable} ${jetbrainsMono.variable} font-[family-name:var(--font-hanken)] bg-[var(--nord-bg)] text-[var(--nord-ink)] antialiased`}
       >
         <AmplifyProvider>{children}</AmplifyProvider>
       </body>

@@ -62,7 +62,7 @@ export default function SplatCard({
   return (
     <article
       className={cn(
-        "group relative flex flex-col rounded-xl bg-[#212121] transition-transform duration-200 hover:-translate-y-1",
+        "group relative flex flex-col rounded-xl bg-[var(--nord-surface)] transition-transform duration-200 hover:-translate-y-1",
         menuOpen && "z-50",
       )}
       onClick={() => onCardClick(splat)}
@@ -93,21 +93,21 @@ export default function SplatCard({
             className="relative h-full w-full"
           />
         )}
-        <span className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-full border border-[#166534]/60 bg-[#14532d]/90 px-2.5 py-1 font-sw-mono text-[10px] font-semibold uppercase tracking-wide text-[#86efac] backdrop-blur-sm">
-          <span className="h-1.5 w-1.5 rounded-full bg-[#4ade80]" aria-hidden />
+        <span className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-full border border-[var(--nord-success)] bg-[var(--nord-success)] px-2.5 py-1 font-sw-mono text-[10px] font-semibold uppercase tracking-wide text-[var(--nord-success)] backdrop-blur-sm">
+          <span className="h-1.5 w-1.5 rounded-full bg-[var(--nord-success)]" aria-hidden />
           Completed
         </span>
       </div>
 
       {/* Action bar */}
       <div
-        className="flex items-center justify-between border-y border-[#303030] bg-[#181818] px-3 py-2"
+        className="flex items-center justify-between border-y border-[var(--nord-hairline)] bg-[var(--nord-bg)] px-3 py-2"
         onClick={(e) => e.stopPropagation()}
       >
         <button
           type="button"
           onClick={() => onOpen3D(splat)}
-          className="flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium text-[#d4d4d4] transition-colors hover:bg-[#262626] hover:text-white"
+          className="flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium text-[var(--nord-ink)] transition-colors hover:bg-[var(--nord-pine-tint)] hover:text-[var(--nord-pine)]"
         >
           <Box className="h-3.5 w-3.5 text-[#3b82f6]" strokeWidth={1.5} />
           3D Viewer: Open
@@ -115,7 +115,7 @@ export default function SplatCard({
         <button
           type="button"
           onClick={() => onTour(splat)}
-          className="flex items-center gap-1.5 rounded-md px-2 py-1 font-sw-mono text-[10px] font-semibold tracking-wide text-[#a3a3a3] transition-colors hover:bg-[#262626] hover:text-white"
+          className="flex items-center gap-1.5 rounded-md px-2 py-1 font-sw-mono text-[10px] font-semibold tracking-wide text-[var(--nord-slate)] transition-colors hover:bg-[var(--nord-pine-tint)] hover:text-[var(--nord-pine)]"
         >
           <Play className="h-3 w-3 fill-current" />
           PLAY
@@ -128,7 +128,7 @@ export default function SplatCard({
 
         <div className="min-w-0 flex-1">
           <div className="flex items-start gap-2">
-            <h3 className="min-w-0 flex-1 truncate text-[15px] font-semibold leading-snug text-white">
+            <h3 className="min-w-0 flex-1 truncate text-[15px] font-semibold leading-snug text-[var(--nord-ink)]">
               {splat.title}
             </h3>
             <div
@@ -145,8 +145,8 @@ export default function SplatCard({
                   setMenuOpen((o) => !o);
                 }}
                 className={cn(
-                  "rounded-full p-1.5 text-[#b3b3b3] transition-colors hover:bg-[#303030] hover:text-white",
-                  menuOpen ? "bg-[#303030] text-white opacity-100" : "opacity-70 group-hover:opacity-100",
+                  "rounded-full p-1.5 text-[var(--nord-ink)] transition-colors hover:bg-[var(--nord-surface)] hover:text-[var(--nord-ink)]",
+                  menuOpen ? "bg-[var(--nord-surface)] text-[var(--nord-ink)] opacity-100" : "opacity-70 group-hover:opacity-100",
                 )}
               >
                 <MoreVertical className="h-4 w-4" />
@@ -154,7 +154,7 @@ export default function SplatCard({
               {menuOpen && (
                 <div
                   role="menu"
-                  className="absolute bottom-full right-0 z-50 mb-2 min-w-[188px] overflow-hidden rounded-lg border border-[#404040] bg-[#1a1a1a] py-1.5 shadow-2xl ring-1 ring-black/50"
+                  className="absolute bottom-full right-0 z-50 mb-2 min-w-[188px] overflow-hidden rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-surface)] py-1.5 shadow-2xl ring-1 ring-[var(--nord-hairline)]"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <MenuItem
@@ -189,7 +189,7 @@ export default function SplatCard({
                       onRename(splat);
                     }}
                   />
-                  <div className="my-1 border-t border-[#303030]" />
+                  <div className="my-1 border-t border-[var(--nord-hairline)]" />
                   <MenuItem
                     icon={Trash2}
                     label="Delete"
@@ -204,11 +204,11 @@ export default function SplatCard({
             </div>
           </div>
 
-          <p className="mt-0.5 truncate text-sm text-[#aaaaaa]">
+          <p className="mt-0.5 truncate text-sm text-[var(--nord-slate)]">
             {splat.author.name}
           </p>
-          <p className="mt-1 font-sw-mono text-xs text-[#909090]">{stats}</p>
-          <p className="mt-0.5 text-xs text-[#717171]">
+          <p className="mt-1 font-sw-mono text-xs text-[var(--nord-slate)]">{stats}</p>
+          <p className="mt-0.5 text-xs text-[var(--nord-slate-soft)]">
             Created {splat.createdAt}
           </p>
         </div>
@@ -237,8 +237,8 @@ function MenuItem({
         onClick();
       }}
       className={cn(
-        "flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm font-medium transition-colors hover:bg-[#2a2a2a]",
-        destructive ? "text-[#f87171] hover:bg-red-950/40" : "text-[#f0f0f0]",
+        "flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm font-medium transition-colors hover:bg-[var(--nord-surface)]",
+        destructive ? "text-[var(--nord-danger)] hover:bg-[var(--nord-danger-tint)]" : "text-[var(--nord-ink)]",
       )}
     >
       <Icon className="h-3.5 w-3.5" strokeWidth={1.5} />

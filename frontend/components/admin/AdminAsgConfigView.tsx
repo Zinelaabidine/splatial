@@ -73,9 +73,9 @@ const POOL_OPTIONS: { value: WorkerPool; label: string; sublabel: string }[] = [
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-4 py-3">
-      <div className="text-xs uppercase tracking-wide text-[#808080]">{label}</div>
-      <div className="mt-1 text-lg font-semibold text-[#f1f1f1]">{value}</div>
+    <div className="rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-surface)] px-4 py-3">
+      <div className="text-xs uppercase tracking-wide text-[var(--nord-slate)]">{label}</div>
+      <div className="mt-1 text-lg font-semibold text-[var(--nord-ink)]">{value}</div>
     </div>
   );
 }
@@ -94,13 +94,13 @@ function InstancesPanel({ instances }: { instances: AdminAsgInstance[] }) {
   }
 
   return (
-    <div className="mb-6 rounded-xl border border-[#2a2a2a]">
-      <div className="border-b border-[#2a2a2a] bg-[#1a1a1a] px-4 py-3">
+    <div className="mb-6 rounded-xl border border-[var(--nord-hairline)]">
+      <div className="border-b border-[var(--nord-hairline)] bg-[var(--nord-surface)] px-4 py-3">
         <div className="flex items-center gap-2">
-          <Terminal className="h-4 w-4 text-[#808080]" />
-          <h2 className="text-sm font-semibold text-[#f1f1f1]">Connect to a worker</h2>
+          <Terminal className="h-4 w-4 text-[var(--nord-slate)]" />
+          <h2 className="text-sm font-semibold text-[var(--nord-ink)]">Connect to a worker</h2>
         </div>
-        <p className="mt-1 text-xs text-[#808080]">
+        <p className="mt-1 text-xs text-[var(--nord-slate)]">
           Access via SSM Session Manager always works (AWS CLI with the Session Manager
           plugin, or the EC2 console&apos;s &quot;Connect&quot; tab). In this environment,
           direct SSH with the GaussianWorker key pair is also available where an instance
@@ -109,14 +109,14 @@ function InstancesPanel({ instances }: { instances: AdminAsgInstance[] }) {
       </div>
 
       {instances.length === 0 ? (
-        <div className="px-4 py-6 text-center text-sm text-[#707070]">
+        <div className="px-4 py-6 text-center text-sm text-[var(--nord-slate-soft)]">
           No instances running. Boot one below, or wait for a real job to trigger
           scale-out.
         </div>
       ) : (
         <table className="w-full border-collapse text-left text-sm">
           <thead>
-            <tr className="text-xs uppercase tracking-wide text-[#808080]">
+            <tr className="text-xs uppercase tracking-wide text-[var(--nord-slate)]">
               <th className="px-4 py-2 font-medium">Instance</th>
               <th className="px-4 py-2 font-medium">State</th>
               <th className="px-4 py-2 font-medium">AZ</th>
@@ -126,17 +126,17 @@ function InstancesPanel({ instances }: { instances: AdminAsgInstance[] }) {
           </thead>
           <tbody>
             {instances.map((inst) => (
-              <tr key={inst.instanceId} className="border-t border-[#242424]">
-                <td className="px-4 py-2 align-middle font-mono text-xs text-[#e8e8e8]">
+              <tr key={inst.instanceId} className="border-t border-[var(--nord-hairline)]">
+                <td className="px-4 py-2 align-middle font-mono text-xs text-[var(--nord-ink)]">
                   {inst.instanceId}
                 </td>
-                <td className="px-4 py-2 align-middle text-xs text-[#b0b0b0]">
+                <td className="px-4 py-2 align-middle text-xs text-[var(--nord-slate)]">
                   {inst.lifecycleState}
                 </td>
-                <td className="px-4 py-2 align-middle text-xs text-[#b0b0b0]">
+                <td className="px-4 py-2 align-middle text-xs text-[var(--nord-slate)]">
                   {inst.availabilityZone ?? "—"}
                 </td>
-                <td className="px-4 py-2 align-middle font-mono text-xs text-[#b0b0b0]">
+                <td className="px-4 py-2 align-middle font-mono text-xs text-[var(--nord-slate)]">
                   {inst.privateIp ?? "—"}
                 </td>
                 <td className="px-4 py-2 align-middle">
@@ -145,10 +145,10 @@ function InstancesPanel({ instances }: { instances: AdminAsgInstance[] }) {
                       type="button"
                       onClick={() => copyCommand(inst.instanceId, inst.ssmCommand)}
                       title={inst.ssmCommand}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-[#2a2a2a] px-2 py-1 text-xs text-[#e8e8e8] hover:bg-[#1a1a1a]"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--nord-hairline)] px-2 py-1 text-xs text-[var(--nord-ink)] hover:bg-[var(--nord-surface)]"
                     >
                       {copiedId === inst.instanceId ? (
-                        <Check className="h-3.5 w-3.5 text-[#8fd6a3]" />
+                        <Check className="h-3.5 w-3.5 text-[var(--nord-success)]" />
                       ) : (
                         <Copy className="h-3.5 w-3.5" />
                       )}
@@ -161,10 +161,10 @@ function InstancesPanel({ instances }: { instances: AdminAsgInstance[] }) {
                           copyCommand(`${inst.instanceId}-ssh`, inst.sshCommand as string)
                         }
                         title={inst.sshCommand}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#2a2a2a] px-2 py-1 text-xs text-[#e8e8e8] hover:bg-[#1a1a1a]"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--nord-hairline)] px-2 py-1 text-xs text-[var(--nord-ink)] hover:bg-[var(--nord-surface)]"
                       >
                         {copiedId === `${inst.instanceId}-ssh` ? (
-                          <Check className="h-3.5 w-3.5 text-[#8fd6a3]" />
+                          <Check className="h-3.5 w-3.5 text-[var(--nord-success)]" />
                         ) : (
                           <Copy className="h-3.5 w-3.5" />
                         )}
@@ -175,7 +175,7 @@ function InstancesPanel({ instances }: { instances: AdminAsgInstance[] }) {
                       href={inst.consoleUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-[#2a2a2a] px-2 py-1 text-xs text-[#e8e8e8] hover:bg-[#1a1a1a]"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--nord-hairline)] px-2 py-1 text-xs text-[var(--nord-ink)] hover:bg-[var(--nord-surface)]"
                     >
                       <ExternalLink className="h-3.5 w-3.5" />
                       Console
@@ -280,7 +280,7 @@ function AmiPicker({
   return (
     <div>
       <div className="mb-1 flex items-center justify-between">
-        <label className="block text-xs uppercase tracking-wide text-[#808080]">
+        <label className="block text-xs uppercase tracking-wide text-[var(--nord-slate)]">
           AMI
         </label>
         <div className="flex items-center gap-2">
@@ -299,14 +299,14 @@ function AmiPicker({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder="ami-xxxxxxxxxxxxxxxxx"
-          className="w-full rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-2 font-mono text-sm text-[#e8e8e8] outline-none focus:border-[#3b82f6]"
+          className="w-full rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-surface)] px-3 py-2 font-mono text-sm text-[var(--nord-ink)] outline-none focus:border-[#3b82f6]"
         />
       ) : (
         <select
           value={amis.some((a) => a.amiId === value) ? value : ""}
           onChange={(e) => onChange(e.target.value)}
           disabled={loading}
-          className="w-full rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-2 font-mono text-sm text-[#e8e8e8] outline-none focus:border-[#3b82f6] disabled:opacity-50"
+          className="w-full rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-surface)] px-3 py-2 font-mono text-sm text-[var(--nord-ink)] outline-none focus:border-[#3b82f6] disabled:opacity-50"
         >
           <option value="" disabled>
             {loading ? "Loading…" : "Select a registered AMI"}
@@ -321,7 +321,7 @@ function AmiPicker({
       )}
 
       {loadError && (
-        <p className="mt-1 text-xs text-[#f0a8a8]">{loadError}</p>
+        <p className="mt-1 text-xs text-[var(--nord-danger)]">{loadError}</p>
       )}
 
       <div className="mt-1.5 flex items-center gap-3">
@@ -346,39 +346,39 @@ function AmiPicker({
       </div>
 
       {showRegisterForm && (
-        <div className="mt-3 rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-3">
+        <div className="mt-3 rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-surface)] p-3">
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <input
               value={newAmiId}
               onChange={(e) => setNewAmiId(e.target.value)}
               placeholder="ami-xxxxxxxxxxxxxxxxx"
-              className="rounded-lg border border-[#2a2a2a] bg-[#141414] px-3 py-2 font-mono text-xs text-[#e8e8e8] outline-none focus:border-[#3b82f6]"
+              className="rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-bg)] px-3 py-2 font-mono text-xs text-[var(--nord-ink)] outline-none focus:border-[#3b82f6]"
             />
             <input
               value={newLabel}
               onChange={(e) => setNewLabel(e.target.value)}
               placeholder="Label, e.g. v12 - depth priors"
-              className="rounded-lg border border-[#2a2a2a] bg-[#141414] px-3 py-2 text-xs text-[#e8e8e8] outline-none focus:border-[#3b82f6]"
+              className="rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-bg)] px-3 py-2 text-xs text-[var(--nord-ink)] outline-none focus:border-[#3b82f6]"
             />
           </div>
           <input
             value={newReason}
             onChange={(e) => setNewReason(e.target.value)}
             placeholder="Reason (optional)"
-            className="mt-2 w-full rounded-lg border border-[#2a2a2a] bg-[#141414] px-3 py-2 text-xs text-[#e8e8e8] outline-none focus:border-[#3b82f6]"
+            className="mt-2 w-full rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-bg)] px-3 py-2 text-xs text-[var(--nord-ink)] outline-none focus:border-[#3b82f6]"
           />
-          <p className="mt-1.5 text-[11px] text-[#707070]">
+          <p className="mt-1.5 text-[11px] text-[var(--nord-slate-soft)]">
             Checked against EC2 once (existence + state) before it&apos;s saved to the
             registry — this doesn&apos;t list or browse AWS&apos;s AMI catalog.
           </p>
           {registerError && (
-            <p className="mt-1.5 text-xs text-[#f0a8a8]">{registerError}</p>
+            <p className="mt-1.5 text-xs text-[var(--nord-danger)]">{registerError}</p>
           )}
           <div className="mt-2 flex justify-end gap-2">
             <button
               type="button"
               onClick={() => setShowRegisterForm(false)}
-              className="rounded-lg border border-[#2a2a2a] px-3 py-1.5 text-xs text-[#e8e8e8] hover:bg-[#1f1f1f]"
+              className="rounded-lg border border-[var(--nord-hairline)] px-3 py-1.5 text-xs text-[var(--nord-ink)] hover:bg-[var(--nord-surface)]"
             >
               Cancel
             </button>
@@ -390,7 +390,7 @@ function AmiPicker({
                 !newLabel.trim()
               }
               onClick={handleRegister}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[#3b82f6] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#2f6fd6] disabled:cursor-not-allowed disabled:opacity-40"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#3b82f6] px-3 py-1.5 text-xs font-medium text-[var(--nord-cta-fg)] hover:bg-[#2f6fd6] disabled:cursor-not-allowed disabled:opacity-40"
             >
               {registering && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               Register
@@ -400,11 +400,11 @@ function AmiPicker({
       )}
 
       {showManage && amis.length > 0 && (
-        <ul className="mt-3 divide-y divide-[#242424] rounded-lg border border-[#2a2a2a]">
+        <ul className="mt-3 divide-y divide-[var(--nord-hairline)] rounded-lg border border-[var(--nord-hairline)]">
           {amis.map((a) => (
             <li key={a.amiId} className="px-3 py-2 text-xs">
-              <div className="truncate text-[#e8e8e8]">{a.label}</div>
-              <div className="truncate font-mono text-[#808080]">{a.amiId}</div>
+              <div className="truncate text-[var(--nord-ink)]">{a.label}</div>
+              <div className="truncate font-mono text-[var(--nord-slate)]">{a.amiId}</div>
             </li>
           ))}
         </ul>
@@ -589,7 +589,7 @@ export default function AdminAsgConfigView() {
 
   if (isAdmin === null) {
     return (
-      <div className="flex h-64 items-center justify-center text-[#909090]">
+      <div className="flex h-64 items-center justify-center text-[var(--nord-slate)]">
         <Loader2 className="mr-2 h-5 w-5 animate-spin" />
         Checking access…
       </div>
@@ -598,10 +598,10 @@ export default function AdminAsgConfigView() {
 
   if (isAdmin === false) {
     return (
-      <div className="mx-auto mt-16 flex max-w-md flex-col items-center rounded-xl border border-[#2a2a2a] bg-[#161616] px-6 py-10 text-center">
-        <ShieldAlert className="mb-3 h-8 w-8 text-[#d98a8a]" />
-        <h2 className="text-lg font-semibold text-[#f1f1f1]">Admin access required</h2>
-        <p className="mt-1 text-sm text-[#909090]">
+      <div className="mx-auto mt-16 flex max-w-md flex-col items-center rounded-xl border border-[var(--nord-hairline)] bg-[var(--nord-bg)] px-6 py-10 text-center">
+        <ShieldAlert className="mb-3 h-8 w-8 text-[var(--nord-danger)]" />
+        <h2 className="text-lg font-semibold text-[var(--nord-ink)]">Admin access required</h2>
+        <p className="mt-1 text-sm text-[var(--nord-slate)]">
           Your account isn’t in the admin group. Ask an operator to add you, then sign
           out and back in.
         </p>
@@ -613,10 +613,10 @@ export default function AdminAsgConfigView() {
     <div className="mx-auto max-w-4xl">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-[#f1f1f1]">
+          <h1 className="text-xl font-semibold text-[var(--nord-ink)]">
             GPU worker ASG config
           </h1>
-          <p className="text-sm text-[#909090]">
+          <p className="text-sm text-[var(--nord-slate)]">
             Change the AMI, instance type, or max fleet size live. Takes effect on the
             next scale-out — no Terraform apply or deploy.
           </p>
@@ -625,14 +625,14 @@ export default function AdminAsgConfigView() {
           type="button"
           onClick={load}
           disabled={loading}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-2 text-sm text-[#e8e8e8] transition-colors hover:bg-[#222] disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-surface)] px-3 py-2 text-sm text-[var(--nord-ink)] transition-colors hover:bg-[var(--nord-surface)] disabled:opacity-50"
         >
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
           Refresh
         </button>
       </div>
 
-      <div className="mb-5 inline-flex rounded-lg border border-[#2a2a2a] bg-[#161616] p-1">
+      <div className="mb-5 inline-flex rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-bg)] p-1">
         {POOL_OPTIONS.map((o) => (
           <button
             key={o.value}
@@ -640,12 +640,12 @@ export default function AdminAsgConfigView() {
             onClick={() => setPool(o.value)}
             className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
               pool === o.value
-                ? "bg-[#3b82f6] text-white"
-                : "text-[#909090] hover:bg-[#1f1f1f]"
+                ? "bg-[#3b82f6] text-[var(--nord-cta-fg)]"
+                : "text-[var(--nord-slate)] hover:bg-[var(--nord-surface)]"
             }`}
           >
             {o.label}
-            <span className={`ml-1.5 text-xs ${pool === o.value ? "text-[#dbe8fd]" : "text-[#707070]"}`}>
+            <span className={`ml-1.5 text-xs ${pool === o.value ? "text-[var(--nord-cta-fg)]/80" : "text-[var(--nord-slate-soft)]"}`}>
               {o.sublabel}
             </span>
           </button>
@@ -653,13 +653,13 @@ export default function AdminAsgConfigView() {
       </div>
 
       {loadError && (
-        <div className="mb-4 rounded-lg border border-[#5b2626] bg-[#2a1414] px-4 py-3 text-sm text-[#f0a8a8]">
+        <div className="mb-4 rounded-lg border border-[var(--nord-danger)] bg-[var(--nord-danger-tint)] px-4 py-3 text-sm text-[var(--nord-danger)]">
           {loadError}
         </div>
       )}
 
       {loading && !config ? (
-        <div className="flex h-64 items-center justify-center text-[#909090]">
+        <div className="flex h-64 items-center justify-center text-[var(--nord-slate)]">
           <Loader2 className="mr-2 h-5 w-5 animate-spin" />
           Loading ASG config…
         </div>
@@ -681,10 +681,10 @@ export default function AdminAsgConfigView() {
           </div>
 
           {config.asg.manualModeActive && (
-            <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#5b4a1a] bg-[#2a2210] px-4 py-3">
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#5b4a1a] bg-[#f4ecd6] px-4 py-3">
               <div className="flex items-start gap-2">
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[#e8b84a]" />
-                <div className="text-sm text-[#e8d98a]">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[#9a6b1f]" />
+                <div className="text-sm text-[#9a6b1f]">
                   <span className="font-medium">
                     Manual mode active
                     {formatElapsed(config.asg.manualModeSince) &&
@@ -699,7 +699,7 @@ export default function AdminAsgConfigView() {
                 type="button"
                 onClick={doRelease}
                 disabled={releaseSubmitting}
-                className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-[#e8b84a] px-3 py-1.5 text-sm font-medium text-[#2a2210] hover:bg-[#f0c65e] disabled:opacity-50"
+                className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-[#e8b84a] px-3 py-1.5 text-sm font-medium text-[#9a6b1f] hover:bg-[#f0c65e] disabled:opacity-50"
               >
                 {releaseSubmitting ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -711,18 +711,18 @@ export default function AdminAsgConfigView() {
             </div>
           )}
           {releaseError && (
-            <div className="mb-6 rounded-lg border border-[#5b2626] bg-[#2a1414] px-4 py-3 text-sm text-[#f0a8a8]">
+            <div className="mb-6 rounded-lg border border-[var(--nord-danger)] bg-[var(--nord-danger-tint)] px-4 py-3 text-sm text-[var(--nord-danger)]">
               {releaseError}
             </div>
           )}
 
           <InstancesPanel instances={config.asg.instances} />
 
-          <div className="mb-6 rounded-xl border border-[#2a2a2a] bg-[#161616] p-5">
-            <h2 className="mb-1 text-sm font-semibold text-[#f1f1f1]">
+          <div className="mb-6 rounded-xl border border-[var(--nord-hairline)] bg-[var(--nord-bg)] p-5">
+            <h2 className="mb-1 text-sm font-semibold text-[var(--nord-ink)]">
               Manual worker boot
             </h2>
-            <p className="mb-4 text-sm text-[#909090]">
+            <p className="mb-4 text-sm text-[var(--nord-slate)]">
               Force capacity up right now — e.g. to smoke-test the current AMI/instance
               type before real jobs hit the queue. Suspends SQS-driven scaling until you
               release.
@@ -730,7 +730,7 @@ export default function AdminAsgConfigView() {
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <label className="mb-1 block text-xs uppercase tracking-wide text-[#808080]">
+                <label className="mb-1 block text-xs uppercase tracking-wide text-[var(--nord-slate)]">
                   Worker count
                 </label>
                 <input
@@ -739,27 +739,27 @@ export default function AdminAsgConfigView() {
                   max={config.asg.maxSize}
                   value={bootCount}
                   onChange={(e) => setBootCount(e.target.value)}
-                  className="w-full rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-2 text-sm text-[#e8e8e8] outline-none focus:border-[#3b82f6]"
+                  className="w-full rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-surface)] px-3 py-2 text-sm text-[var(--nord-ink)] outline-none focus:border-[#3b82f6]"
                 />
-                <p className="mt-1 text-xs text-[#707070]">
+                <p className="mt-1 text-xs text-[var(--nord-slate-soft)]">
                   Capped at the current max size ({config.asg.maxSize}).
                 </p>
               </div>
               <div>
-                <label className="mb-1 block text-xs uppercase tracking-wide text-[#808080]">
+                <label className="mb-1 block text-xs uppercase tracking-wide text-[var(--nord-slate)]">
                   Reason (optional)
                 </label>
                 <input
                   value={bootReason}
                   onChange={(e) => setBootReason(e.target.value)}
                   placeholder="e.g. smoke-test new AMI"
-                  className="w-full rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-2 text-sm text-[#e8e8e8] outline-none focus:border-[#3b82f6]"
+                  className="w-full rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-surface)] px-3 py-2 text-sm text-[var(--nord-ink)] outline-none focus:border-[#3b82f6]"
                 />
               </div>
             </div>
 
             {bootError && (
-              <div className="mt-4 rounded-lg border border-[#5b2626] bg-[#2a1414] px-3 py-2 text-sm text-[#f0a8a8]">
+              <div className="mt-4 rounded-lg border border-[var(--nord-danger)] bg-[var(--nord-danger-tint)] px-3 py-2 text-sm text-[var(--nord-danger)]">
                 {bootError}
               </div>
             )}
@@ -769,7 +769,7 @@ export default function AdminAsgConfigView() {
                 type="button"
                 disabled={bootSubmitting || config.asg.maxSize < 1}
                 onClick={() => setBootConfirmOpen(true)}
-                className="inline-flex items-center gap-2 rounded-lg bg-[#3b82f6] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#2f6fd6] disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex items-center gap-2 rounded-lg bg-[#3b82f6] px-4 py-2 text-sm font-medium text-[var(--nord-cta-fg)] transition-colors hover:bg-[#2f6fd6] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <Power className="h-4 w-4" />
                 Boot worker now
@@ -777,7 +777,7 @@ export default function AdminAsgConfigView() {
             </div>
 
             {bootConfirmOpen && (
-              <div className="mt-4 rounded-lg border border-[#3a3312] bg-[#211d0d] px-4 py-3 text-sm text-[#e8d98a]">
+              <div className="mt-4 rounded-lg border border-[#e7d9a8] bg-[#f4ecd6] px-4 py-3 text-sm text-[#9a6b1f]">
                 <p className="mb-3">
                   This pauses SQS-driven auto-scaling until you click Release. Real jobs
                   submitted in the meantime will queue but won&apos;t launch a worker.
@@ -787,7 +787,7 @@ export default function AdminAsgConfigView() {
                   <button
                     type="button"
                     onClick={() => setBootConfirmOpen(false)}
-                    className="rounded-lg border border-[#2a2a2a] px-3 py-1.5 text-[#e8e8e8] hover:bg-[#1a1a1a]"
+                    className="rounded-lg border border-[var(--nord-hairline)] px-3 py-1.5 text-[var(--nord-ink)] hover:bg-[var(--nord-surface)]"
                   >
                     Cancel
                   </button>
@@ -795,7 +795,7 @@ export default function AdminAsgConfigView() {
                     type="button"
                     onClick={doBoot}
                     disabled={bootSubmitting}
-                    className="inline-flex items-center gap-2 rounded-lg bg-[#3b82f6] px-3 py-1.5 font-medium text-white hover:bg-[#2f6fd6] disabled:opacity-50"
+                    className="inline-flex items-center gap-2 rounded-lg bg-[#3b82f6] px-3 py-1.5 font-medium text-[var(--nord-cta-fg)] hover:bg-[#2f6fd6] disabled:opacity-50"
                   >
                     {bootSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
                     Confirm boot
@@ -805,8 +805,8 @@ export default function AdminAsgConfigView() {
             )}
           </div>
 
-          <div className="mb-6 rounded-xl border border-[#2a2a2a] bg-[#161616] p-5">
-            <h2 className="mb-4 text-sm font-semibold text-[#f1f1f1]">
+          <div className="mb-6 rounded-xl border border-[var(--nord-hairline)] bg-[var(--nord-bg)] p-5">
+            <h2 className="mb-4 text-sm font-semibold text-[var(--nord-ink)]">
               Update configuration
             </h2>
 
@@ -814,14 +814,14 @@ export default function AdminAsgConfigView() {
               <div>
                 <AmiPicker value={amiId} onChange={setAmiId} />
                 {config.current.amiName && (
-                  <p className="mt-1 truncate text-xs text-[#707070]">
+                  <p className="mt-1 truncate text-xs text-[var(--nord-slate-soft)]">
                     Current: {config.current.amiName} ({config.current.architecture ?? "—"})
                   </p>
                 )}
               </div>
 
               <div>
-                <label className="mb-1 block text-xs uppercase tracking-wide text-[#808080]">
+                <label className="mb-1 block text-xs uppercase tracking-wide text-[var(--nord-slate)]">
                   Instance type
                 </label>
                 <select
@@ -831,7 +831,7 @@ export default function AdminAsgConfigView() {
                       : ""
                   }
                   onChange={(e) => setInstanceType(e.target.value)}
-                  className="w-full rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-2 font-mono text-sm text-[#e8e8e8] outline-none focus:border-[#3b82f6]"
+                  className="w-full rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-surface)] px-3 py-2 font-mono text-sm text-[var(--nord-ink)] outline-none focus:border-[#3b82f6]"
                 >
                   <option value="" disabled>
                     {instanceType && !INSTANCE_TYPE_OPTIONS.some((o) => o.value === instanceType)
@@ -844,16 +844,16 @@ export default function AdminAsgConfigView() {
                     </option>
                   ))}
                 </select>
-                <p className="mt-1 text-xs text-[#707070]">
+                <p className="mt-1 text-xs text-[var(--nord-slate-soft)]">
                   Limited to these two GPU Spot types. Must match the AMI&apos;s CPU
                   architecture (validated on submit).
                 </p>
                 {spotPriceLoading ? (
-                  <p className="mt-1 text-xs text-[#707070]">
+                  <p className="mt-1 text-xs text-[var(--nord-slate-soft)]">
                     Checking Spot price…
                   </p>
                 ) : spotPrice?.cheapest ? (
-                  <p className="mt-1 text-xs text-[#8fd6a3]">
+                  <p className="mt-1 text-xs text-[var(--nord-success)]">
                     {pool === "priority" ? "Spot reference price" : "Est. Spot"}: $
                     {spotPrice.cheapest.pricePerHour.toFixed(4)}/hr in{" "}
                     {spotPrice.cheapest.az}
@@ -863,14 +863,14 @@ export default function AdminAsgConfigView() {
                       " — this pool runs On-Demand, shown for cost comparison only"}
                   </p>
                 ) : spotPrice && spotPrice.prices.length === 0 ? (
-                  <p className="mt-1 text-xs text-[#707070]">
+                  <p className="mt-1 text-xs text-[var(--nord-slate-soft)]">
                     No recent Spot price history for this type/AZ combination.
                   </p>
                 ) : null}
               </div>
 
               <div>
-                <label className="mb-1 block text-xs uppercase tracking-wide text-[#808080]">
+                <label className="mb-1 block text-xs uppercase tracking-wide text-[var(--nord-slate)]">
                   Max ASG size
                 </label>
                 <input
@@ -879,34 +879,34 @@ export default function AdminAsgConfigView() {
                   max={config.asg.maxSizeCap}
                   value={maxSize}
                   onChange={(e) => setMaxSize(e.target.value)}
-                  className="w-full rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-2 text-sm text-[#e8e8e8] outline-none focus:border-[#3b82f6]"
+                  className="w-full rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-surface)] px-3 py-2 text-sm text-[var(--nord-ink)] outline-none focus:border-[#3b82f6]"
                 />
-                <p className="mt-1 text-xs text-[#707070]">
+                <p className="mt-1 text-xs text-[var(--nord-slate-soft)]">
                   Hard cap: {config.asg.maxSizeCap} (
                   {pool === "priority" ? "On-Demand" : "Spot"} GPU instances only).
                 </p>
               </div>
 
               <div>
-                <label className="mb-1 block text-xs uppercase tracking-wide text-[#808080]">
+                <label className="mb-1 block text-xs uppercase tracking-wide text-[var(--nord-slate)]">
                   Reason (optional, shown in version history)
                 </label>
                 <input
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
                   placeholder="e.g. rolling out fixed COLMAP timeout"
-                  className="w-full rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-2 text-sm text-[#e8e8e8] outline-none focus:border-[#3b82f6]"
+                  className="w-full rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-surface)] px-3 py-2 text-sm text-[var(--nord-ink)] outline-none focus:border-[#3b82f6]"
                 />
               </div>
             </div>
 
             {submitError && (
-              <div className="mt-4 rounded-lg border border-[#5b2626] bg-[#2a1414] px-3 py-2 text-sm text-[#f0a8a8]">
+              <div className="mt-4 rounded-lg border border-[var(--nord-danger)] bg-[var(--nord-danger-tint)] px-3 py-2 text-sm text-[var(--nord-danger)]">
                 {submitError}
               </div>
             )}
             {submitSuccess && (
-              <div className="mt-4 rounded-lg border border-[#1f4d2e] bg-[#122016] px-3 py-2 text-sm text-[#8fd6a3]">
+              <div className="mt-4 rounded-lg border border-[var(--nord-success)] bg-[var(--nord-success-tint)] px-3 py-2 text-sm text-[var(--nord-success)]">
                 {submitSuccess}
               </div>
             )}
@@ -916,7 +916,7 @@ export default function AdminAsgConfigView() {
                 type="button"
                 disabled={!changed || submitting}
                 onClick={() => setConfirmOpen(true)}
-                className="inline-flex items-center gap-2 rounded-lg bg-[#3b82f6] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#2f6fd6] disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex items-center gap-2 rounded-lg bg-[#3b82f6] px-4 py-2 text-sm font-medium text-[var(--nord-cta-fg)] transition-colors hover:bg-[#2f6fd6] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <Rocket className="h-4 w-4" />
                 Apply changes
@@ -924,7 +924,7 @@ export default function AdminAsgConfigView() {
             </div>
 
             {confirmOpen && (
-              <div className="mt-4 rounded-lg border border-[#3a3312] bg-[#211d0d] px-4 py-3 text-sm text-[#e8d98a]">
+              <div className="mt-4 rounded-lg border border-[#e7d9a8] bg-[#f4ecd6] px-4 py-3 text-sm text-[#9a6b1f]">
                 <p className="mb-3">
                   This affects every new GPU worker instance launched from now on
                   in the {pool} pool.
@@ -941,7 +941,7 @@ export default function AdminAsgConfigView() {
                   <button
                     type="button"
                     onClick={() => setConfirmOpen(false)}
-                    className="rounded-lg border border-[#2a2a2a] px-3 py-1.5 text-[#e8e8e8] hover:bg-[#1a1a1a]"
+                    className="rounded-lg border border-[var(--nord-hairline)] px-3 py-1.5 text-[var(--nord-ink)] hover:bg-[var(--nord-surface)]"
                   >
                     Cancel
                   </button>
@@ -949,7 +949,7 @@ export default function AdminAsgConfigView() {
                     type="button"
                     onClick={applyChanges}
                     disabled={submitting}
-                    className="inline-flex items-center gap-2 rounded-lg bg-[#3b82f6] px-3 py-1.5 font-medium text-white hover:bg-[#2f6fd6] disabled:opacity-50"
+                    className="inline-flex items-center gap-2 rounded-lg bg-[#3b82f6] px-3 py-1.5 font-medium text-[var(--nord-cta-fg)] hover:bg-[#2f6fd6] disabled:opacity-50"
                   >
                     {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
                     Confirm
@@ -959,16 +959,16 @@ export default function AdminAsgConfigView() {
             )}
           </div>
 
-          <div className="rounded-xl border border-[#2a2a2a]">
-            <div className="flex items-center gap-2 border-b border-[#2a2a2a] bg-[#1a1a1a] px-4 py-3">
-              <History className="h-4 w-4 text-[#808080]" />
-              <h2 className="text-sm font-semibold text-[#f1f1f1]">
+          <div className="rounded-xl border border-[var(--nord-hairline)]">
+            <div className="flex items-center gap-2 border-b border-[var(--nord-hairline)] bg-[var(--nord-surface)] px-4 py-3">
+              <History className="h-4 w-4 text-[var(--nord-slate)]" />
+              <h2 className="text-sm font-semibold text-[var(--nord-ink)]">
                 Launch template version history
               </h2>
             </div>
             <table className="w-full border-collapse text-left text-sm">
               <thead>
-                <tr className="text-xs uppercase tracking-wide text-[#808080]">
+                <tr className="text-xs uppercase tracking-wide text-[var(--nord-slate)]">
                   <th className="px-4 py-2 font-medium">Version</th>
                   <th className="px-4 py-2 font-medium">AMI</th>
                   <th className="px-4 py-2 font-medium">Instance type</th>
@@ -979,32 +979,32 @@ export default function AdminAsgConfigView() {
               </thead>
               <tbody>
                 {config.history.map((h) => (
-                  <tr key={h.version} className="border-t border-[#242424]">
-                    <td className="px-4 py-2 align-middle text-[#e8e8e8]">
+                  <tr key={h.version} className="border-t border-[var(--nord-hairline)]">
+                    <td className="px-4 py-2 align-middle text-[var(--nord-ink)]">
                       {h.version}
                       {h.version === config.launchTemplate.latestVersion && (
-                        <span className="ml-2 rounded-full bg-[#1f4d2e] px-2 py-0.5 text-xs text-[#8fd6a3]">
+                        <span className="ml-2 rounded-full bg-[var(--nord-success-tint)] px-2 py-0.5 text-xs text-[var(--nord-success)]">
                           latest
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-2 align-middle font-mono text-xs text-[#b0b0b0]">
+                    <td className="px-4 py-2 align-middle font-mono text-xs text-[var(--nord-slate)]">
                       {h.amiId ?? "—"}
                     </td>
-                    <td className="px-4 py-2 align-middle font-mono text-xs text-[#b0b0b0]">
+                    <td className="px-4 py-2 align-middle font-mono text-xs text-[var(--nord-slate)]">
                       {h.instanceType ?? "—"}
                     </td>
-                    <td className="max-w-[220px] truncate px-4 py-2 align-middle text-xs text-[#808080]">
+                    <td className="max-w-[220px] truncate px-4 py-2 align-middle text-xs text-[var(--nord-slate)]">
                       {h.description ?? "—"}
                     </td>
-                    <td className="px-4 py-2 align-middle whitespace-nowrap text-xs text-[#808080]">
+                    <td className="px-4 py-2 align-middle whitespace-nowrap text-xs text-[var(--nord-slate)]">
                       {formatWhen(h.createdAt)}
                     </td>
                     <td className="px-4 py-2 align-middle">
                       <button
                         type="button"
                         onClick={() => applyHistoryVersion(h.amiId, h.instanceType)}
-                        className="rounded-lg border border-[#2a2a2a] px-2 py-1 text-xs text-[#e8e8e8] hover:bg-[#1a1a1a]"
+                        className="rounded-lg border border-[var(--nord-hairline)] px-2 py-1 text-xs text-[var(--nord-ink)] hover:bg-[var(--nord-surface)]"
                       >
                         Use this
                       </button>

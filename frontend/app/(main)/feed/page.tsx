@@ -91,7 +91,7 @@ export default function FeedPage() {
   if (loading) {
     return (
       <div className="mx-auto w-full max-w-[1400px]">
-        <h1 className="mb-6 text-2xl font-bold tracking-tight text-white">Feed</h1>
+        <h1 className="mb-6 text-2xl font-bold tracking-tight text-[var(--nord-ink)]">Feed</h1>
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
             <SceneCardSkeleton key={i} />
@@ -104,8 +104,8 @@ export default function FeedPage() {
   if (error) {
     return (
       <div className="mx-auto w-full max-w-[1400px]">
-        <h1 className="mb-6 text-2xl font-bold tracking-tight text-white">Feed</h1>
-        <div className="rounded-xl border border-red-900/50 bg-red-950/40 px-5 py-4 text-sm text-red-300">
+        <h1 className="mb-6 text-2xl font-bold tracking-tight text-[var(--nord-ink)]">Feed</h1>
+        <div className="rounded-xl border border-[var(--nord-danger)] bg-[var(--nord-danger-tint)] px-5 py-4 text-sm text-[var(--nord-danger)]">
           {error}{" "}
           <button
             type="button"
@@ -113,7 +113,7 @@ export default function FeedPage() {
               const controller = new AbortController();
               void fetchFeed(controller.signal);
             }}
-            className="font-medium underline underline-offset-2 hover:text-red-200"
+            className="font-medium underline underline-offset-2 hover:text-[var(--nord-danger)]"
           >
             Retry
           </button>
@@ -124,15 +124,15 @@ export default function FeedPage() {
 
   return (
     <div className="mx-auto w-full max-w-[1400px]">
-      <h1 className="mb-6 text-2xl font-bold tracking-tight text-white">Feed</h1>
+      <h1 className="mb-6 text-2xl font-bold tracking-tight text-[var(--nord-ink)]">Feed</h1>
 
       {loadMoreError ? (
-        <div className="mb-4 rounded-xl border border-red-900/50 bg-red-950/40 px-5 py-4 text-sm text-red-300">
+        <div className="mb-4 rounded-xl border border-[var(--nord-danger)] bg-[var(--nord-danger-tint)] px-5 py-4 text-sm text-[var(--nord-danger)]">
           {loadMoreError}{" "}
           <button
             type="button"
             onClick={() => void loadMore()}
-            className="font-medium underline underline-offset-2 hover:text-red-200"
+            className="font-medium underline underline-offset-2 hover:text-[var(--nord-danger)]"
           >
             Retry
           </button>
@@ -140,7 +140,7 @@ export default function FeedPage() {
       ) : null}
 
       {items.length === 0 ? (
-        <p className="py-16 text-center text-sm text-[#909090]">
+        <p className="py-16 text-center text-sm text-[var(--nord-slate)]">
           Your feed is empty — follow some creators to see their scenes here.
         </p>
       ) : (

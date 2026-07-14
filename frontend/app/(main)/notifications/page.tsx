@@ -20,10 +20,10 @@ function NotificationListSkeleton() {
           key={i}
           className="flex animate-pulse gap-3 rounded-xl px-3 py-3"
         >
-          <div className="h-10 w-10 shrink-0 rounded-full bg-[#2a2a2a]" />
+          <div className="h-10 w-10 shrink-0 rounded-full bg-[var(--nord-surface)]" />
           <div className="min-w-0 flex-1 space-y-2 pt-1">
-            <div className="h-3.5 w-4/5 rounded bg-[#2a2a2a]" />
-            <div className="h-2.5 w-1/4 rounded bg-[#252525]" />
+            <div className="h-3.5 w-4/5 rounded bg-[var(--nord-surface)]" />
+            <div className="h-2.5 w-1/4 rounded bg-[var(--nord-surface)]" />
           </div>
         </div>
       ))}
@@ -121,7 +121,7 @@ export default function NotificationsPage() {
   if (loading) {
     return (
       <div className="mx-auto w-full max-w-[640px]">
-        <h1 className="mb-6 text-2xl font-bold tracking-tight text-white">
+        <h1 className="mb-6 text-2xl font-bold tracking-tight text-[var(--nord-ink)]">
           Notifications
         </h1>
         <NotificationListSkeleton />
@@ -132,10 +132,10 @@ export default function NotificationsPage() {
   if (error) {
     return (
       <div className="mx-auto w-full max-w-[640px]">
-        <h1 className="mb-6 text-2xl font-bold tracking-tight text-white">
+        <h1 className="mb-6 text-2xl font-bold tracking-tight text-[var(--nord-ink)]">
           Notifications
         </h1>
-        <div className="rounded-xl border border-red-900/50 bg-red-950/40 px-5 py-4 text-sm text-red-300">
+        <div className="rounded-xl border border-[var(--nord-danger)] bg-[var(--nord-danger-tint)] px-5 py-4 text-sm text-[var(--nord-danger)]">
           {error}{" "}
           <button
             type="button"
@@ -143,7 +143,7 @@ export default function NotificationsPage() {
               const controller = new AbortController();
               void fetchInitial(controller.signal);
             }}
-            className="font-medium underline underline-offset-2 hover:text-red-200"
+            className="font-medium underline underline-offset-2 hover:text-[var(--nord-danger)]"
           >
             Retry
           </button>
@@ -154,17 +154,17 @@ export default function NotificationsPage() {
 
   return (
     <div className="mx-auto w-full max-w-[640px]">
-      <h1 className="mb-6 text-2xl font-bold tracking-tight text-white">
+      <h1 className="mb-6 text-2xl font-bold tracking-tight text-[var(--nord-ink)]">
         Notifications
       </h1>
 
       {loadMoreError ? (
-        <div className="mb-4 rounded-xl border border-red-900/50 bg-red-950/40 px-5 py-4 text-sm text-red-300">
+        <div className="mb-4 rounded-xl border border-[var(--nord-danger)] bg-[var(--nord-danger-tint)] px-5 py-4 text-sm text-[var(--nord-danger)]">
           {loadMoreError}{" "}
           <button
             type="button"
             onClick={() => void loadMore()}
-            className="font-medium underline underline-offset-2 hover:text-red-200"
+            className="font-medium underline underline-offset-2 hover:text-[var(--nord-danger)]"
           >
             Retry
           </button>
@@ -172,7 +172,7 @@ export default function NotificationsPage() {
       ) : null}
 
       {items.length === 0 ? (
-        <p className="py-16 text-center text-sm text-[#909090]">
+        <p className="py-16 text-center text-sm text-[var(--nord-slate)]">
           No notifications yet
         </p>
       ) : (
@@ -193,7 +193,7 @@ export default function NotificationsPage() {
                 variant="outline"
                 disabled={loadingMore}
                 onClick={() => void loadMore()}
-                className="border-[#303030] bg-transparent text-[#e8e8e8] hover:bg-[#212121]"
+                className="border-[var(--nord-hairline)] bg-transparent text-[var(--nord-ink)] hover:bg-[var(--nord-surface)]"
               >
                 {loadingMore ? "Loading…" : "Load more"}
               </Button>

@@ -32,7 +32,7 @@ export default function SceneStatChips({
 
   if (!hasStats && showEmpty) {
     return (
-      <p className={cn("text-xs text-[#9a9aa4]", className)}>
+      <p className={cn("text-xs text-[var(--nord-slate)]", className)}>
         No engagement yet — publish to start collecting reactions.
       </p>
     );
@@ -75,12 +75,12 @@ export function SceneEngagementSummary({
     items.length > 0 ? items.join(" · ") : "No engagement yet";
 
   return (
-    <p className={cn("text-sm text-[#b4b4be]", className)}>
+    <p className={cn("text-sm text-[var(--nord-ink)]", className)}>
       {summary}
       {scene.caption ? (
         <>
-          <span className="mx-2 text-[#5a5a64]">|</span>
-          <span className="font-sw-mono text-xs text-[#9a9aa4]">{scene.caption}</span>
+          <span className="mx-2 text-[var(--nord-slate-soft)]">|</span>
+          <span className="font-sw-mono text-xs text-[var(--nord-slate)]">{scene.caption}</span>
         </>
       ) : null}
     </p>

@@ -225,17 +225,17 @@ export const SplatPreviewRenderer: React.FC<SplatPreviewProps> = ({
       {/* Renderer Container */}
       <div
         ref={containerRef}
-        className="relative bg-slate-900 rounded-lg overflow-hidden"
+        className="relative bg-[var(--nord-surface)] rounded-lg overflow-hidden"
         style={{ width, height }}
       >
         {isLoading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-            <div className="text-white">Loading splat...</div>
+          <div className="absolute inset-0 flex items-center justify-center bg-[var(--nord-scrim)]">
+            <div className="text-[var(--nord-ink)]">Loading splat...</div>
           </div>
         )}
         {error && (
-          <div className="absolute inset-0 flex items-center justify-center bg-red-900/50">
-            <div className="text-white text-center">
+          <div className="absolute inset-0 flex items-center justify-center bg-[var(--nord-danger-tint)]">
+            <div className="text-[var(--nord-ink)] text-center">
               <p>Error loading splat</p>
               <p className="text-sm mt-2">{error}</p>
             </div>
@@ -247,17 +247,17 @@ export const SplatPreviewRenderer: React.FC<SplatPreviewProps> = ({
       {showControls && (
         <div className="flex flex-col gap-3">
           {/* Metrics Display */}
-          <div className="grid grid-cols-3 gap-2 text-sm bg-slate-800 p-3 rounded">
-            <div className="text-gray-300">
-              <span className="text-gray-400">FPS:</span>
+          <div className="grid grid-cols-3 gap-2 text-sm bg-[var(--nord-surface)] p-3 rounded">
+            <div className="text-[var(--nord-ink)]">
+              <span className="text-[var(--nord-slate)]">FPS:</span>
               <span className="ml-2 text-blue-400">{metrics.fps}</span>
             </div>
-            <div className="text-gray-300">
-              <span className="text-gray-400">Render:</span>
+            <div className="text-[var(--nord-ink)]">
+              <span className="text-[var(--nord-slate)]">Render:</span>
               <span className="ml-2 text-blue-400">{metrics.renderTime.toFixed(2)}ms</span>
             </div>
-            <div className="text-gray-300">
-              <span className="text-gray-400">Memory:</span>
+            <div className="text-[var(--nord-ink)]">
+              <span className="text-[var(--nord-slate)]">Memory:</span>
               <span className="ml-2 text-blue-400">
                 {(metrics.memoryUsage / 1024 / 1024).toFixed(1)}MB
               </span>
@@ -268,13 +268,13 @@ export const SplatPreviewRenderer: React.FC<SplatPreviewProps> = ({
           <div className="flex gap-2">
             <button
               onClick={exportToPNG}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium transition"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-[var(--nord-ink)] rounded font-medium transition"
             >
               Export PNG
             </button>
             <button
               onClick={exportToWebP}
-              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-medium transition"
+              className="px-4 py-2 bg-[var(--nord-success)] hover:bg-[var(--nord-success-tint)] text-[var(--nord-cta-fg)] rounded font-medium transition"
             >
               Export WebP
             </button>

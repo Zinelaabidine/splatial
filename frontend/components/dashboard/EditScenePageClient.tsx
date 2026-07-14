@@ -238,51 +238,51 @@ export default function EditScenePageClient() {
     (splatLoadState.kind === "error" ? splatLoadState.message : null);
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] min-h-[480px] flex-col bg-[#0f0f0f]">
-      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-4 py-2.5">
+    <div className="flex h-[calc(100vh-3.5rem)] min-h-[480px] flex-col bg-[var(--nord-bg)]">
+      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--nord-hairline)] px-4 py-2.5">
         <div className="flex items-center gap-3 min-w-0">
           <Button
             variant="ghost"
             size="sm"
             onClick={cancel}
-            className="text-slate-200 hover:bg-white/10 hover:text-white"
+            className="text-[var(--nord-ink)] hover:bg-[var(--nord-tint)] hover:text-[var(--nord-ink)]"
           >
             <ArrowLeft className="mr-1.5 h-4 w-4" />
             Cancel
           </Button>
-          <span className="truncate text-sm font-medium text-slate-200">
+          <span className="truncate text-sm font-medium text-[var(--nord-ink)]">
             Editing: {sceneName ?? "scene"}
           </span>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-xs text-slate-400" aria-live="polite">
+          <span className="text-xs text-[var(--nord-slate)]" aria-live="polite">
             {splatLoading && (
-              <span className="inline-flex items-center gap-1.5 text-slate-200">
+              <span className="inline-flex items-center gap-1.5 text-[var(--nord-ink)]">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading splat…
               </span>
             )}
             {saveState.kind === "uploading" && (
-              <span className="inline-flex items-center gap-1.5 text-slate-200">
+              <span className="inline-flex items-center gap-1.5 text-[var(--nord-ink)]">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving…
               </span>
             )}
             {saveState.kind === "completing" && (
-              <span className="inline-flex items-center gap-1.5 text-slate-200">
+              <span className="inline-flex items-center gap-1.5 text-[var(--nord-ink)]">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" /> Finalizing…
               </span>
             )}
             {saveState.kind === "done" && (
-              <span className="text-emerald-400">Saved — opening viewer…</span>
+              <span className="text-[var(--nord-success)]">Saved — opening viewer…</span>
             )}
             {saveState.kind === "error" && (
-              <span className="text-red-400">Save failed: {saveState.message}</span>
+              <span className="text-[var(--nord-danger)]">Save failed: {saveState.message}</span>
             )}
           </span>
           <Button
             size="sm"
             onClick={handleSave}
             disabled={saving || !splatUrl || splatLoadState.kind !== "ready"}
-            className="bg-purple-600 text-white hover:bg-purple-700"
+            className="bg-purple-600 text-[var(--nord-ink)] hover:bg-purple-700"
           >
             <Save className="mr-1.5 h-4 w-4" />
             Save to Splatial
@@ -293,11 +293,11 @@ export default function EditScenePageClient() {
       <div className="relative flex-1">
         {loading ? (
           <div className="flex h-full items-center justify-center">
-            <p className="text-sm text-slate-400">Loading scene…</p>
+            <p className="text-sm text-[var(--nord-slate)]">Loading scene…</p>
           </div>
         ) : displayError ? (
           <div className="flex h-full items-center justify-center px-6 text-center">
-            <p className="text-sm text-red-400">{displayError}</p>
+            <p className="text-sm text-[var(--nord-danger)]">{displayError}</p>
           </div>
         ) : editorSrc && splatLoadState.kind !== "preparing-buffer" ? (
           <iframe

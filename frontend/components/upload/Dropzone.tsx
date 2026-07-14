@@ -121,7 +121,7 @@ export default function Dropzone({
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       className={cn(
-        "w-full max-w-2xl p-16 bg-white border-2 border-dashed border-slate-200 rounded-3xl shadow-sm",
+        "w-full max-w-2xl p-16 bg-[var(--nord-surface)] border-2 border-dashed border-[var(--nord-hairline)] rounded-3xl shadow-sm",
         "hover:border-indigo-400 hover:bg-indigo-50/50 transition-all",
         "flex flex-col items-center justify-center cursor-pointer group",
         "focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200 focus-visible:border-indigo-400",
@@ -132,7 +132,7 @@ export default function Dropzone({
     >
       <div
         className={cn(
-          "mb-5 grid h-14 w-14 place-items-center rounded-2xl bg-slate-50 text-slate-400 transition-all",
+          "mb-5 grid h-14 w-14 place-items-center rounded-2xl bg-[var(--nord-surface-2)] text-[var(--nord-slate)] transition-all",
           "group-hover:bg-indigo-100 group-hover:text-indigo-600",
           isDragging && "bg-indigo-100 text-indigo-600 scale-110",
         )}
@@ -140,10 +140,10 @@ export default function Dropzone({
         <UploadCloud className="h-6 w-6" strokeWidth={1.75} />
       </div>
 
-      <h2 className="text-lg font-semibold tracking-tight text-slate-900">
+      <h2 className="text-lg font-semibold tracking-tight text-[var(--nord-ink)]">
         {isDragging ? "Drop to upload" : "Drag your scene here"}
       </h2>
-      <p className="mt-1.5 text-sm text-slate-500">
+      <p className="mt-1.5 text-sm text-[var(--nord-slate)]">
         or{" "}
         <span className="font-medium text-indigo-600 group-hover:underline">
           browse files
@@ -151,15 +151,15 @@ export default function Dropzone({
         from your computer
       </p>
 
-      <div className="mt-6 flex flex-wrap items-center justify-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-slate-400">
-        <span className="rounded-full bg-slate-50 px-2.5 py-1">.glb</span>
-        <span className="rounded-full bg-slate-50 px-2.5 py-1">.gltf</span>
-        <span className="rounded-full bg-slate-50 px-2.5 py-1">.ply</span>
-        <span className="rounded-full bg-slate-50 px-2.5 py-1">.obj</span>
-        <span className="rounded-full bg-slate-50 px-2.5 py-1">.splat</span>
+      <div className="mt-6 flex flex-wrap items-center justify-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-[var(--nord-slate)]">
+        <span className="rounded-full bg-[var(--nord-surface-2)] px-2.5 py-1">.glb</span>
+        <span className="rounded-full bg-[var(--nord-surface-2)] px-2.5 py-1">.gltf</span>
+        <span className="rounded-full bg-[var(--nord-surface-2)] px-2.5 py-1">.ply</span>
+        <span className="rounded-full bg-[var(--nord-surface-2)] px-2.5 py-1">.obj</span>
+        <span className="rounded-full bg-[var(--nord-surface-2)] px-2.5 py-1">.splat</span>
       </div>
 
-      <p className="mt-4 text-xs text-slate-400">
+      <p className="mt-4 text-xs text-[var(--nord-slate)]">
         Files upload directly to S3 in 5&nbsp;MiB chunks
       </p>
 

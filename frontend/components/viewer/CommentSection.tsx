@@ -31,11 +31,11 @@ function CommentListSkeleton() {
     <div className="space-y-4" aria-hidden>
       {[0, 1, 2].map((i) => (
         <div key={i} className="flex animate-pulse gap-3">
-          <div className="h-8 w-8 shrink-0 rounded-full bg-[#2a2a2a]" />
+          <div className="h-8 w-8 shrink-0 rounded-full bg-[var(--nord-surface)]" />
           <div className="flex-1 space-y-2">
-            <div className="h-3 w-24 rounded bg-[#2a2a2a]" />
-            <div className="h-3 w-full rounded bg-[#252525]" />
-            <div className="h-3 w-4/5 rounded bg-[#252525]" />
+            <div className="h-3 w-24 rounded bg-[var(--nord-surface)]" />
+            <div className="h-3 w-full rounded bg-[var(--nord-surface)]" />
+            <div className="h-3 w-4/5 rounded bg-[var(--nord-surface)]" />
           </div>
         </div>
       ))}
@@ -254,7 +254,7 @@ export default function CommentSection({
     <section
       className={cn(
         "flex h-full min-h-0 flex-col",
-        variant === "overlay" ? "bg-transparent" : "bg-[#121212]",
+        variant === "overlay" ? "bg-transparent" : "bg-[var(--nord-bg)]",
       )}
       aria-label="Comments"
     >
@@ -262,15 +262,15 @@ export default function CommentSection({
         className={cn(
           "shrink-0 border-b px-4 py-3",
           variant === "overlay"
-            ? "border-white/10 bg-black/35 backdrop-blur-md"
-            : "border-[#2a2a2a]",
+            ? "border-[var(--nord-hairline)] bg-[var(--nord-scrim)] backdrop-blur-md"
+            : "border-[var(--nord-hairline)]",
         )}
       >
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold text-white">
+          <h2 className="text-sm font-semibold text-[var(--nord-ink)]">
             Comments
             {commentsCount > 0 ? (
-              <span className="ml-2 font-sw-mono text-xs font-normal text-[#c4c4cc]">
+              <span className="ml-2 font-sw-mono text-xs font-normal text-[var(--nord-ink)]">
                 {commentsCount}
               </span>
             ) : null}
@@ -281,7 +281,7 @@ export default function CommentSection({
               data-overlay-focus
               aria-label="Close comments"
               onClick={onClose}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#d0d0d8] transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/25"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[var(--nord-ink)] transition-colors hover:bg-[var(--nord-tint)] hover:text-[var(--nord-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nord-hairline)]"
             >
               <X className="h-4 w-4" />
             </button>
@@ -292,19 +292,19 @@ export default function CommentSection({
       <div
         className={cn(
           "min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4",
-          variant === "overlay" && "text-[#ececf0]",
+          variant === "overlay" && "text-[var(--nord-ink)]",
         )}
       >
         {loading ? (
           <CommentListSkeleton />
         ) : loadError ? (
-          <div className="rounded-lg border border-red-900/50 bg-red-950/20 px-4 py-3 text-center">
-            <p className="text-sm text-red-400">{loadError}</p>
+          <div className="rounded-lg border border-[var(--nord-danger)] bg-[var(--nord-danger-tint)] px-4 py-3 text-center">
+            <p className="text-sm text-[var(--nord-danger)]">{loadError}</p>
             <Button
               type="button"
               variant="outline"
               size="sm"
-              className="mt-3 border-[#404040] bg-transparent text-[#e8e8e8] hover:bg-[#2a2a2a]"
+              className="mt-3 border-[var(--nord-hairline)] bg-transparent text-[var(--nord-ink)] hover:bg-[var(--nord-surface)]"
               onClick={() => {
                 const ctrl = new AbortController();
                 void fetchComments(ctrl.signal);
@@ -315,8 +315,8 @@ export default function CommentSection({
           </div>
         ) : comments.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-1 py-10 text-center">
-            <p className="text-sm text-[#e0e0e6]">No comments yet</p>
-            <p className="text-xs text-[#a0a0aa]">
+            <p className="text-sm text-[var(--nord-ink)]">No comments yet</p>
+            <p className="text-xs text-[var(--nord-slate)]">
               Be the first to say something about this scene.
             </p>
           </div>
@@ -352,7 +352,7 @@ export default function CommentSection({
               size="sm"
               disabled={loadingMore}
               onClick={() => void handleLoadMore()}
-              className="border-[#404040] bg-transparent text-[#e8e8e8] hover:bg-[#2a2a2a]"
+              className="border-[var(--nord-hairline)] bg-transparent text-[var(--nord-ink)] hover:bg-[var(--nord-surface)]"
             >
               {loadingMore ? (
                 <>
@@ -364,7 +364,7 @@ export default function CommentSection({
               )}
             </Button>
             {loadMoreError ? (
-              <p className="text-xs text-red-400" role="alert">
+              <p className="text-xs text-[var(--nord-danger)]" role="alert">
                 {loadMoreError}
               </p>
             ) : null}
@@ -376,8 +376,8 @@ export default function CommentSection({
         className={cn(
           "shrink-0 space-y-2 border-t px-4 py-3",
           variant === "overlay"
-            ? "border-white/10 bg-black/40 backdrop-blur-md"
-            : "border-[#2a2a2a]",
+            ? "border-[var(--nord-hairline)] bg-[var(--nord-scrim)] backdrop-blur-md"
+            : "border-[var(--nord-hairline)]",
         )}
       >
         <Textarea
@@ -398,8 +398,8 @@ export default function CommentSection({
               atLimit
                 ? "font-sw-mono text-xs text-amber-400"
                 : variant === "overlay"
-                  ? "font-sw-mono text-xs text-[#a8a8b4]"
-                  : "font-sw-mono text-xs text-[#737373]"
+                  ? "font-sw-mono text-xs text-[var(--nord-slate)]"
+                  : "font-sw-mono text-xs text-[var(--nord-slate)]"
             }
           >
             {charCount}/{MAX_COMMENT_LENGTH}
@@ -409,7 +409,7 @@ export default function CommentSection({
             size="sm"
             disabled={!canPost}
             onClick={() => void handlePost()}
-            className="bg-[#19c2ad] text-black hover:bg-[#15a896]"
+            className="bg-[var(--nord-pine)] text-[var(--nord-ink)] hover:bg-[var(--nord-pine)]"
           >
             {posting ? (
               <>
@@ -422,7 +422,7 @@ export default function CommentSection({
           </Button>
         </div>
         {postError ? (
-          <p className="text-xs text-red-400" role="alert">
+          <p className="text-xs text-[var(--nord-danger)]" role="alert">
             {postError}
           </p>
         ) : null}

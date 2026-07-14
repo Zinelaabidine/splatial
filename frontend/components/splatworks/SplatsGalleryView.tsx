@@ -71,12 +71,12 @@ export default function SplatsGalleryView() {
     <div className="mx-auto w-full max-w-[1400px]">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
+          <h1 className="text-xl font-bold tracking-tight text-[var(--nord-ink)] sm:text-2xl">
             Splatworks: My Splats
             {!loading && totalReady > 0 ? ` (${totalReady})` : ""}
           </h1>
           {loading && (
-            <RefreshCw className="h-4 w-4 animate-spin text-[#909090]" aria-hidden />
+            <RefreshCw className="h-4 w-4 animate-spin text-[var(--nord-slate)]" aria-hidden />
           )}
         </div>
 
@@ -84,13 +84,13 @@ export default function SplatsGalleryView() {
           <button
             type="button"
             onClick={() => setSortOpen((o) => !o)}
-            className="flex h-9 items-center gap-1.5 rounded-lg border border-[#303030] bg-[#212121] px-3 text-sm text-[#e5e5e5] hover:bg-[#303030]"
+            className="flex h-9 items-center gap-1.5 rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-surface)] px-3 text-sm text-[var(--nord-ink)] hover:bg-[var(--nord-surface)]"
           >
             {SORT_LABELS[sortBy]}
-            <ChevronDown className="h-4 w-4 text-[#909090]" />
+            <ChevronDown className="h-4 w-4 text-[var(--nord-slate)]" />
           </button>
           {sortOpen && (
-            <div className="absolute right-0 top-full z-10 mt-1 min-w-[140px] rounded-lg border border-[#303030] bg-[#212121] py-1 shadow-xl">
+            <div className="absolute right-0 top-full z-10 mt-1 min-w-[140px] rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-surface)] py-1 shadow-xl">
               {sortOptions.map((option) => (
                 <button
                   key={option}
@@ -99,7 +99,7 @@ export default function SplatsGalleryView() {
                     setSortBy(option);
                     setSortOpen(false);
                   }}
-                  className="block w-full px-4 py-2 text-left text-sm text-[#e5e5e5] hover:bg-[#303030]"
+                  className="block w-full px-4 py-2 text-left text-sm text-[var(--nord-ink)] hover:bg-[var(--nord-surface)]"
                 >
                   {SORT_LABELS[option]}
                 </button>
@@ -110,12 +110,12 @@ export default function SplatsGalleryView() {
       </div>
 
       {actionMessage ? (
-        <div className="mb-4 rounded-xl border border-emerald-900/50 bg-emerald-950/40 px-5 py-4 text-sm text-emerald-200">
+        <div className="mb-4 rounded-xl border border-[var(--nord-success)] bg-[var(--nord-success-tint)] px-5 py-4 text-sm text-[var(--nord-success)]">
           {actionMessage}{" "}
           <button
             type="button"
             onClick={clearActionMessage}
-            className="font-medium underline underline-offset-2 hover:text-emerald-100"
+            className="font-medium underline underline-offset-2 hover:text-[var(--nord-success)]"
           >
             Dismiss
           </button>
@@ -123,12 +123,12 @@ export default function SplatsGalleryView() {
       ) : null}
 
       {downloadError ? (
-        <div className="mb-4 rounded-xl border border-amber-900/50 bg-amber-950/40 px-5 py-4 text-sm text-amber-200">
+        <div className="mb-4 rounded-xl border border-[#e7d9a8] bg-[#f4ecd6] px-5 py-4 text-sm text-[#9a6b1f]">
           {downloadError}{" "}
           <button
             type="button"
             onClick={clearDownloadError}
-            className="font-medium underline underline-offset-2 hover:text-amber-100"
+            className="font-medium underline underline-offset-2 hover:text-[#9a6b1f]"
           >
             Dismiss
           </button>
@@ -136,7 +136,7 @@ export default function SplatsGalleryView() {
       ) : null}
 
       {error ? (
-        <div className="rounded-xl border border-red-900/50 bg-red-950/40 px-5 py-4 text-sm text-red-300">
+        <div className="rounded-xl border border-[var(--nord-danger)] bg-[var(--nord-danger-tint)] px-5 py-4 text-sm text-[var(--nord-danger)]">
           {error}{" "}
           <button
             type="button"
@@ -151,12 +151,12 @@ export default function SplatsGalleryView() {
           {Array.from({ length: 6 }).map((_, i) => (
             <div
               key={i}
-              className="aspect-[4/5] animate-pulse rounded-xl bg-[#212121]"
+              className="aspect-[4/5] animate-pulse rounded-xl bg-[var(--nord-surface)]"
             />
           ))}
         </div>
       ) : splats.length === 0 ? (
-        <p className="py-16 text-center text-sm text-[#909090]">{emptyMessage}</p>
+        <p className="py-16 text-center text-sm text-[var(--nord-slate)]">{emptyMessage}</p>
       ) : (
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
           {splats.map((splat) => (

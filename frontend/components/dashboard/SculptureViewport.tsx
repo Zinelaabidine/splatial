@@ -27,7 +27,7 @@ export default function SculptureViewport({ title, className }: SculptureViewpor
   return (
     <div
       className={cn(
-        "relative h-full w-full overflow-hidden bg-gradient-to-b from-gray-100 via-gray-50 to-gray-200",
+        "relative h-full w-full overflow-hidden bg-gradient-to-b from-[var(--nord-surface)] via-[var(--nord-surface)] to-[var(--nord-surface)]",
         className,
       )}
     >
@@ -37,11 +37,11 @@ export default function SculptureViewport({ title, className }: SculptureViewpor
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_85%_80%,rgba(147,51,234,0.07),transparent_45%)]" />
 
       {/* Floor / ground plane */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[36%] bg-gradient-to-t from-gray-300/50 to-transparent" />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[36%] bg-gradient-to-t from-[var(--nord-surface)] to-transparent" />
       {/* Perspective horizon line */}
-      <div className="pointer-events-none absolute bottom-[23%] left-1/2 h-px w-[min(68%,600px)] -translate-x-1/2 bg-gradient-to-r from-transparent via-gray-400/40 to-transparent" />
+      <div className="pointer-events-none absolute bottom-[23%] left-1/2 h-px w-[min(68%,600px)] -translate-x-1/2 bg-gradient-to-r from-transparent via-[var(--nord-surface)] to-transparent" />
       {/* Pedestal shadow on floor */}
-      <div className="pointer-events-none absolute bottom-[17.5%] left-1/2 h-4 w-32 -translate-x-1/2 rounded-full bg-gray-500/20 blur-md" />
+      <div className="pointer-events-none absolute bottom-[17.5%] left-1/2 h-4 w-32 -translate-x-1/2 rounded-full bg-[var(--nord-tint)] blur-md" />
 
       {/* Sculpture stage */}
       <div className="absolute inset-0 flex items-end justify-center pb-[16%]">
@@ -49,7 +49,7 @@ export default function SculptureViewport({ title, className }: SculptureViewpor
           {/* Pedestal */}
           <div className="relative z-0">
             {/* Pedestal cap */}
-            <div className="h-2.5 w-36 rounded-sm bg-gradient-to-b from-gray-250 to-gray-350 shadow-sm"
+            <div className="h-2.5 w-36 rounded-sm bg-gradient-to-b from-[var(--nord-surface)] to-[var(--nord-surface)] shadow-sm"
                  style={{ background: "linear-gradient(to bottom, #d1d5db, #9ca3af)" }} />
             {/* Pedestal body */}
             <div
@@ -119,19 +119,19 @@ export default function SculptureViewport({ title, className }: SculptureViewpor
 
       {/* Scene title overlay */}
       <div className="pointer-events-none absolute left-6 top-6">
-        <h2 className="text-lg font-medium tracking-tight text-gray-800/65 drop-shadow-sm">
+        <h2 className="text-lg font-medium tracking-tight text-[var(--nord-ink)] drop-shadow-sm">
           {title}
         </h2>
       </div>
 
       {/* View controls panel — frosted glass, bottom-left */}
       <div className="absolute bottom-6 left-6">
-        <div className="rounded-xl bg-white/30 p-2 shadow-xl backdrop-blur-sm">
+        <div className="rounded-xl bg-[var(--nord-tint)] p-2 shadow-xl backdrop-blur-sm">
           <button
             type="button"
-            className="inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-800 transition-colors hover:bg-white/40"
+            className="inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--nord-ink)] transition-colors hover:bg-[var(--nord-tint)]"
           >
-            <Camera className="h-3.5 w-3.5 text-gray-700" />
+            <Camera className="h-3.5 w-3.5 text-[var(--nord-ink)]" />
             View Controls
           </button>
         </div>

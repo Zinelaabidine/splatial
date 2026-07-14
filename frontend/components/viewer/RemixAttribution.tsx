@@ -19,21 +19,21 @@ export default function RemixAttribution({
   return (
     <p
       className={cn(
-        "font-sw-mono text-[11px] text-white/70",
+        "font-sw-mono text-[11px] text-[var(--nord-ink)]",
         className,
       )}
     >
       Remixed from{" "}
       <Link
         href={`/u/${encodeURIComponent(handle)}`}
-        className="text-white/90 underline-offset-2 hover:text-white hover:underline"
+        className="text-[var(--nord-ink)] underline-offset-2 hover:text-[var(--nord-ink)] hover:underline"
       >
         @{handle}
       </Link>
       {" · "}
       <Link
         href={`/scenes/view?id=${encodeURIComponent(forkedFromSceneId)}`}
-        className="text-white/90 underline-offset-2 hover:text-white hover:underline"
+        className="text-[var(--nord-ink)] underline-offset-2 hover:text-[var(--nord-ink)] hover:underline"
       >
         original scene
       </Link>

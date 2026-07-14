@@ -205,12 +205,12 @@ export default function PublicProfilePageClient() {
     return (
       <div className="mx-auto w-full max-w-[1400px]">
         <div className="mb-8 flex animate-pulse items-start gap-5">
-          <div className="h-20 w-20 shrink-0 rounded-full bg-[#2a2a2a]" />
+          <div className="h-20 w-20 shrink-0 rounded-full bg-[var(--nord-surface)]" />
           <div className="min-w-0 flex-1 space-y-3">
-            <div className="h-7 w-48 rounded bg-[#2a2a2a]" />
-            <div className="h-4 w-32 rounded bg-[#252525]" />
-            <div className="h-4 w-full max-w-md rounded bg-[#252525]" />
-            <div className="h-3 w-56 rounded bg-[#252525]" />
+            <div className="h-7 w-48 rounded bg-[var(--nord-surface)]" />
+            <div className="h-4 w-32 rounded bg-[var(--nord-surface)]" />
+            <div className="h-4 w-full max-w-md rounded bg-[var(--nord-surface)]" />
+            <div className="h-3 w-56 rounded bg-[var(--nord-surface)]" />
           </div>
         </div>
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
@@ -225,8 +225,8 @@ export default function PublicProfilePageClient() {
   if (notFound) {
     return (
       <div className="mx-auto w-full max-w-[1400px] py-16 text-center">
-        <p className="text-lg font-medium text-white">Profile not found</p>
-        <p className="mt-2 text-sm text-[#909090]">
+        <p className="text-lg font-medium text-[var(--nord-ink)]">Profile not found</p>
+        <p className="mt-2 text-sm text-[var(--nord-slate)]">
           This username does not exist or is not available.
         </p>
       </div>
@@ -236,7 +236,7 @@ export default function PublicProfilePageClient() {
   if (error || !profile) {
     return (
       <div className="mx-auto w-full max-w-[1400px]">
-        <div className="rounded-xl border border-red-900/50 bg-red-950/40 px-5 py-4 text-sm text-red-300">
+        <div className="rounded-xl border border-[var(--nord-danger)] bg-[var(--nord-danger-tint)] px-5 py-4 text-sm text-[var(--nord-danger)]">
           {error ?? "Failed to load profile."}{" "}
           <button
             type="button"
@@ -244,7 +244,7 @@ export default function PublicProfilePageClient() {
               const controller = new AbortController();
               void fetchProfileAndScenes(controller.signal);
             }}
-            className="font-medium underline underline-offset-2 hover:text-red-200"
+            className="font-medium underline underline-offset-2 hover:text-[var(--nord-danger)]"
           >
             Retry
           </button>
@@ -277,27 +277,27 @@ export default function PublicProfilePageClient() {
           )}
 
           <div className="min-w-0 flex-1">
-            <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
+            <h1 className="text-2xl font-bold tracking-tight text-[var(--nord-ink)] sm:text-3xl">
               {profile.displayName}
             </h1>
-            <p className="mt-1 font-sw-mono text-sm text-[#909090]">@{handle}</p>
+            <p className="mt-1 font-sw-mono text-sm text-[var(--nord-slate)]">@{handle}</p>
             {profile.bio.trim() !== "" && (
-              <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[#c8c8c8]">
+              <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--nord-ink)]">
                 {profile.bio}
               </p>
             )}
-            <p className="mt-3 text-sm text-[#909090]">
-              <span className="font-medium text-[#e8e8e8]">
+            <p className="mt-3 text-sm text-[var(--nord-slate)]">
+              <span className="font-medium text-[var(--nord-ink)]">
                 {formatCount(profile.followersCount)}
               </span>{" "}
               followers
-              <span className="mx-2 text-[#505050]">·</span>
-              <span className="font-medium text-[#e8e8e8]">
+              <span className="mx-2 text-[var(--nord-slate-soft)]">·</span>
+              <span className="font-medium text-[var(--nord-ink)]">
                 {formatCount(profile.followingCount)}
               </span>{" "}
               following
-              <span className="mx-2 text-[#505050]">·</span>
-              <span className="font-medium text-[#e8e8e8]">
+              <span className="mx-2 text-[var(--nord-slate-soft)]">·</span>
+              <span className="font-medium text-[var(--nord-ink)]">
                 {formatCount(profile.scenesCount)}
               </span>{" "}
               scenes
@@ -325,21 +325,21 @@ export default function PublicProfilePageClient() {
               )}
             </Button>
             {followError ? (
-              <p className="max-w-xs text-xs text-red-400">{followError}</p>
+              <p className="max-w-xs text-xs text-[var(--nord-danger)]">{followError}</p>
             ) : null}
           </div>
         ) : null}
       </header>
 
-      <h2 className="mb-4 text-lg font-semibold text-white">Public scenes</h2>
+      <h2 className="mb-4 text-lg font-semibold text-[var(--nord-ink)]">Public scenes</h2>
 
       {scenesError ? (
-        <div className="mb-4 rounded-xl border border-red-900/50 bg-red-950/40 px-5 py-4 text-sm text-red-300">
+        <div className="mb-4 rounded-xl border border-[var(--nord-danger)] bg-[var(--nord-danger-tint)] px-5 py-4 text-sm text-[var(--nord-danger)]">
           {scenesError}{" "}
           <button
             type="button"
             onClick={() => void loadMore()}
-            className="font-medium underline underline-offset-2 hover:text-red-200"
+            className="font-medium underline underline-offset-2 hover:text-[var(--nord-danger)]"
           >
             Retry
           </button>
@@ -347,7 +347,7 @@ export default function PublicProfilePageClient() {
       ) : null}
 
       {scenes.length === 0 ? (
-        <p className="py-16 text-center text-sm text-[#909090]">No public scenes yet.</p>
+        <p className="py-16 text-center text-sm text-[var(--nord-slate)]">No public scenes yet.</p>
       ) : (
         <>
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">

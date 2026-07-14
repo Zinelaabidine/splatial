@@ -116,10 +116,10 @@ function FieldRow<T extends object>({
   if (field.type === "bool") {
     const checked = raw === true;
     return (
-      <label className="flex items-center justify-between gap-2 py-1.5 text-xs text-slate-200">
+      <label className="flex items-center justify-between gap-2 py-1.5 text-xs text-[var(--nord-ink)]">
         <span>
           {field.label}
-          <span className="ml-1 text-slate-400">
+          <span className="ml-1 text-[var(--nord-slate)]">
             (default: {field.default ? "on" : "off"})
           </span>
         </span>
@@ -127,7 +127,7 @@ function FieldRow<T extends object>({
           type="checkbox"
           checked={checked}
           onChange={(e) => onChange({ ...config, [field.key]: e.target.checked })}
-          className="h-3.5 w-3.5 shrink-0 rounded border-white/20 bg-white/5 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0"
+          className="h-3.5 w-3.5 shrink-0 rounded border-[var(--nord-hairline)] bg-[var(--nord-tint)] text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0"
         />
       </label>
     );
@@ -136,7 +136,7 @@ function FieldRow<T extends object>({
   if (field.type === "select") {
     const value = typeof raw === "string" ? raw : "";
     return (
-      <label className="flex flex-col gap-1 py-1.5 text-xs text-slate-200">
+      <label className="flex flex-col gap-1 py-1.5 text-xs text-[var(--nord-ink)]">
         <span>{field.label}</span>
         <select
           value={value}
@@ -146,7 +146,7 @@ function FieldRow<T extends object>({
               [field.key]: e.target.value === "" ? undefined : e.target.value,
             })
           }
-          className="rounded-md border border-white/15 bg-white/5 px-2 py-1 text-xs text-white focus:border-indigo-400 focus:outline-none [&_option]:bg-slate-900 [&_option]:text-white"
+          className="rounded-md border border-[var(--nord-hairline)] bg-[var(--nord-tint)] px-2 py-1 text-xs text-[var(--nord-ink)] focus:border-indigo-400 focus:outline-none [&_option]:bg-[var(--nord-surface)] [&_option]:text-[var(--nord-ink)]"
         >
           <option value="">{field.default} (default)</option>
           {field.options.map((opt) => (
@@ -162,7 +162,7 @@ function FieldRow<T extends object>({
   // number
   const value = typeof raw === "number" ? String(raw) : "";
   return (
-    <label className="flex flex-col gap-1 py-1.5 text-xs text-slate-200">
+    <label className="flex flex-col gap-1 py-1.5 text-xs text-[var(--nord-ink)]">
       <span>{field.label}</span>
       <input
         type="number"
@@ -180,7 +180,7 @@ function FieldRow<T extends object>({
           const parsed = Number(next);
           onChange({ ...config, [field.key]: Number.isNaN(parsed) ? undefined : parsed });
         }}
-        className="rounded-md border border-white/15 bg-white/5 px-2 py-1 text-xs text-white placeholder:text-slate-500 focus:border-indigo-400 focus:outline-none"
+        className="rounded-md border border-[var(--nord-hairline)] bg-[var(--nord-tint)] px-2 py-1 text-xs text-[var(--nord-ink)] placeholder:text-[var(--nord-slate)] focus:border-indigo-400 focus:outline-none"
       />
     </label>
   );
@@ -200,11 +200,11 @@ function FieldSection<T extends object>({
   defaultOpen?: boolean;
 }) {
   return (
-    <details className="group rounded-lg border border-white/10" open={defaultOpen}>
-      <summary className="cursor-pointer select-none list-none rounded-lg px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-white/5">
+    <details className="group rounded-lg border border-[var(--nord-hairline)]" open={defaultOpen}>
+      <summary className="cursor-pointer select-none list-none rounded-lg px-3 py-2 text-xs font-semibold text-[var(--nord-ink)] hover:bg-[var(--nord-tint)]">
         {title}
       </summary>
-      <div className="grid grid-cols-2 gap-x-3 gap-y-0 border-t border-white/10 px-3 py-2">
+      <div className="grid grid-cols-2 gap-x-3 gap-y-0 border-t border-[var(--nord-hairline)] px-3 py-2">
         {fields.map((f) => (
           <FieldRow key={String(f.key)} field={f} config={config} onChange={onChange} />
         ))}
@@ -233,10 +233,10 @@ export default function AdvancedSettingsPanel({
 
   return (
     <div className={cn("flex flex-col gap-2", className)}>
-      <div className="flex flex-col gap-1.5 rounded-lg border border-white/10 p-2">
+      <div className="flex flex-col gap-1.5 rounded-lg border border-[var(--nord-hairline)] p-2">
         <div className="flex items-center justify-between px-1">
-          <span className="text-xs font-semibold text-slate-200">Presets</span>
-          <span className="text-[11px] text-slate-400">
+          <span className="text-xs font-semibold text-[var(--nord-ink)]">Presets</span>
+          <span className="text-[11px] text-[var(--nord-slate)]">
             {activePresetId
               ? JOB_PRESETS.find((p) => p.id === activePresetId)?.label
               : isUntouched
@@ -260,7 +260,7 @@ export default function AdvancedSettingsPanel({
                   "rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
                   active
                     ? "border-indigo-400/60 bg-indigo-500/20 text-indigo-200"
-                    : "border-white/15 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white",
+                    : "border-[var(--nord-hairline)] bg-[var(--nord-tint)] text-[var(--nord-ink)] hover:bg-[var(--nord-tint)] hover:text-[var(--nord-ink)]",
                 )}
               >
                 {preset.label}
@@ -295,7 +295,7 @@ export default function AdvancedSettingsPanel({
         onChange={onTrainConfigChange}
       />
       {colmapConfig.matcher === "vocab_tree" ? (
-        <p className="px-1 text-[11px] text-amber-300">
+        <p className="px-1 text-[11px] text-[#9a6b1f]">
           vocab_tree requires a vocab tree file baked into the worker AMI; leave
           the path unset to use the operator-configured default.
         </p>

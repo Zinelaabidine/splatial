@@ -100,14 +100,14 @@ export default function Layout({
   const initial = email.charAt(0).toUpperCase() || "?";
 
   return (
-    <div className="flex h-screen bg-slate-50 text-slate-900 font-sans overflow-hidden">
-      <aside className="w-64 bg-white border-r border-slate-100 flex flex-col justify-between p-4">
+    <div className="flex h-screen bg-[var(--nord-surface-2)] text-[var(--nord-ink)] font-sans overflow-hidden">
+      <aside className="w-64 bg-[var(--nord-surface)] border-r border-[var(--nord-hairline)] flex flex-col justify-between p-4">
         <div className="flex flex-col gap-6">
           <div className="flex items-center gap-2 px-2 pt-1">
-            <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-500 grid place-items-center text-white text-xs font-semibold">
+            <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-500 grid place-items-center text-[var(--nord-cta-fg)] text-xs font-semibold">
               S
             </div>
-            <span className="text-sm font-semibold tracking-tight text-slate-900">
+            <span className="text-sm font-semibold tracking-tight text-[var(--nord-ink)]">
               Splatial
             </span>
           </div>
@@ -123,13 +123,13 @@ export default function Layout({
                   className={[
                     "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors",
                     active
-                      ? "bg-slate-100 text-slate-900"
-                      : "text-slate-500 hover:bg-slate-50 hover:text-slate-900",
+                      ? "bg-[var(--nord-surface-2)] text-[var(--nord-ink)]"
+                      : "text-[var(--nord-slate)] hover:bg-[var(--nord-surface-2)] hover:text-[var(--nord-ink)]",
                   ].join(" ")}
                 >
                   <span
                     className={
-                      active ? "text-indigo-500" : "text-slate-400"
+                      active ? "text-indigo-500" : "text-[var(--nord-slate)]"
                     }
                   >
                     {item.icon}
@@ -142,15 +142,15 @@ export default function Layout({
         </div>
 
         <div className="flex flex-col gap-3">
-          <div className="flex items-center gap-2.5 rounded-lg border border-slate-100 bg-slate-50/60 p-2.5">
-            <div className="h-7 w-7 rounded-full bg-slate-900 text-white grid place-items-center text-xs font-semibold">
+          <div className="flex items-center gap-2.5 rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-surface-2)] p-2.5">
+            <div className="h-7 w-7 rounded-full bg-[var(--nord-surface)] text-[var(--nord-ink)] grid place-items-center text-xs font-semibold">
               {initial}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-medium text-slate-900">
+              <p className="truncate text-xs font-medium text-[var(--nord-ink)]">
                 {email || "Signed in"}
               </p>
-              <p className="text-[10px] uppercase tracking-wider text-slate-400">
+              <p className="text-[10px] uppercase tracking-wider text-[var(--nord-slate)]">
                 Free plan
               </p>
             </div>
@@ -159,7 +159,7 @@ export default function Layout({
           <button
             type="button"
             onClick={signOut}
-            className="hidden flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
+            className="hidden flex items-center justify-center gap-2 rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-surface)] px-3 py-2 text-xs font-medium text-[var(--nord-slate-soft)] transition-colors hover:bg-[var(--nord-surface-2)] hover:text-[var(--nord-ink)]"
           >
             <svg
               viewBox="0 0 24 24"
@@ -184,7 +184,7 @@ export default function Layout({
       </main>
 
       {rightSidebar ? (
-        <aside className="hidden lg:flex w-80 bg-white border-l border-slate-100 p-5 flex-col gap-6 overflow-y-auto">
+        <aside className="hidden lg:flex w-80 bg-[var(--nord-surface)] border-l border-[var(--nord-hairline)] p-5 flex-col gap-6 overflow-y-auto">
           {rightSidebar}
         </aside>
       ) : null}

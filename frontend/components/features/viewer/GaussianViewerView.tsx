@@ -54,19 +54,19 @@ export default function GaussianViewerView({
 }: GaussianViewerViewProps) {
   if (loading) {
     return (
-      <div className="flex h-full items-center justify-center bg-black">
-        <p className="text-sm text-slate-400">Loading scene…</p>
+      <div className="flex h-full items-center justify-center bg-[var(--nord-bg)]">
+        <p className="text-sm text-[var(--nord-slate)]">Loading scene…</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-4 bg-black px-6 text-center">
-        <p className="max-w-md text-sm text-red-400">{error}</p>
+      <div className="flex h-full flex-col items-center justify-center gap-4 bg-[var(--nord-bg)] px-6 text-center">
+        <p className="max-w-md text-sm text-[var(--nord-danger)]">{error}</p>
         <Link
           href="/scenes"
-          className="text-sm font-medium text-slate-300 underline-offset-4 hover:text-white hover:underline"
+          className="text-sm font-medium text-[var(--nord-ink)] underline-offset-4 hover:text-[var(--nord-ink)] hover:underline"
         >
           Back to Your Scenes
         </Link>
@@ -116,7 +116,7 @@ export default function GaussianViewerView({
       {(showAttribution || forksCount > 0) && (
         <div className="pointer-events-none absolute inset-x-0 top-4 z-[var(--z-canvas-overlay)] flex flex-col items-center gap-2 px-4">
           {showAttribution ? (
-            <div className="pointer-events-auto max-w-lg rounded-full border border-white/10 bg-black/70 px-4 py-2 shadow-lg backdrop-blur-md">
+            <div className="pointer-events-auto max-w-lg rounded-full border border-[var(--nord-hairline)] bg-[var(--nord-scrim)] px-4 py-2 shadow-lg backdrop-blur-md">
               <RemixAttribution
                 forkedFromSceneId={forkedFromSceneId}
                 forkedFromUsername={forkedFromUsername}
@@ -126,7 +126,7 @@ export default function GaussianViewerView({
           {forksCount > 0 ? (
             <ForkCountBadge
               forksCount={forksCount}
-              className="pointer-events-auto rounded-full border border-white/10 bg-black/70 px-3 py-1.5 text-white/80 shadow-lg backdrop-blur-md"
+              className="pointer-events-auto rounded-full border border-[var(--nord-hairline)] bg-[var(--nord-scrim)] px-3 py-1.5 text-[var(--nord-cta-fg)] shadow-lg backdrop-blur-md"
             />
           ) : null}
         </div>

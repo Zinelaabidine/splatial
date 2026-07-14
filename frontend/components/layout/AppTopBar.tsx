@@ -236,7 +236,7 @@ export default function AppTopBar() {
           <button
             type="button"
             aria-label="Close navigation"
-            className="fixed inset-0 top-16 z-40 bg-black/60 lg:hidden"
+            className="fixed inset-0 top-16 z-40 bg-[var(--nord-scrim)] lg:hidden"
             onClick={closeMobileNav}
           />
           <nav

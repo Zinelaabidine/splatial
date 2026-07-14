@@ -23,7 +23,7 @@ export default function AdminShell() {
 
   return (
     <div>
-      <div className="mx-auto mb-6 flex max-w-6xl gap-1 border-b border-[#2a2a2a]">
+      <div className="mx-auto mb-6 flex max-w-6xl gap-1 border-b border-[var(--nord-hairline)]">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -31,8 +31,8 @@ export default function AdminShell() {
             onClick={() => setTab(t.id)}
             className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
               tab === t.id
-                ? "border-[#3b82f6] text-[#f1f1f1]"
-                : "border-transparent text-[#808080] hover:text-[#c8c8c8]"
+                ? "border-[#3b82f6] text-[var(--nord-ink)]"
+                : "border-transparent text-[var(--nord-slate)] hover:text-[var(--nord-ink)]"
             }`}
           >
             {t.label}

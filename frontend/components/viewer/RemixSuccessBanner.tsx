@@ -24,13 +24,13 @@ export default function RemixSuccessBanner() {
 
   return (
     <div
-      className="pointer-events-auto absolute inset-x-0 bottom-24 z-20 mx-auto flex max-w-lg items-start gap-3 rounded-xl border border-emerald-500/30 bg-emerald-950/90 px-4 py-3 text-sm text-emerald-100 shadow-lg backdrop-blur-md"
+      className="pointer-events-auto absolute inset-x-0 bottom-24 z-20 mx-auto flex max-w-lg items-start gap-3 rounded-xl border border-[var(--nord-success)] bg-[var(--nord-success-tint)] px-4 py-3 text-sm text-[var(--nord-success)] shadow-lg backdrop-blur-md"
       role="status"
     >
-      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--nord-success)]" />
       <div className="min-w-0 flex-1">
-        <p className="font-medium text-emerald-50">Remix created</p>
-        <p className="mt-0.5 text-xs text-emerald-200/90">
+        <p className="font-medium text-[var(--nord-success)]">Remix created</p>
+        <p className="mt-0.5 text-xs text-[var(--nord-success)]">
           Your copy is private by default — make it public from Your Scenes when you are ready.
         </p>
       </div>
@@ -38,7 +38,7 @@ export default function RemixSuccessBanner() {
         type="button"
         onClick={dismiss}
         aria-label="Dismiss"
-        className="shrink-0 rounded-md p-1 text-emerald-300/80 transition hover:bg-emerald-900/60 hover:text-emerald-50"
+        className="shrink-0 rounded-md p-1 text-[var(--nord-success)] transition hover:bg-[var(--nord-success-tint)] hover:text-[var(--nord-success)]"
       >
         <X className="h-4 w-4" />
       </button>
