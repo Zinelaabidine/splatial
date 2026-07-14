@@ -75,11 +75,21 @@ export default function ProfileOnboardingGate({
   }, [loading, profile, pathname, router]);
 
   if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[var(--nord-bg)]">
-        <Loader2 className="h-8 w-8 animate-spin text-[var(--nord-slate)]" />
-      </div>
-    );
+    // Don't block the entire app behind the profile fetch. Onboarding only
+    // matters for brand-new accounts, so the common case (existing user
+    // loading /scenes) should mount AppShell immediately — that lets the
+    // scenes list, notifications badge, etc. all start fetching in parallel
+    // with getMyProfile() instead of waiting for it to finish first. The
+    // redirect effect above still fires once profile resolves, in the rare
+    // case onboarding is actually needed.
+    if (pathname === ONBOARDING_PATH) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-[var(--nord-bg)]">
+          <Loader2 className="h-8 w-8 animate-spin text-[var(--nord-slate)]" />
+        </div>
+      );
+    }
+    return <AppShell>{children}</AppShell>;
   }
 
   if (error) {

@@ -10,6 +10,22 @@ import {
   isTransientNetworkError,
 } from "@/lib/api/apiErrors";
 
+// Concurrent callers within the same tick/burst (e.g. profile + scenes +
+// notifications firing together on initial page load) share one in-flight
+// fetchAuthSession() call instead of each independently re-resolving the
+// Cognito session. Cleared as soon as it settles, so it never serves a stale
+// or errored session to later, unrelated calls.
+let inFlightSession: ReturnType<typeof fetchAuthSession> | null = null;
+
+function getSharedAuthSession() {
+  if (!inFlightSession) {
+    inFlightSession = fetchAuthSession().finally(() => {
+      inFlightSession = null;
+    });
+  }
+  return inFlightSession;
+}
+
 /**
  * Secure fetch wrapper that injects the Cognito JWT and handles silent refresh.
  */
@@ -18,7 +34,7 @@ export async function authenticatedFetch(
   options: RequestInit = {},
 ) {
   try {
-    const session = await fetchAuthSession();
+    const session = await getSharedAuthSession();
     const jwtToken = session.tokens?.idToken?.toString();
 
     if (!jwtToken) {
