@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=1440, initial-scale=1" />
+<title>Varjo Teleporter — Dashboard Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    /* Warm Nordic neutrals */
+    --bg:        #F3EFE8;   /* warm ivory / pale stone */
+    --bg-edge:   #EDE8DF;   /* faint gradient toward edges */
+    --surface:   #FBFAF6;   /* soft off-white card */
+    --surface-2: #F7F4EE;   /* nav / secondary surface */
+    --hairline:  #E5E0D6;   /* warm-gray hairline */
+    --hairline-2:#EEEAE1;
+
+    /* Cool text */
+    --ink:       #34383B;   /* cool charcoal (headings) */
+    --slate:     #5C6469;   /* slate body */
+    --slate-soft:#8A9096;   /* muted labels */
+
+    /* Accents (used sparingly) */
+    --pine:      #23433A;   /* confident dark-pine primary */
+    --pine-hover:#1C382F;
+    --teal:      #4E827C;   /* desaturated teal — selected */
+    --teal-soft: #E6EEEB;   /* teal tint fill */
+    --pine-tint: #E7EDE9;
+
+    --radius:    12px;
+    --radius-sm: 10px;
+    --shadow:    0 1px 2px rgba(43,42,38,0.04), 0 8px 20px rgba(43,42,38,0.04);
+    --shadow-sm: 0 1px 2px rgba(43,42,38,0.05);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: radial-gradient(120% 120% at 50% -10%, var(--bg) 55%, var(--bg-edge) 100%);
+    font-family: "Inter", system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    display: flex;
+    justify-content: center;
+    padding: 40px 0;
+  }
+
+  /* Canvas 1440 x 900 */
+  .canvas {
+    width: 1440px;
+    height: 900px;
+    background: radial-gradient(130% 120% at 50% -20%, var(--bg) 50%, var(--bg-edge) 100%);
+    border: 1px solid var(--hairline);
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 30px 80px rgba(43,42,38,0.10);
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ============ TOP NAVIGATION ============ */
+  .nav {
+    height: 68px;
+    flex: 0 0 68px;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--hairline);
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    padding: 0 32px;
+    gap: 24px;
+  }
+
+  /* Brand */
+  .brand { display: flex; align-items: center; gap: 12px; justify-self: start; }
+  .mark {
+    width: 30px; height: 30px; border-radius: 8px;
+    background: var(--pine);
+    display: grid; place-items: center;
+    box-shadow: var(--shadow-sm);
+  }
+  .mark svg { display: block; }
+  .brand-name {
+    font-size: 15.5px; font-weight: 600; letter-spacing: 0.15px; color: var(--ink);
+  }
+  .brand-name .light { color: var(--slate-soft); font-weight: 500; }
+
+  /* Center links */
+  .nav-links { display: flex; align-items: center; gap: 4px; justify-self: center; }
+  .nav-links a {
+    text-decoration: none;
+    font-size: 14px; font-weight: 500;
+    color: var(--slate);
+    padding: 8px 14px;
+    border-radius: 9px;
+    letter-spacing: 0.1px;
+    transition: background .15s, color .15s;
+  }
+  .nav-links a:hover { background: rgba(78,130,124,0.08); color: var(--ink); }
+  .nav-links a.active {
+    color: var(--pine);
+    background: var(--pine-tint);
+    box-shadow: inset 0 0 0 1px rgba(35,67,58,0.10);
+  }
+
+  /* Right cluster */
+  .nav-right { display: flex; align-items: center; gap: 10px; justify-self: end; }
+  .icon-btn {
+    width: 38px; height: 38px; border-radius: 10px;
+    border: 1px solid var(--hairline);
+    background: var(--surface);
+    display: grid; place-items: center;
+    cursor: pointer; color: var(--slate);
+    transition: border-color .15s, background .15s;
+    position: relative;
+  }
+  .icon-btn:hover { border-color: #DAD4C8; background: #fff; }
+  .dot {
+    position: absolute; top: 9px; right: 10px;
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--teal); box-shadow: 0 0 0 2px var(--surface);
+  }
+
+  .btn-primary {
+    display: inline-flex; align-items: center; gap: 8px;
+    height: 38px; padding: 0 16px;
+    background: var(--pine); color: #F4F2EC;
+    border: none; border-radius: 10px;
+    font-family: inherit; font-size: 13.5px; font-weight: 500; letter-spacing: 0.2px;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(35,67,58,0.25), 0 6px 14px rgba(35,67,58,0.14);
+    transition: background .15s;
+  }
+  .btn-primary:hover { background: var(--pine-hover); }
+
+  .divider-v { width: 1px; height: 28px; background: var(--hairline); margin: 0 2px; }
+
+  .avatar {
+    width: 38px; height: 38px; border-radius: 50%;
+    background: linear-gradient(150deg, #C9D3CB, #A9BBB0);
+    color: #33433B; font-size: 13px; font-weight: 600;
+    display: grid; place-items: center;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.4), var(--shadow-sm);
+    cursor: pointer;
+  }
+
+  /* ============ CONTENT ============ */
+  .content { flex: 1; padding: 40px 56px 48px; overflow: hidden; }
+
+  .page-head {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    margin-bottom: 28px;
+  }
+  .breadcrumb { font-size: 12.5px; color: var(--slate-soft); font-weight: 500; margin-bottom: 8px; letter-spacing: 0.2px; }
+  .breadcrumb b { color: var(--slate); font-weight: 500; }
+  h1 { margin: 0; font-size: 28px; font-weight: 600; letter-spacing: -0.4px; color: var(--ink); }
+  .subtitle { margin: 8px 0 0; font-size: 14px; color: var(--slate); font-weight: 400; }
+
+  /* Segmented filter */
+  .segment {
+    display: inline-flex; padding: 4px;
+    background: var(--surface-2); border: 1px solid var(--hairline);
+    border-radius: 11px; gap: 2px;
+  }
+  .segment button {
+    font-family: inherit; font-size: 13px; font-weight: 500; color: var(--slate);
+    background: transparent; border: none; cursor: pointer;
+    padding: 7px 15px; border-radius: 8px; letter-spacing: 0.1px;
+    transition: all .15s;
+  }
+  .segment button.on {
+    background: var(--surface); color: var(--pine);
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* Scene grid */
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    transition: box-shadow .2s, transform .2s;
+  }
+  .card:hover { transform: translateY(-2px); box-shadow: 0 2px 4px rgba(43,42,38,0.05), 0 16px 34px rgba(43,42,38,0.08); }
+  .card.selected { box-shadow: 0 0 0 1.5px var(--teal), var(--shadow); border-color: transparent; }
+
+  .thumb { height: 194px; position: relative; overflow: hidden; }
+  .thumb .scene-a { background:
+      radial-gradient(80% 90% at 25% 20%, #DCE5DE 0%, transparent 60%),
+      radial-gradient(70% 80% at 85% 80%, #E4DED2 0%, transparent 55%),
+      linear-gradient(160deg, #EDEAE2, #DDE3DC); height:100%; }
+  .thumb .scene-b { background:
+      radial-gradient(75% 85% at 80% 25%, #E7E0D3 0%, transparent 58%),
+      radial-gradient(70% 80% at 15% 85%, #D7E1DC 0%, transparent 55%),
+      linear-gradient(150deg, #E9E5DC, #DEDAD0); height:100%; }
+  .thumb .scene-c { background:
+      radial-gradient(80% 80% at 50% 15%, #DFE6E4 0%, transparent 60%),
+      radial-gradient(60% 70% at 20% 90%, #E6DFD1 0%, transparent 55%),
+      linear-gradient(165deg, #E7EAE6, #D9DAD2); height:100%; }
+  /* faint architectural line motif */
+  .thumb .grain {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(52,56,59,0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(52,56,59,0.05) 1px, transparent 1px);
+    background-size: 46px 46px;
+    mask-image: radial-gradient(120% 120% at 50% 30%, #000 30%, transparent 85%);
+    -webkit-mask-image: radial-gradient(120% 120% at 50% 30%, #000 30%, transparent 85%);
+  }
+  .chip {
+    position: absolute; top: 14px; left: 14px;
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 26px; padding: 0 10px;
+    background: rgba(251,250,246,0.92);
+    backdrop-filter: saturate(120%);
+    border: 1px solid var(--hairline);
+    border-radius: 8px;
+    font-size: 11.5px; font-weight: 500; color: var(--slate);
+    letter-spacing: 0.2px;
+  }
+  .chip .led { width: 7px; height: 7px; border-radius: 50%; }
+  .led.live { background: var(--teal); }
+  .led.proc { background: #C9A24B; }
+  .led.draft { background: #B7B2A6; }
+
+  .thumb .duration {
+    position: absolute; bottom: 14px; right: 14px;
+    height: 24px; padding: 0 9px; border-radius: 7px;
+    background: rgba(37,44,42,0.72); color: #EFEDE6;
+    font-size: 11px; font-weight: 500; letter-spacing: 0.3px;
+    display: inline-flex; align-items: center;
+  }
+
+  .card-body { padding: 16px 18px 18px; }
+  .card-title { font-size: 15px; font-weight: 600; color: var(--ink); letter-spacing: -0.1px; }
+  .card-loc { font-size: 12.5px; color: var(--slate-soft); margin-top: 3px; }
+  .card-meta {
+    margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--hairline-2);
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 12px; color: var(--slate);
+  }
+  .card-meta .stat { display: inline-flex; align-items: center; gap: 6px; }
+  .card-meta .stat svg { color: var(--slate-soft); }
+  .card-meta .who {
+    width: 24px; height: 24px; border-radius: 50%;
+    background: linear-gradient(150deg,#CBD4CC,#AEBEB4);
+    display:grid; place-items:center;
+    font-size: 10.5px; font-weight: 600; color:#3a463f;
+  }
+
+  .foot-note { margin-top: 26px; font-size: 12px; color: var(--slate-soft); text-align: center; letter-spacing: 0.2px; }
+</style>
+</head>
+<body>
+  <div class="canvas">
+
+    <!-- ===== TOP NAVIGATION ===== -->
+    <header class="nav">
+      <div class="brand">
+        <span class="mark" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M8 1.4 14 4.6v6.8L8 14.6 2 11.4V4.6L8 1.4Z" stroke="#E7ECE7" stroke-width="1.3" stroke-linejoin="round"/>
+            <path d="M8 6.1 11 7.7v.02L8 9.3 5 7.72 8 6.1Z" fill="#E7ECE7"/>
+          </svg>
+        </span>
+        <span class="brand-name">Varjo <span class="light">Teleporter</span></span>
+      </div>
+
+      <nav class="nav-links">
+        <a href="#">Overview</a>
+        <a href="#">Captures</a>
+        <a href="#" class="active">Scenes</a>
+        <a href="#">Experiences</a>
+        <a href="#">Devices</a>
+      </nav>
+
+      <div class="nav-right">
+        <button class="icon-btn" title="Search" aria-label="Search">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
+        </button>
+        <button class="icon-btn" title="Notifications" aria-label="Notifications">
+          <span class="dot"></span>
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+        </button>
+        <span class="divider-v"></span>
+        <button class="btn-primary">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          New capture
+        </button>
+        <div class="avatar" title="Ingrid Solberg">IS</div>
+      </div>
+    </header>
+
+    <!-- ===== CONTENT ===== -->
+    <main class="content">
+      <div class="page-head">
+        <div>
+          <div class="breadcrumb">Workspace · <b>Nordic Studio</b></div>
+          <h1>Scenes</h1>
+          <p class="subtitle">Manage immersive spatial captures and published telepresence experiences.</p>
+        </div>
+        <div class="segment" role="tablist" aria-label="Filter scenes">
+          <button class="on">All</button>
+          <button>Published</button>
+          <button>Processing</button>
+          <button>Drafts</button>
+        </div>
+      </div>
+
+      <section class="grid">
+        <!-- Card 1 — selected / live -->
+        <article class="card selected">
+          <div class="thumb">
+            <div class="scene-a"></div><div class="grain"></div>
+            <span class="chip"><span class="led live"></span>Published</span>
+            <span class="duration">04:12</span>
+          </div>
+          <div class="card-body">
+            <div class="card-title">Atrium — Oslo Headquarters</div>
+            <div class="card-loc">Spatial capture · 4K · 2.1 GB</div>
+            <div class="card-meta">
+              <span class="stat">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/></svg>
+                1.4M splats
+              </span>
+              <span class="who" title="Ingrid Solberg">IS</span>
+            </div>
+          </div>
+        </article>
+
+        <!-- Card 2 — processing -->
+        <article class="card">
+          <div class="thumb">
+            <div class="scene-b"></div><div class="grain"></div>
+            <span class="chip"><span class="led proc"></span>Processing · 74%</span>
+            <span class="duration">06:38</span>
+          </div>
+          <div class="card-body">
+            <div class="card-title">Fjord Pavilion — Bergen</div>
+            <div class="card-loc">Video capture · 6K · 5.8 GB</div>
+            <div class="card-meta">
+              <span class="stat">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6v6l4 2"/><circle cx="12" cy="12" r="9"/></svg>
+                Training · GPU
+              </span>
+              <span class="who" title="Anders Vik">AV</span>
+            </div>
+          </div>
+        </article>
+
+        <!-- Card 3 — draft -->
+        <article class="card">
+          <div class="thumb">
+            <div class="scene-c"></div><div class="grain"></div>
+            <span class="chip"><span class="led draft"></span>Draft</span>
+            <span class="duration">02:07</span>
+          </div>
+          <div class="card-body">
+            <div class="card-title">Reading Room — Aarhus Library</div>
+            <div class="card-loc">Spatial capture · 4K · 1.3 GB</div>
+            <div class="card-meta">
+              <span class="stat">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></svg>
+                Not published
+              </span>
+              <span class="who" title="Mette Lund">ML</span>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <p class="foot-note">Showing 3 of 18 scenes · Last synced 2 minutes ago</p>
+    </main>
+  </div>
+</body>
+</html>

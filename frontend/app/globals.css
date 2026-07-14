@@ -204,6 +204,26 @@ body {
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+
+  /* ─── Nordic top-navigation palette ──────────────────────────────────────
+     Warm, light, architectural theme scoped to the app top bar (AppTopBar).
+     These tokens intentionally live apart from the graphite --primary/--card
+     scale so the reskin is contained to the navigation surface: minimalist
+     ivory bar, cool-charcoal text, muted pine primary, desaturated teal
+     for selected/hover states. Referenced from components via
+     bg-[var(--nav-*)] / text-[var(--nav-*)] Tailwind arbitrary values. */
+  --nav-surface: #f7f4ee;        /* nav bar background — soft warm off-white */
+  --nav-hairline: #e5e0d6;       /* low-contrast warm-gray border */
+  --nav-icon-surface: #fbfaf6;   /* inputs / bordered controls fill */
+  --nav-ink: #34383b;            /* cool charcoal — primary text */
+  --nav-slate: #5c6469;          /* slate — inactive nav text */
+  --nav-slate-soft: #8a9096;     /* muted labels, placeholders, inactive icons */
+  --nav-pine: #23433a;           /* confident dark-pine — primary CTA + active text */
+  --nav-pine-hover: #1c382f;     /* pine hover */
+  --nav-pine-tint: #e7ede9;      /* selected nav-link fill */
+  --nav-teal: #4e827c;           /* desaturated teal — active icon accent */
+  --nav-teal-tint: rgba(78, 130, 124, 0.08); /* hover wash */
+  --nav-cta-fg: #f4f2ec;         /* text on pine CTA */
 }
 
 .dark {

@@ -20,7 +20,7 @@ import { useIsAdmin } from "@/lib/auth/useIsAdmin";
 import { cn } from "@/lib/utils";
 
 const iconButtonClass =
-  "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-neutral-300 transition-colors hover:bg-neutral-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-600";
+  "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--nav-slate)] transition-colors hover:bg-[var(--nav-teal-tint)] hover:text-[var(--nav-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nav-teal)]/40";
 
 const TOP_NAV_ITEM_CLASS =
   "inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[13px] font-medium leading-none whitespace-nowrap transition-colors";
@@ -47,8 +47,8 @@ function NavLink({
       className={cn(
         TOP_NAV_ITEM_CLASS,
         isActive
-          ? "bg-neutral-800 font-semibold text-white"
-          : "text-neutral-400 hover:bg-neutral-800/60 hover:text-white",
+          ? "bg-[var(--nav-pine-tint)] font-semibold text-[var(--nav-pine)] shadow-[inset_0_0_0_1px_rgba(35,67,58,0.10)]"
+          : "text-[var(--nav-slate)] hover:bg-[var(--nav-teal-tint)] hover:text-[var(--nav-ink)]",
         className,
       )}
     >
@@ -56,7 +56,7 @@ function NavLink({
         aria-hidden
         className={cn(
           "h-4 w-4 shrink-0",
-          isActive ? "text-teal-400" : "text-neutral-500",
+          isActive ? "text-[var(--nav-pine)]" : "text-[var(--nav-slate-soft)]",
         )}
         strokeWidth={isActive ? 2.25 : 1.75}
       />
@@ -79,13 +79,13 @@ function TopBarSearch({
   return (
     <label
       className={cn(
-        "flex h-9 w-full items-center gap-2.5 rounded-lg border border-neutral-800 bg-neutral-950 px-3 transition-colors",
-        "focus-within:border-neutral-700 focus-within:ring-1 focus-within:ring-neutral-700",
+        "flex h-9 w-full items-center gap-2.5 rounded-lg border border-[var(--nav-hairline)] bg-[var(--nav-icon-surface)] px-3 transition-colors",
+        "focus-within:border-[var(--nav-teal)] focus-within:ring-1 focus-within:ring-[var(--nav-teal)]/40",
         className,
       )}
     >
       <Search
-        className="h-4 w-4 shrink-0 text-neutral-500"
+        className="h-4 w-4 shrink-0 text-[var(--nav-slate-soft)]"
         strokeWidth={1.75}
         aria-hidden
       />
@@ -94,14 +94,14 @@ function TopBarSearch({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-neutral-500"
+        className="min-w-0 flex-1 bg-transparent text-sm text-[var(--nav-ink)] outline-none placeholder:text-[var(--nav-slate-soft)]"
       />
       {value.length > 0 ? (
         <button
           type="button"
           aria-label="Clear search"
           onClick={() => onChange("")}
-          className="shrink-0 rounded-full p-0.5 text-neutral-500 transition-colors hover:bg-neutral-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-600"
+          className="shrink-0 rounded-full p-0.5 text-[var(--nav-slate-soft)] transition-colors hover:bg-[var(--nav-teal-tint)] hover:text-[var(--nav-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nav-teal)]/40"
         >
           <X className="h-3.5 w-3.5" />
         </button>
@@ -134,7 +134,7 @@ export default function AppTopBar() {
   const closeMobileNav = useCallback(() => setMobileNavOpen(false), []);
 
   return (
-    <header className="sticky top-0 z-50 h-16 w-full shrink-0 border-b border-neutral-800 bg-neutral-900">
+    <header className="sticky top-0 z-50 h-16 w-full shrink-0 border-b border-[var(--nav-hairline)] bg-[var(--nav-surface)]">
       <div className="relative flex h-full items-center gap-3 px-4 sm:gap-4 sm:px-5">
         {/* Left — brand */}
         <div className="flex min-w-0 flex-1 items-center gap-3 lg:gap-5">
@@ -143,7 +143,7 @@ export default function AppTopBar() {
             aria-label={mobileNavOpen ? "Close navigation" : "Open navigation"}
             aria-expanded={mobileNavOpen}
             onClick={() => setMobileNavOpen((open) => !open)}
-            className={cn(iconButtonClass, "lg:hidden", mobileNavOpen && "bg-neutral-800 text-white")}
+            className={cn(iconButtonClass, "lg:hidden", mobileNavOpen && "bg-[var(--nav-pine-tint)] text-[var(--nav-ink)]")}
           >
             {mobileNavOpen ? (
               <X className="h-5 w-5" />
@@ -153,7 +153,7 @@ export default function AppTopBar() {
           </button>
 
           <Link href="/scenes" className="shrink-0" aria-label="Splatworks home">
-            <SplatworksLogo variant="dark" />
+            <SplatworksLogo variant="light" />
           </Link>
         </div>
 
@@ -182,12 +182,12 @@ export default function AppTopBar() {
             href="/scenes/create"
             className={cn(
               TOP_NAV_ITEM_CLASS,
-              "hidden text-teal-400 hover:bg-neutral-800/60 hover:text-teal-300 sm:inline-flex",
+              "hidden bg-[var(--nav-pine)] text-[var(--nav-cta-fg)] shadow-[0_1px_2px_rgba(35,67,58,0.25),0_6px_14px_rgba(35,67,58,0.14)] hover:bg-[var(--nav-pine-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nav-pine)]/40 sm:inline-flex",
             )}
           >
             <Plus
-              className="h-4 w-4 shrink-0 text-teal-400"
-              strokeWidth={1.75}
+              className="h-4 w-4 shrink-0 text-[var(--nav-cta-fg)]"
+              strokeWidth={2}
               aria-hidden
             />
             <span>New Scene</span>
@@ -197,7 +197,7 @@ export default function AppTopBar() {
             type="button"
             onClick={() => router.push("/scenes/create")}
             aria-label="New scene"
-            className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-500 text-black transition-colors hover:bg-teal-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/50 active:scale-[0.98] sm:hidden"
+            className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--nav-pine)] text-[var(--nav-cta-fg)] transition-colors hover:bg-[var(--nav-pine-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nav-pine)]/40 active:scale-[0.98] sm:hidden"
           >
             <Plus className="h-4 w-4" strokeWidth={2.5} aria-hidden />
           </button>
@@ -212,12 +212,12 @@ export default function AppTopBar() {
               className={cn(
                 iconButtonClass,
                 "relative",
-                commentsOverlayOpen && "bg-neutral-800 text-white",
+                commentsOverlayOpen && "bg-[var(--nav-pine-tint)] text-[var(--nav-ink)]",
               )}
             >
               <MessageSquare className="h-[18px] w-[18px]" strokeWidth={1.75} />
               {viewerCommentsCount > 0 ? (
-                <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-teal-500 px-1 text-[10px] font-semibold text-black">
+                <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--nav-pine)] px-1 text-[10px] font-semibold text-[var(--nav-cta-fg)]">
                   {viewerCommentsCount > 99 ? "99+" : viewerCommentsCount}
                 </span>
               ) : null}
@@ -241,7 +241,7 @@ export default function AppTopBar() {
           />
           <nav
             aria-label="Primary"
-            className="absolute inset-x-0 top-full z-50 flex flex-col gap-1 border-b border-neutral-800 bg-neutral-900 p-3 lg:hidden"
+            className="absolute inset-x-0 top-full z-50 flex flex-col gap-1 border-b border-[var(--nav-hairline)] bg-[var(--nav-surface)] p-3 lg:hidden"
           >
             {showSearch ? (
               <TopBarSearch
@@ -265,12 +265,12 @@ export default function AppTopBar() {
               onClick={closeMobileNav}
               className={cn(
                 TOP_NAV_ITEM_CLASS,
-                "w-full px-3.5 py-2.5 text-teal-400 hover:bg-neutral-800/60 hover:text-teal-300",
+                "w-full bg-[var(--nav-pine)] px-3.5 py-2.5 text-[var(--nav-cta-fg)] hover:bg-[var(--nav-pine-hover)]",
               )}
             >
               <Plus
-                className="h-4 w-4 shrink-0 text-teal-400"
-                strokeWidth={1.75}
+                className="h-4 w-4 shrink-0 text-[var(--nav-cta-fg)]"
+                strokeWidth={2}
                 aria-hidden
               />
               <span>New Scene</span>
