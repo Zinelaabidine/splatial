@@ -1,0 +1,100 @@
+---
+description: Splatial 3D Gaussian-splat viewer — scoped rules for the WebGL engine, React viewer UI, hooks, and trajectory math. Load this instead of the full repo CLAUDE.md when working on the viewer.
+globs:
+  - frontend/viewer/**
+  - frontend/components/viewer/**
+  - frontend/components/features/viewer/**
+  - frontend/hooks/viewer/**
+alwaysApply: false
+---
+
+# Splatial Viewer — Scoped Rules
+
+Work on the viewer without loading the Lambda, Terraform, or worker context. This
+file carries only the standards that apply to the four viewer folders below. For
+anything outside them, defer to the root `CLAUDE.md`.
+
+## 1. Where the viewer lives
+
+| Path | Role |
+|---|---|
+| `frontend/viewer/engine/` | Imperative vanilla-JS WebGL engine (`viewer.js`, `viewerEngine.js`, `viewerState.js`). No React. |
+| `frontend/viewer/engine/viewer.d.ts` | The engine's **public API surface**. This is the contract the React layer imports. |
+| `frontend/viewer/trajectoryMath.ts` | Pure camera-matrix math (`invert4`, `interpolateViewMatrix`). No React, no DOM, no side effects. |
+| `frontend/components/viewer/` | React viewer UI: dock, panels, controls, comments (`"use client"`). |
+| `frontend/components/features/viewer/GaussianViewerView.tsx` | The heavy WebGL React view, lazy-loaded (`ssr: false`). |
+| `frontend/hooks/viewer/` | Viewer hooks: controls, trajectory, presence, view URL, MP4 export. |
+
+Imports use the `@/*` alias (maps to `frontend/*`): `@/viewer/engine/viewer`,
+`@/components/viewer/...`, `@/hooks/viewer/...`.
+
+## 2. Engine vs React boundary — do not blur it
+
+- The engine (`viewer/engine/*.js`) is **imperative and framework-agnostic**. It
+  looks up DOM nodes via `document.getElementById()`, owns a
+  `requestAnimationFrame` loop, and guards re-init with a module-level flag.
+  Never import React into it.
+- React talks to the engine **only through the functions declared in
+  `viewer.d.ts`** (`startViewer`, `stopViewer`, `setViewMatrix` / `updateCameraMatrix`
+  / `clearViewMatrix` / `applyViewMatrix`, `readViewMatrix`, `getViewerSplatBuffer`,
+  `resetView`, `isViewerStarted`). If you add engine behaviour, extend `viewer.d.ts`
+  in the same change — the typed surface is the contract.
+- `LegacySplatViewer.tsx` is the bridge: it renders the DOM nodes the engine
+  expects, calls `startViewer(splatUrl)` after first paint, and `stopViewer()` on
+  unmount. Extend it rather than starting the engine from elsewhere.
+
+## 3. Binary splat data — memory & endianness
+
+- `.splat` / `.ply` bytes are streamed into a `Uint8Array` sized from
+  `content-length`; depth sorting runs in a **Web Worker** via `postMessage`, not
+  on the main thread. Keep it that way — never sort or decompress splats on the
+  main thread.
+- Parse binary buffers with `DataView` and explicit `getFloat32/getUint32(..., true)`
+  little-endian reads. Never `JSON.parse`, `TextDecoder`, or `atob` a raw splat
+  buffer.
+- Do not buffer whole splat files needlessly. `getViewerSplatBuffer()` returns a
+  clone only after download completes; treat it as potentially null.
+
+## 4. React viewer components
+
+- Every component here is a Client Component: keep the `"use client"` directive.
+- The heavy WebGL view is loaded with `next/dynamic` and `{ ssr: false }`
+  (see `GaussianViewer.tsx`, `ViewerShell.tsx`). Any new WebGL/WebGPU-touching
+  component must be lazy-loaded the same way — a WebGL context must never run
+  during SSR.
+- Build UI from `@/components/ui/` (shadcn) primitives and Tailwind utilities with
+  `cn()`. No raw inline styles. Reuse `ViewerDock`, `ShotsPanel`, `ToursPanel`,
+  `TrajectoryControls` rather than duplicating panel/layout logic.
+- TypeScript is `strict`. No `any` (use `unknown` + narrowing), no `!` non-null
+  assertions, prefer `type` aliases for props. Shared API shapes live in
+  `types/api.ts`, not inline.
+
+## 5. Camera trajectory & animation
+
+- Trajectory interpolation math stays **pure** in `trajectoryMath.ts` — no React,
+  no DOM. This keeps it unit-testable and is the right place to optimize hot loops.
+- Animation loops (`useCameraTrajectory.ts`) drive the camera by calling the
+  engine's `setViewMatrix`; store the handle in a `rafRef` and cancel it on
+  cleanup. Never leak a `requestAnimationFrame` loop across unmount.
+- Camera override state is shared through `CameraTrajectoryContext`. Consume it via
+  the hooks; don't reach into engine globals from components.
+
+## 6. Optimization checklist (this is the goal)
+
+When optimizing the viewer, prefer in this order:
+1. Move CPU-bound work (sorting, decompression, matrix batches) into the Worker or
+   into pure functions in `trajectoryMath.ts`.
+2. Avoid per-frame allocations in the RAF loop — reuse typed arrays / matrices.
+3. Minimize main-thread → Worker `postMessage` payloads; transfer buffers instead
+   of copying where possible.
+4. Keep the heavy view behind `dynamic(..., { ssr: false })` so it never blocks
+   first paint.
+5. Profile before raising concurrency or changing part/buffer sizes.
+
+## 7. Before you finish
+
+- `cd frontend && npm run build` — zero TypeScript errors.
+- `npm run lint` clean for touched files.
+- No new `any`, no hardcoded API URLs (use `getApiBaseUrl()`), no token storage in
+  `localStorage`/`sessionStorage`.
+- If the engine's callable surface changed, `viewer.d.ts` was updated to match.
