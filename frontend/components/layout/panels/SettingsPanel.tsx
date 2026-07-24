@@ -32,7 +32,13 @@ function formatGB(bytes: number): string {
   return `${gb >= 10 ? gb.toFixed(0) : gb.toFixed(1)} GB`;
 }
 
-function StorageUsageBlock({ open }: { open: boolean }) {
+function formatPlanLabel(tier: string | undefined): string {
+  if (tier === "pro") return "Pro plan";
+  if (tier === "free") return "Free plan";
+  return "—";
+}
+
+function useAccountUsage(open: boolean) {
   const [usage, setUsage] = useState<AccountUsageResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -53,7 +59,7 @@ function StorageUsageBlock({ open }: { open: boolean }) {
           ? err.message
           : err instanceof Error
             ? err.message
-            : "Failed to load storage usage";
+            : "Failed to load account usage";
       setError(message);
     }
   }, []);
@@ -65,6 +71,10 @@ function StorageUsageBlock({ open }: { open: boolean }) {
     return () => abortRef.current?.abort();
   }, [open, load]);
 
+  return { usage, error };
+}
+
+function StorageUsageBlock({ usage, error }: { usage: AccountUsageResponse | null; error: string | null }) {
   if (error || !usage) return null;
 
   const pct =
@@ -116,6 +126,8 @@ function AccountMenuPopup({
   onClose,
   onSignOut,
 }: AccountMenuPopupProps) {
+  const { usage, error } = useAccountUsage(open);
+
   return (
     <section
       role="dialog"
@@ -151,10 +163,12 @@ function AccountMenuPopup({
         <div className={cn(ACTION_ROW_CLASS, "cursor-default hover:bg-transparent")}>
           <CreditCard className="h-4 w-4 shrink-0 text-[var(--nord-slate)]" strokeWidth={1.75} aria-hidden />
           <span className="min-w-0 flex-1 truncate">Plan</span>
-          <span className="shrink-0 text-[13px] text-[var(--nord-slate)]">{account.plan}</span>
+          <span className="shrink-0 text-[13px] text-[var(--nord-slate)]">
+            {formatPlanLabel(usage?.tier)}
+          </span>
         </div>
 
-        <StorageUsageBlock open={open} />
+        <StorageUsageBlock usage={usage} error={error} />
 
         <Link
           href="/settings/profile"

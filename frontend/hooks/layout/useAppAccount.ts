@@ -20,6 +20,5 @@ export function useAppAccount(): UserAccount {
     name: displayName,
     initials,
     email,
-    plan: "Pro plan",
   };
 }

@@ -105,21 +105,21 @@ body {
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
-  color: #8a9096;
+  color: #000000;
   font-size: 0.875rem;
   font-weight: 500;
   padding: 0.875rem 1rem;
 }
 
 .auth-gate [data-amplify-authenticator] .amplify-tabs__item[data-state="active"] {
-  color: #4e827c;
-  border-bottom-color: #4e827c;
+  color: #000000;
+  border-bottom-color: #000000;
 }
 
 .auth-gate [data-amplify-authenticator] .amplify-label,
 .auth-gate [data-amplify-authenticator] .amplify-field__show-password {
   font-size: 0.8125rem;
-  color: #8a9096;
+  color: #000000;
 }
 
 .auth-gate [data-amplify-authenticator] .amplify-input,
@@ -136,13 +136,13 @@ body {
 .auth-gate [data-amplify-authenticator] .amplify-input:focus,
 .auth-gate [data-amplify-authenticator] .amplify-select:focus {
   outline: none;
-  border-color: #4e827c;
+  border-color: #000000;
   box-shadow: 0 0 0 3px rgba(78, 130, 124, 0.18);
 }
 
 .auth-gate [data-amplify-authenticator] .amplify-button--primary {
-  background: #4e827c;
-  color: #f4f2ec;
+  background: #ffffff;
+  color: #000000;
   border: none;
   border-radius: 0.625rem;
   font-weight: 600;
@@ -152,16 +152,16 @@ body {
 }
 
 .auth-gate [data-amplify-authenticator] .amplify-button--primary:hover {
-  background: #3f6b66;
+  background: #f0f0f0;
 }
 
 .auth-gate [data-amplify-authenticator] .amplify-button--link {
-  color: #4e827c;
+  color: #000000;
   font-size: 0.8125rem;
 }
 
 .auth-gate [data-amplify-authenticator] .amplify-button--link:hover {
-  color: #3f6b66;
+  color: #000000;
   background: transparent;
   text-decoration: underline;
 }
@@ -172,66 +172,64 @@ body {
 }
 
 :root {
-  /* Retuned to the Nordic light palette (see --nord-* block below). */
-  --background: #fbfaf8;
-  --foreground: #1c1f21;
-  --card: #fefefd;
-  --card-foreground: #1c1f21;
-  --popover: #fefefd;
-  --popover-foreground: #1c1f21;
-  --primary: #23433a;
-  --primary-foreground: #f4f2ec;
-  --secondary: #f1f0ec;
-  --secondary-foreground: #1c1f21;
-  --muted: #f0ede6;
-  --muted-foreground: #45494c;
-  --accent: #e7ede9;
-  --accent-foreground: #23433a;
+  /* Retuned to a plain white/black palette (see --nord-* block below). */
+  --background: #ffffff;
+  --foreground: #000000;
+  --card: #ffffff;
+  --card-foreground: #000000;
+  --popover: #ffffff;
+  --popover-foreground: #000000;
+  --primary: #ffffff;
+  --primary-foreground: #000000;
+  --secondary: #ffffff;
+  --secondary-foreground: #000000;
+  --muted: #ffffff;
+  --muted-foreground: #000000;
+  --accent: #ffffff;
+  --accent-foreground: #000000;
   --destructive: #b3564d;
   --border: var(--nord-hairline);
   --input: var(--nord-hairline);
-  --ring: #4e827c;
+  --ring: #000000;
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
   --radius: 0.625rem;
-  --sidebar: #f8f6f2;
-  --sidebar-foreground: #1c1f21;
-  --sidebar-primary: #23433a;
-  --sidebar-primary-foreground: #f4f2ec;
-  --sidebar-accent: #e7ede9;
-  --sidebar-accent-foreground: #23433a;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #000000;
+  --sidebar-primary: #ffffff;
+  --sidebar-primary-foreground: #000000;
+  --sidebar-accent: #ffffff;
+  --sidebar-accent-foreground: #000000;
   --sidebar-border: var(--nord-hairline);
-  --sidebar-ring: #4e827c;
+  --sidebar-ring: #000000;
 
-  /* ─── Nordic light theme palette ─────────────────────────────────────────
-     Warm, minimalist, architectural theme applied across the whole app.
-     Cool-charcoal text on warm ivory/stone, muted pine primary, desaturated
-     teal for selection/hover, warm-gray hairlines. Components reference these
+  /* ─── White / black theme palette ────────────────────────────────────────
+     All surfaces white, all text black. Components reference these
      via bg-[var(--nord-*)] / text-[var(--nord-*)] Tailwind arbitrary values;
      the shadcn :root tokens above are also retuned to this palette so
      token-driven primitives (Button, etc.) inherit it automatically. */
-  --nord-bg: #fbfaf8;            /* page canvas — near-white */
-  --nord-bg-2: #f3f1ec;          /* deeper canvas / gradient edge */
-  --nord-surface: #fefefd;       /* cards, panels, menus */
-  --nord-surface-2: #f8f6f2;     /* secondary surface, nav bar, toolbars */
-  --nord-card: #fefefd;          /* elevated card face */
+  --nord-bg: #ffffff;            /* page canvas — white */
+  --nord-bg-2: #ffffff;          /* deeper canvas / gradient edge */
+  --nord-surface: #ffffff;       /* cards, panels, menus */
+  --nord-surface-2: #ffffff;     /* secondary surface, nav bar, toolbars */
+  --nord-card: #ffffff;          /* elevated card face */
   --nord-hairline: #e2ddd2;      /* low-contrast warm-gray border */
   --nord-hairline-2: #ece8e0;    /* softer inner divider */
-  --nord-ink: #1c1f21;           /* near-black — primary text */
-  --nord-slate: #45494c;         /* dark slate — secondary text */
-  --nord-slate-soft: #6f7478;    /* muted labels, inactive icons */
-  --nord-muted: #82878b;         /* faint captions / placeholders */
-  --nord-pine: #23433a;          /* confident dark-pine — primary CTA + active */
-  --nord-pine-hover: #1c382f;    /* pine hover */
-  --nord-pine-tint: #e7ede9;     /* selected / active fill */
-  --nord-teal: #4e827c;          /* desaturated teal — accent, focus ring */
-  --nord-teal-tint: rgba(78, 130, 124, 0.10);  /* hover / subtle wash */
-  --nord-tint: rgba(52, 56, 59, 0.05);          /* neutral raised fill (glass) */
-  --nord-cta-fg: #f4f2ec;        /* text/icon on pine or accent fills */
-  --nord-scrim: rgba(38, 44, 42, 0.55);         /* dark scrim over imagery */
+  --nord-ink: #000000;           /* black — primary text */
+  --nord-slate: #000000;         /* black — secondary text */
+  --nord-slate-soft: #000000;    /* black — muted labels, inactive icons */
+  --nord-muted: #000000;         /* black — faint captions / placeholders */
+  --nord-pine: #ffffff;          /* white — primary CTA + active fill */
+  --nord-pine-hover: #f0f0f0;    /* pine hover */
+  --nord-pine-tint: #ffffff;     /* selected / active fill */
+  --nord-teal: #000000;          /* black — accent, focus ring */
+  --nord-teal-tint: rgba(0, 0, 0, 0.10);  /* hover / subtle wash */
+  --nord-tint: rgba(0, 0, 0, 0.05);          /* neutral raised fill (glass) */
+  --nord-cta-fg: #000000;        /* text/icon on pine or accent fills */
+  --nord-scrim: rgba(0, 0, 0, 0.55);         /* dark scrim over imagery */
   --nord-success: #3f7d63;       /* success / live green */
   --nord-success-tint: #e6efe8;  /* success fill */
   --nord-danger: #b3564d;        /* error red */
@@ -474,7 +472,7 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #8a9096;
+  color: #000000;
 }
 .traj-label { flex: 1; }
 .traj-dot {
@@ -524,7 +522,7 @@ body {
 .traj-btn--play    { border-color: rgba(34,197,94,0.6);  color: #3f7d63; }
 .traj-btn--export  { border-color: rgba(59,130,246,0.6); color: #3b6ea5; }
 .traj-btn--stop    { border-color: rgba(249,115,22,0.6); color: #b5701f; }
-.traj-btn--clear   { border-color: rgba(52, 56, 59, 0.10); color: #8a9096; }
+.traj-btn--clear   { border-color: rgba(52, 56, 59, 0.10); color: #000000; }
 
 /* ─── Viewer dock (unified bottom control bar) ──────────────────────────────
    Replaces three independently-floating widgets (Shots top-right, Tours
@@ -558,7 +556,7 @@ body {
   border-radius: 7px;
   border: 1px solid transparent;
   background: transparent;
-  color: #5c6469;
+  color: #000000;
   font-size: 11px;
   font-family: ui-monospace, 'Cascadia Code', monospace;
   cursor: pointer;
@@ -569,7 +567,7 @@ body {
 .viewer-dock-btn--active {
   background: rgba(78, 130, 124, 0.16);
   border-color: rgba(78, 130, 124, 0.4);
-  color: #4e827c;
+  color: #000000;
 }
 .viewer-dock-dot {
   position: absolute;
@@ -653,7 +651,7 @@ body {
 }
 .shots-btn:hover:not(:disabled) { background: rgba(52, 56, 59, 0.10); }
 .shots-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.shots-btn--save { border-color: rgba(78, 130, 124, 0.55); color: #4e827c; }
+.shots-btn--save { border-color: rgba(78, 130, 124, 0.55); color: #000000; }
 .shots-btn--load { align-self: center; margin-top: 2px; }
 .shots-save-form { display: flex; flex-direction: column; gap: 5px; }
 .shots-input {
@@ -712,7 +710,7 @@ body {
 }
 .shots-creator {
   font-size: 10px;
-  color: #4e827c;
+  color: #000000;
   text-decoration: none;
 }
 .shots-creator:hover { text-decoration: underline; }
@@ -722,7 +720,7 @@ body {
   padding-right: 2px;
 }
 .shots-icon-btn {
-  color: #8a9096 !important;
+  color: #000000 !important;
   min-width: 24px !important;
   height: 24px !important;
 }
@@ -735,14 +733,14 @@ body {
   font-size: 10px;
   line-height: 1.4;
 }
-.shots-empty { color: #8a9096; }
-.shots-notice { color: #8a9096; }
+.shots-empty { color: #000000; }
+.shots-notice { color: #000000; }
 .shots-error { color: #b3564d; }
 .shots-loading {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #8a9096;
+  color: #000000;
 }
 
 /* ─── Tours panel (guided camera flythroughs) ───────────────────────────── */
@@ -796,7 +794,7 @@ body {
 .tours-btn:hover:not(:disabled) { background: rgba(52, 56, 59, 0.10); }
 .tours-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .tours-btn--new { border-color: rgba(147, 197, 253, 0.55); color: #3b6ea5; }
-.tours-btn--save { border-color: rgba(78, 130, 124, 0.55); color: #4e827c; align-self: flex-start; }
+.tours-btn--save { border-color: rgba(78, 130, 124, 0.55); color: #000000; align-self: flex-start; }
 .tours-btn--load { align-self: center; margin-top: 2px; }
 .tours-btn--small { font-size: 10px; padding: 1px 5px; }
 .tours-builder { display: flex; flex-direction: column; gap: 5px; overflow-y: auto; }
@@ -820,7 +818,7 @@ body {
   justify-content: space-between;
   gap: 8px;
   font-size: 10px;
-  color: #8a9096;
+  color: #000000;
 }
 .tours-stops-header {
   display: flex;
@@ -828,10 +826,10 @@ body {
   justify-content: space-between;
   gap: 6px;
 }
-.tours-stops-label { font-size: 10px; color: #8a9096; }
+.tours-stops-label { font-size: 10px; color: #000000; }
 .tours-stops-actions { display: flex; gap: 4px; }
 .tours-shot-picker { display: flex; flex-direction: column; gap: 4px; }
-.tours-shot-picker-label { font-size: 10px; color: #8a9096; }
+.tours-shot-picker-label { font-size: 10px; color: #000000; }
 .tours-shot-picker-list {
   display: flex;
   flex-wrap: wrap;
@@ -861,7 +859,7 @@ body {
   flex-shrink: 0;
   width: 1rem;
   text-align: center;
-  color: #8a9096;
+  color: #000000;
   font-size: 10px;
 }
 .tours-stop-controls { display: flex; align-items: center; flex-shrink: 0; }
@@ -898,10 +896,10 @@ body {
   white-space: nowrap;
   max-width: 100%;
 }
-.tours-row-meta { font-size: 10px; color: #8a9096; }
+.tours-row-meta { font-size: 10px; color: #000000; }
 .tours-creator {
   font-size: 10px;
-  color: #4e827c;
+  color: #000000;
   text-decoration: none;
 }
 .tours-creator:hover { text-decoration: underline; }
@@ -911,7 +909,7 @@ body {
   padding-right: 2px;
 }
 .tours-icon-btn {
-  color: #8a9096 !important;
+  color: #000000 !important;
   min-width: 24px !important;
   height: 24px !important;
 }
@@ -937,14 +935,14 @@ body {
   font-size: 10px;
   line-height: 1.4;
 }
-.tours-empty { color: #8a9096; }
-.tours-notice { color: #8a9096; }
+.tours-empty { color: #000000; }
+.tours-notice { color: #000000; }
 .tours-error { color: #b3564d; }
 .tours-loading {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #8a9096;
+  color: #000000;
 }
 
 /* Dashboard sculpture viewport — multi-ring animation */
@@ -1094,13 +1092,13 @@ body {
 
 /* Header primary CTA — "New Scene" in the top bar. */
 .sw-header-cta {
-  background: #4e827c;
-  color: #f4f2ec;
+  background: #ffffff;
+  color: #000000;
   box-shadow: 0 2px 8px rgba(78, 130, 124, 0.28);
 }
 
 .sw-header-cta:hover {
-  background: #3f6b66;
+  background: #f0f0f0;
 }
 
 /* Viewer scene actions — unified floating pill on the canvas. */
@@ -1188,7 +1186,7 @@ body {
   box-shadow:
     0 2px 8px rgba(35, 67, 58, 0.20),
     inset 0 1px 0 rgba(255, 255, 255, 0.12);
-  color: #f4f2ec;
+  color: #000000;
   transition: background-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
 }
 
@@ -1283,7 +1281,7 @@ body {
   font-family: var(--font-jetbrains), ui-monospace, monospace;
   font-size: 11px;
   font-weight: 500;
-  color: #5c6469;
+  color: #000000;
   line-height: 1;
 }
 
@@ -1326,7 +1324,7 @@ body {
   background: rgba(52, 56, 59, 0.04);
   padding: 0.3rem 0.65rem;
   font-size: 11px;
-  color: #5c6469;
+  color: #000000;
 }
 
 .sw-dash-stat strong {

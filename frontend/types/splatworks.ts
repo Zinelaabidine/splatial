@@ -107,7 +107,6 @@ export type UserAccount = {
   name: string;
   initials: string;
   email: string;
-  plan: string;
 };
 
 export type SplatsSortOption = "newest" | "oldest" | "name";
