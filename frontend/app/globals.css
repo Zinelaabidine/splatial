@@ -172,64 +172,74 @@ body {
 }
 
 :root {
-  /* Retuned to a plain white/black palette (see --nord-* block below). */
-  --background: #ffffff;
-  --foreground: #000000;
+  /* Restored semantic palette — see --nord-* block below for the source of
+     truth. These shadcn tokens mirror it so token-driven primitives
+     (Button, etc.) inherit the same hierarchy and accent automatically. */
+  --background: #fbfaf6;
+  --foreground: #1c1c1a;
   --card: #ffffff;
-  --card-foreground: #000000;
+  --card-foreground: #1c1c1a;
   --popover: #ffffff;
-  --popover-foreground: #000000;
-  --primary: #ffffff;
-  --primary-foreground: #000000;
-  --secondary: #ffffff;
-  --secondary-foreground: #000000;
-  --muted: #ffffff;
-  --muted-foreground: #000000;
-  --accent: #ffffff;
-  --accent-foreground: #000000;
+  --popover-foreground: #1c1c1a;
+  --primary: #23433a;
+  --primary-foreground: #ffffff;
+  --secondary: #f4f4f1;
+  --secondary-foreground: #1c1c1a;
+  --muted: #f4f4f1;
+  --muted-foreground: #6b6b66;
+  --accent: #eef0ee;
+  --accent-foreground: #1c1c1a;
   --destructive: #b3564d;
   --border: var(--nord-hairline);
   --input: var(--nord-hairline);
-  --ring: #000000;
+  --ring: #4e827c;
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
   --radius: 0.625rem;
-  --sidebar: #ffffff;
-  --sidebar-foreground: #000000;
-  --sidebar-primary: #ffffff;
-  --sidebar-primary-foreground: #000000;
-  --sidebar-accent: #ffffff;
-  --sidebar-accent-foreground: #000000;
+  --sidebar: #fbfaf6;
+  --sidebar-foreground: #1c1c1a;
+  --sidebar-primary: #23433a;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eef0ee;
+  --sidebar-accent-foreground: #1c1c1a;
   --sidebar-border: var(--nord-hairline);
-  --sidebar-ring: #000000;
+  --sidebar-ring: #4e827c;
 
-  /* ─── White / black theme palette ────────────────────────────────────────
-     All surfaces white, all text black. Components reference these
-     via bg-[var(--nord-*)] / text-[var(--nord-*)] Tailwind arbitrary values;
-     the shadcn :root tokens above are also retuned to this palette so
-     token-driven primitives (Button, etc.) inherit it automatically. */
-  --nord-bg: #ffffff;            /* page canvas — white */
-  --nord-bg-2: #ffffff;          /* deeper canvas / gradient edge */
+  /* ─── Splatial palette ───────────────────────────────────────────────────
+     A small, deliberate set of hues instead of an accidental black/white
+     flattening: warm off-white neutrals for surfaces, a warm charcoal for
+     text (not pure black, easier on the eyes and distinguishable from true
+     "ink"), a forest-green brand accent for primary actions, and a muted
+     teal for secondary accents/focus. --nord-teal (#4e827c) and --nord-pine
+     (#23433a) are chosen to match hex values already hardcoded elsewhere in
+     this file (.sw-new-scene gradient, .sw-nav-active accent bar, focus
+     rings) so those components — which never stopped using the "real"
+     brand color — now agree with the variables instead of silently
+     diverging from them. Status hues (success/danger/queued-amber) stay a
+     distinct triad so job state is always readable at a glance. */
+  --nord-bg: #fbfaf6;            /* page canvas — warm off-white */
+  --nord-bg-2: #f4f2ec;          /* deeper canvas / gradient edge */
   --nord-surface: #ffffff;       /* cards, panels, menus */
-  --nord-surface-2: #ffffff;     /* secondary surface, nav bar, toolbars */
+  --nord-surface-2: #f6f5f0;     /* secondary surface, nav bar, toolbars */
   --nord-card: #ffffff;          /* elevated card face */
   --nord-hairline: #e2ddd2;      /* low-contrast warm-gray border */
   --nord-hairline-2: #ece8e0;    /* softer inner divider */
-  --nord-ink: #000000;           /* black — primary text */
-  --nord-slate: #000000;         /* black — secondary text */
-  --nord-slate-soft: #000000;    /* black — muted labels, inactive icons */
-  --nord-muted: #000000;         /* black — faint captions / placeholders */
-  --nord-pine: #ffffff;          /* white — primary CTA + active fill */
-  --nord-pine-hover: #f0f0f0;    /* pine hover */
-  --nord-pine-tint: #ffffff;     /* selected / active fill */
-  --nord-teal: #000000;          /* black — accent, focus ring */
-  --nord-teal-tint: rgba(0, 0, 0, 0.10);  /* hover / subtle wash */
-  --nord-tint: rgba(0, 0, 0, 0.05);          /* neutral raised fill (glass) */
-  --nord-cta-fg: #000000;        /* text/icon on pine or accent fills */
+  --nord-ink: #1c1c1a;           /* warm charcoal — primary text/headings */
+  --nord-slate: #6b6b66;         /* medium warm gray — secondary text/captions */
+  --nord-slate-soft: #8a8a86;    /* lighter gray — muted labels, inactive icons */
+  --nord-muted: #a3a39c;         /* faint captions / placeholders */
+  --nord-pine: #23433a;          /* forest green — primary CTA + active fill */
+  --nord-pine-hover: #1c382f;    /* pine hover (matches .sw-new-scene hover) */
+  --nord-pine-tint: rgba(35, 67, 58, 0.12);  /* selected / active fill */
+  --nord-teal: #4e827c;          /* muted teal — accent, focus ring */
+  --nord-teal-tint: rgba(78, 130, 124, 0.14);  /* hover / subtle wash */
+  --nord-tint: rgba(28, 28, 26, 0.05);          /* neutral raised fill (glass) */
+  --nord-cta-fg: #ffffff;        /* text/icon on pine or accent fills */
   --nord-scrim: rgba(0, 0, 0, 0.55);         /* dark scrim over imagery */
+  --nord-scrim-fg: #f5f4ef;      /* text/icons drawn on --nord-scrim — always light, regardless of theme */
   --nord-success: #3f7d63;       /* success / live green */
   --nord-success-tint: #e6efe8;  /* success fill */
   --nord-danger: #b3564d;        /* error red */

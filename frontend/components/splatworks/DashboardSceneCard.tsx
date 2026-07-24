@@ -3,11 +3,13 @@
 import { useState } from "react";
 import { RefreshCw, Send, Settings2, XCircle } from "lucide-react";
 
+import { ImageOff } from "lucide-react";
+
 import SceneCardMenu from "@/components/splatworks/dashboard/SceneCardMenu";
 import SceneCreatorRow from "@/components/splatworks/dashboard/SceneCreatorRow";
 import SceneStatChips from "@/components/splatworks/dashboard/SceneStatChips";
 import PointCloudThumbnail from "@/components/splatworks/PointCloudThumbnail";
-import StatusDot, { STATUS_LABELS } from "@/components/splatworks/StatusDot";
+import StatusDot, { STATUS_LABELS, STATUS_STYLES } from "@/components/splatworks/StatusDot";
 import SceneTaxonomyDisplay from "@/components/features/scenes/SceneTaxonomyDisplay";
 import { SceneVisibilityBadge } from "@/components/features/scenes/SceneVisibilityControl";
 import AdvancedSettingsPanel from "@/components/upload/AdvancedSettingsPanel";
@@ -17,18 +19,7 @@ import { isActiveGpuJobStatus } from "@/lib/scenes/sceneMappers";
 import { cn } from "@/lib/utils";
 import type { SubmitJobOptions } from "@/services/jobsService";
 import type { ColmapConfig, SceneVisibility, TrainConfig } from "@/types/api";
-import type { DashboardScene, SceneStatus } from "@/types/splatworks";
-
-const DARK_STATUS: Record<
-  SceneStatus,
-  { tile: string; text: string; pulse?: boolean }
-> = {
-  draft: { tile: "#18181c", text: "#b8b8c2" },
-  queued: { tile: "#18181c", text: "#d4a24c" },
-  training: { tile: "#18181c", text: "#e8e8ec", pulse: true },
-  completed: { tile: "#18181c", text: "#8fd6ab" },
-  failed: { tile: "#18181c", text: "#e0918f" },
-};
+import type { DashboardScene } from "@/types/splatworks";
 
 type DashboardSceneCardProps = {
   scene: DashboardScene;
@@ -66,7 +57,7 @@ export default function DashboardSceneCard({
   visibilityUpdating = false,
   density = "default",
 }: DashboardSceneCardProps) {
-  const styles = DARK_STATUS[scene.status];
+  const styles = STATUS_STYLES[scene.status];
   const visibility = scene.visibility ?? "PRIVATE";
   const isViewable = scene.status === "completed";
   const showSubmit = canSubmitScene(scene);
@@ -135,24 +126,35 @@ export default function DashboardSceneCard({
             variant="dark-card"
             className="h-full w-full"
           />
+        ) : scene.status === "completed" ? (
+          // A completed job with neither a thumbnail nor point-cloud preview
+          // (e.g. thumbnail generation failed separately from training).
+          // Previously this fell through to StatusTile, which has no
+          // "completed" branch and rendered an empty tile with no message.
+          <div className="flex h-full flex-col items-center justify-center gap-1.5 bg-[var(--nord-tint)] px-4 text-center">
+            <ImageOff className="h-5 w-5 text-[var(--nord-slate-soft)]" strokeWidth={1.5} />
+            <p className="font-sw-mono text-[10px] text-[var(--nord-slate)]">
+              Preview unavailable
+            </p>
+          </div>
         ) : (
           <StatusTile
             scene={scene}
             tileBg={styles.tile}
             textColor={styles.text}
-            pulse={styles.pulse}
+            pulse={styles.dotPulse}
             compact={isCompact}
           />
         )}
 
         <SceneVisibilityBadge
           visibility={visibility}
-          className="absolute left-2 top-2 border-[var(--nord-hairline)] bg-[var(--nord-scrim)] text-[9px] backdrop-blur-sm"
+          className="absolute left-2 top-2 border-[var(--nord-hairline)] bg-[var(--nord-scrim)] text-[9px] text-[var(--nord-scrim-fg)] backdrop-blur-sm"
         />
 
         {scene.status !== "completed" && (
-          <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full border border-[var(--nord-hairline)] bg-[var(--nord-scrim)] px-1.5 py-0.5 font-sw-mono text-[9px] font-medium uppercase tracking-wide text-[var(--nord-ink)] backdrop-blur-sm">
-            <StatusDot status={scene.status} pulse={styles.pulse} className="h-1.5 w-1.5" />
+          <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full border border-[var(--nord-hairline)] bg-[var(--nord-scrim)] px-1.5 py-0.5 font-sw-mono text-[9px] font-medium uppercase tracking-wide text-[var(--nord-scrim-fg)] backdrop-blur-sm">
+            <StatusDot status={scene.status} pulse={styles.dotPulse} className="h-1.5 w-1.5" />
             {scene.apiStatus === "UPLOADED"
               ? "Ready"
               : scene.apiStatus === "PENDING_UPLOAD"

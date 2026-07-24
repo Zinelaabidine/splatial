@@ -19,7 +19,7 @@ export function SceneVisibilityBadge({ visibility, className }: SceneVisibilityB
       className={cn(
         "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ring-1",
         isPublic
-          ? "bg-[var(--nord-success)] text-[var(--nord-success)] ring-[var(--nord-success)]"
+          ? "bg-[var(--nord-success-tint)] text-[var(--nord-success)] ring-[var(--nord-success)]"
           : "bg-[var(--nord-tint)] text-[var(--nord-ink)] ring-[var(--nord-hairline)]",
         className,
       )}

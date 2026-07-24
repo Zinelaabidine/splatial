@@ -16,13 +16,14 @@ function buildBackgroundImage(
   layers: string[],
   dotSize: number,
   fadeStop: string,
+  dotRgb: string,
 ): string {
   const tints = layers.map(
     (color) => `radial-gradient(circle at 50% 47%, ${color}, transparent ${fadeStop})`,
   );
   const dotPx = dotSize >= 7 ? 0.6 : 0.7;
   const dotOpacity = dotSize >= 7 ? 0.85 : 0.9;
-  const dots = `radial-gradient(rgba(255,255,255,${dotOpacity}) ${dotPx}px, transparent ${dotPx + 0.1}px)`;
+  const dots = `radial-gradient(rgba(${dotRgb},${dotOpacity}) ${dotPx}px, transparent ${dotPx + 0.1}px)`;
   return [...tints, dots].join(", ");
 }
 
@@ -35,9 +36,17 @@ export default function PointCloudThumbnail({
 }: PointCloudThumbnailProps) {
   const dotSize = preview.dotSize ?? 6;
   const fadeStop = variant === "light-ready" ? "58%" : "52%";
+  // Dots read as "points" against the base — white pops on the dark-card
+  // gradient, but the same white was invisible against the (previously
+  // unreachable) light base. Use a dark warm-gray dot for the light variant.
+  const dotRgb = variant === "light-ready" ? "28,28,26" : "255,255,255";
 
-  const backgroundImage = buildBackgroundImage(preview.tintLayers, dotSize, fadeStop);
+  const backgroundImage = buildBackgroundImage(preview.tintLayers, dotSize, fadeStop, dotRgb);
 
+  // "light-ready" is meant for point-cloud tiles inside the light dashboard
+  // theme; it previously still set a near-black backgroundColor (#0a0e13),
+  // silently contradicting its own name and clashing with the surrounding
+  // white card. It now actually renders light.
   const baseStyle =
     variant === "dark-card"
       ? {
@@ -45,7 +54,7 @@ export default function PointCloudThumbnail({
             preview.baseGradient ??
             "radial-gradient(circle at 50% 44%, #13202b, #0a0d11 72%)",
         }
-      : { backgroundColor: "#0a0e13" };
+      : { backgroundColor: "#f4f4f1" };
 
   const bgSize =
     preview.tintLayers.map(() => "auto").join(", ") + `, ${dotSize}px ${dotSize}px`;
