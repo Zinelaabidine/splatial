@@ -217,11 +217,21 @@ export default function CommentSection({
     async (commentId: string) => {
       if (deletingId) return;
 
+      const target = comments.find((c) => c.commentId === commentId);
+      const replyCount = target?.replyCount ?? 0;
+      if (replyCount > 0) {
+        const confirmed = window.confirm(
+          `Delete this comment and ${replyCount} ${replyCount === 1 ? "reply" : "replies"}?`,
+        );
+        if (!confirmed) return;
+      }
+
       const previousComments = comments;
       const previousCount = commentsCount;
+      const removedCount = 1 + replyCount;
 
       setComments((prev) => prev.filter((c) => c.commentId !== commentId));
-      updateCount(Math.max(0, commentsCount - 1));
+      updateCount(Math.max(0, commentsCount - removedCount));
       setDeletingId(commentId);
       setPostError(null);
 

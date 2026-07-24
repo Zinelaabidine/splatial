@@ -15,6 +15,8 @@ type ViewerDockProps = {
   showShots?: boolean;
   /** Hide the Tours button entirely when the viewer has no sceneId. */
   showTours?: boolean;
+  /** Trajectory recording is a creator-only dev tool. */
+  showTrajectory?: boolean;
 };
 
 /**
@@ -32,6 +34,7 @@ export default function ViewerDock({
   onSelect,
   showShots = true,
   showTours = true,
+  showTrajectory = true,
 }: ViewerDockProps) {
   const traj = useCameraTrajectoryContext();
   const trajectoryActive = traj.status !== "idle";
@@ -83,27 +86,29 @@ export default function ViewerDock({
         </button>
       ) : null}
 
-      <button
-        type="button"
-        className={cn(
-          "viewer-dock-btn",
-          activePanel === "trajectory" && "viewer-dock-btn--active",
-        )}
-        aria-pressed={activePanel === "trajectory"}
-        aria-label={
-          trajectoryActive ? "Trajectory (recording or playing)" : "Trajectory"
-        }
-        title="Trajectory"
-        onClick={() => onSelect("trajectory")}
-      >
-        <span className="relative flex items-center">
-          <Film className="size-4" strokeWidth={1.75} aria-hidden />
-          {trajectoryActive ? (
-            <span className="viewer-dock-dot" aria-hidden />
-          ) : null}
-        </span>
-        <span className="hidden sm:inline">Trajectory</span>
-      </button>
+      {showTrajectory ? (
+        <button
+          type="button"
+          className={cn(
+            "viewer-dock-btn",
+            activePanel === "trajectory" && "viewer-dock-btn--active",
+          )}
+          aria-pressed={activePanel === "trajectory"}
+          aria-label={
+            trajectoryActive ? "Trajectory (recording or playing)" : "Trajectory"
+          }
+          title="Trajectory"
+          onClick={() => onSelect("trajectory")}
+        >
+          <span className="relative flex items-center">
+            <Film className="size-4" strokeWidth={1.75} aria-hidden />
+            {trajectoryActive ? (
+              <span className="viewer-dock-dot" aria-hidden />
+            ) : null}
+          </span>
+          <span className="hidden sm:inline">Trajectory</span>
+        </button>
+      ) : null}
     </div>
   );
 }

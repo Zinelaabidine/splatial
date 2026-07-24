@@ -8,10 +8,11 @@ import { cn } from "@/lib/utils";
 
 type ShareButtonProps = {
   sceneId: string;
+  sceneName?: string;
 };
 
-/** Copies the current scene's viewer URL to the clipboard. */
-export default function ShareButton({ sceneId }: ShareButtonProps) {
+/** Copies or natively shares the current scene's viewer URL. */
+export default function ShareButton({ sceneId, sceneName }: ShareButtonProps) {
   const [notice, setNotice] = useState<string | null>(null);
 
   const handleShare = useCallback(async () => {
@@ -19,14 +20,31 @@ export default function ShareButton({ sceneId }: ShareButtonProps) {
       typeof window !== "undefined"
         ? `${window.location.origin}/scenes/view?id=${encodeURIComponent(sceneId)}`
         : "";
+    const title = sceneName?.trim() || "Splatworks scene";
+
     try {
-      await navigator.clipboard.writeText(url);
-      setNotice("Link copied");
-    } catch {
-      setNotice("Copy failed");
+      if (typeof navigator.share === "function") {
+        await navigator.share({
+          title,
+          text: `Check out ${title} on Splatworks`,
+          url,
+        });
+        setNotice("Shared");
+      } else {
+        await navigator.clipboard.writeText(url);
+        setNotice("Link copied");
+      }
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
+      try {
+        await navigator.clipboard.writeText(url);
+        setNotice("Link copied");
+      } catch {
+        setNotice("Copy failed");
+      }
     }
     window.setTimeout(() => setNotice(null), 2000);
-  }, [sceneId]);
+  }, [sceneId, sceneName]);
 
   return (
     <div className="pointer-events-auto flex flex-col items-center gap-1.5">

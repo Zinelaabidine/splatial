@@ -4,7 +4,7 @@ const { S3Client, GetObjectCommand } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { DynamoDBClient, QueryCommand } = require("@aws-sdk/client-dynamodb");
 const response = require("../lib/response");
-const { feedItemFromScene } = require("../lib/scene-response");
+const { applyPublicListableSceneFilter, feedItemFromScene } = require("../lib/scene-response");
 const { ALLOWED_CATEGORIES, normalizeTags } = require("../lib/scene-taxonomy");
 
 const s3 = new S3Client({});
@@ -84,6 +84,7 @@ exports.handler = async (event) => {
   const filterParts = ["attribute_exists(#nm)"];
   const exprNames = { "#nm": "name" };
   const exprValues = { ":pub": { S: "PUBLIC" } };
+  applyPublicListableSceneFilter(filterParts, exprNames, exprValues);
 
   const rawCategory = qs.category;
   if (rawCategory !== undefined && rawCategory !== null && rawCategory !== "") {

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import PublicSceneCardGrid from "@/components/splatworks/PublicSceneCardGrid";
 import SceneCardSkeleton from "@/components/splatworks/SceneCardSkeleton";
+import { Button } from "@/components/ui/button";
 import { ApiRequestError } from "@/lib/api/apiErrors";
 import { feedSceneToListItem, type PublicSceneListItem } from "@/lib/scenes/feedSceneMappers";
 import { sceneViewerUrl } from "@/lib/scenes/viewerUrls";
@@ -140,9 +141,18 @@ export default function FeedPage() {
       ) : null}
 
       {items.length === 0 ? (
-        <p className="py-16 text-center text-sm text-[var(--nord-slate)]">
-          Your feed is empty — follow some creators to see their scenes here.
-        </p>
+        <div className="flex flex-col items-center gap-4 py-20 text-center">
+          <h2 className="text-xl font-semibold text-[var(--nord-ink)]">Your feed is waiting</h2>
+          <p className="max-w-sm text-sm text-[var(--nord-slate)]">
+            Follow creators to see their 3D scenes here.
+          </p>
+          <Button
+            className="bg-[var(--nord-pine)] text-[var(--nord-cta-fg)] hover:bg-[var(--nord-pine-hover)]"
+            onClick={() => router.push("/explore")}
+          >
+            Discover creators
+          </Button>
+        </div>
       ) : (
         <PublicSceneCardGrid
           items={items}

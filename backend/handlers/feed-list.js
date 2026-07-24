@@ -5,7 +5,7 @@ const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { DynamoDBClient, QueryCommand } = require("@aws-sdk/client-dynamodb");
 const response = require("../lib/response");
 const { listFollowing } = require("../lib/follows");
-const { feedItemFromScene } = require("../lib/scene-response");
+const { applyPublicListableSceneFilter, feedItemFromScene } = require("../lib/scene-response");
 
 const s3 = new S3Client({});
 const dynamo = new DynamoDBClient({});
@@ -65,14 +65,19 @@ async function queryFolloweeScenes(followeeId, limit, cursor) {
     values[":cursor"] = { S: cursor };
   }
 
+  const filterParts = ["attribute_exists(#nm)"];
+  const exprNames = { "#nm": "name" };
+  const exprValues = { ...values };
+  applyPublicListableSceneFilter(filterParts, exprNames, exprValues);
+
   const result = await dynamo.send(
     new QueryCommand({
       TableName: TABLE,
       IndexName: "public_owner-created_at-index",
       KeyConditionExpression: keyCondition,
-      FilterExpression: "attribute_exists(#nm)",
-      ExpressionAttributeNames: { "#nm": "name" },
-      ExpressionAttributeValues: values,
+      FilterExpression: filterParts.join(" AND "),
+      ExpressionAttributeNames: exprNames,
+      ExpressionAttributeValues: exprValues,
       ScanIndexForward: false,
       Limit: limit,
     })

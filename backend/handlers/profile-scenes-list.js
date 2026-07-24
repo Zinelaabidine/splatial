@@ -5,7 +5,7 @@ const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { DynamoDBClient, QueryCommand } = require("@aws-sdk/client-dynamodb");
 const response = require("../lib/response");
 const { validateUsername, resolveUserIdByUsername } = require("../lib/profile");
-const { sceneResponseFromItem } = require("../lib/scene-response");
+const { applyPublicListableSceneFilter, sceneResponseFromItem } = require("../lib/scene-response");
 
 const s3 = new S3Client({});
 const dynamo = new DynamoDBClient({});
@@ -69,14 +69,19 @@ exports.handler = async (event) => {
   const qs = event.queryStringParameters ?? {};
   const exclusiveStartKey = decodeCursor(qs.cursor);
 
+  const filterParts = ["attribute_exists(#nm)"];
+  const exprNames = { "#nm": "name" };
+  const exprValues = { ":owner": { S: ownerId } };
+  applyPublicListableSceneFilter(filterParts, exprNames, exprValues);
+
   const result = await dynamo.send(
     new QueryCommand({
       TableName: TABLE,
       IndexName: "public_owner-created_at-index",
       KeyConditionExpression: "public_owner_id = :owner",
-      FilterExpression: "attribute_exists(#nm)",
-      ExpressionAttributeNames: { "#nm": "name" },
-      ExpressionAttributeValues: { ":owner": { S: ownerId } },
+      FilterExpression: filterParts.join(" AND "),
+      ExpressionAttributeNames: exprNames,
+      ExpressionAttributeValues: exprValues,
       ScanIndexForward: false,
       Limit: DEFAULT_LIMIT,
       ExclusiveStartKey: exclusiveStartKey,

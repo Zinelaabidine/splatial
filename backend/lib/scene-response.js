@@ -5,6 +5,18 @@ const { ALLOWED_REACTIONS } = require("./reaction-types");
 
 const DEFAULT_VISIBILITY = "PRIVATE";
 const ALLOWED_VISIBILITY = new Set(["PUBLIC", "PRIVATE"]);
+/** Only READY scenes appear on explore, feed, and public profile grids. */
+const PUBLIC_LISTABLE_STATUS = "READY";
+
+/**
+ * Append DynamoDB FilterExpression clauses so public discovery endpoints never
+ * surface FAILED/PROCESSING/etc. scenes that happen to be marked PUBLIC.
+ */
+function applyPublicListableSceneFilter(filterParts, exprNames, exprValues) {
+  exprNames["#status"] = "status";
+  exprValues[":ready"] = { S: PUBLIC_LISTABLE_STATUS };
+  filterParts.push("#status = :ready");
+}
 
 function sceneVisibilityFromItem(item) {
   const value = item?.visibility?.S;
@@ -57,6 +69,8 @@ function feedItemFromScene(item, thumbnailUrl, ownerAvatarUrl) {
 module.exports = {
   ALLOWED_VISIBILITY,
   DEFAULT_VISIBILITY,
+  PUBLIC_LISTABLE_STATUS,
+  applyPublicListableSceneFilter,
   sceneVisibilityFromItem,
   sceneResponseFromItem,
   feedItemFromScene,

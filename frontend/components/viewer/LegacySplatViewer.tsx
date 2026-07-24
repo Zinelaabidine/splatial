@@ -57,12 +57,14 @@ export default function LegacySplatViewer({
 
   return (
     <div className="splat-viewer-container">
-      <div id="info">
-        <details>
-          <summary>Use mouse or arrow keys to navigate.</summary>
-          <div id="instructions">{INSTRUCTIONS}</div>
-        </details>
-      </div>
+      {isSceneOwner ? (
+        <div id="info">
+          <details>
+            <summary>Use mouse or arrow keys to navigate.</summary>
+            <div id="instructions">{INSTRUCTIONS}</div>
+          </details>
+        </div>
+      ) : null}
 
       <div id="progress" />
       <div id="message" />
@@ -100,7 +102,7 @@ export default function LegacySplatViewer({
       <canvas id="canvas" />
 
       <CameraTrajectoryProvider>
-        {activePanel === "trajectory" ? (
+        {isSceneOwner && activePanel === "trajectory" ? (
           <div className="dock-panel-anchor">
             <TrajectoryControls />
           </div>
@@ -131,6 +133,7 @@ export default function LegacySplatViewer({
           onSelect={togglePanel}
           showShots={Boolean(sceneId)}
           showTours={Boolean(sceneId)}
+          showTrajectory={isSceneOwner}
         />
       </CameraTrajectoryProvider>
     </div>
