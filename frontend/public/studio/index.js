@@ -133511,6 +133511,40 @@ const handleSaveTarget = async (events, msg, origin) => {
         window.parent.postMessage({ type: 'save-error', message }, origin);
     }
 };
+// ---------------------------------------------------------------------------
+// Splatial load integration
+//
+// The host page (Splatial) fetches the scene's current .splat bytes itself
+// (blob URLs break this editor's own URL parser, so it can't just point us at
+// one) and, once it sees { type: 'studio-ready' } from us, posts
+// { type: 'load-splat', filename, buffer } with the ArrayBuffer transferred
+// into this frame. We wrap it in a Blob and hand it to the same import
+// pipeline drag & drop / the file picker already use, then report
+// success/failure back to the parent so it can flip the "Loading splat..."
+// state off.
+// ---------------------------------------------------------------------------
+const LOAD_SPLAT = 'load-splat';
+const isLoadSplatMessage = (data) => {
+    return (data &&
+        typeof data === 'object' &&
+        data.type === LOAD_SPLAT &&
+        typeof data.filename === 'string' &&
+        data.buffer instanceof ArrayBuffer);
+};
+const handleLoadSplat = async (events, msg, origin) => {
+    try {
+        const blob = new Blob([msg.buffer]);
+        const models = await events.invoke('import', [{ filename: msg.filename, contents: blob }]);
+        if (!models || models.length === 0) {
+            throw new Error('No splat data could be loaded from file');
+        }
+        window.parent.postMessage({ type: 'load-splat-complete' }, origin);
+    }
+    catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        window.parent.postMessage({ type: 'load-splat-error', message }, origin);
+    }
+};
 const registerIframeApi = (events) => {
     window.addEventListener('message', (event) => {
         const source = event.source;
@@ -133527,6 +133561,10 @@ const registerIframeApi = (events) => {
         }
         if (isSaveTargetMessage(event.data)) {
             void handleSaveTarget(events, event.data, event.origin);
+            return;
+        }
+        if (isLoadSplatMessage(event.data)) {
+            void handleLoadSplat(events, event.data, event.origin);
         }
     });
 };
@@ -158295,6 +158333,15 @@ const main = async () => {
                     }]);
             }
         });
+    }
+    // Splatial load integration: tell the host frame we're ready to receive
+    // { type: 'load-splat' } now that the import pipeline above is live.
+    // Reply to the origin the host told us to use (?parentOrigin=...), not
+    // window.location.origin, so this still works if we're ever framed from
+    // a different origin than our own.
+    if (window.parent !== window) {
+        const parentOrigin = url.searchParams.get('parentOrigin') || window.location.origin;
+        window.parent.postMessage({ type: 'studio-ready' }, parentOrigin);
     }
 };
 
