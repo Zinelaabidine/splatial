@@ -118,6 +118,12 @@ resource "aws_iam_role_policy" "upload_lambda_data_access" {
           "${aws_dynamodb_table.follows.arn}/index/*",
           aws_dynamodb_table.reactions.arn,
           aws_dynamodb_table.comments.arn,
+          # parent_comment_id-index (see dynamodb-comments.tf) — listReplies()
+          # queries this GSI; without the /index/* resource, DynamoDB Query
+          # fails with AccessDeniedException, which surfaces as an
+          # unconditional 500 on GET .../comments/{commentId}/replies (and on
+          # deleteComment's reply cascade, which calls listReplies too).
+          "${aws_dynamodb_table.comments.arn}/index/*",
           aws_dynamodb_table.comment_reactions.arn,
           aws_dynamodb_table.notifications.arn,
           aws_dynamodb_table.bookmarks.arn,
