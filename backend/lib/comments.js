@@ -322,7 +322,12 @@ async function deleteComment({ sceneId, commentId, scene, callerId }) {
         Key: { scene_id: { S: sceneId } },
         UpdateExpression:
           "SET comments_count = if_not_exists(comments_count, :zero) + :minusN",
-        ConditionExpression: "if_not_exists(comments_count, :zero) >= :n",
+        // NOTE: if_not_exists() is only valid inside an UpdateExpression SET
+        // clause — DynamoDB rejects it inside a ConditionExpression with a
+        // ValidationException (no resource-level statusCode), which used to
+        // bubble up as an unconditional 500 on every delete. Use
+        // attribute_not_exists(...) OR <comparison> instead (#defect-1).
+        ConditionExpression: "attribute_not_exists(comments_count) OR comments_count >= :n",
         ExpressionAttributeValues: {
           ":zero": { N: "0" },
           ":n": { N: String(totalDeleted) },
@@ -351,7 +356,9 @@ async function deleteComment({ sceneId, commentId, scene, callerId }) {
         },
         UpdateExpression:
           "SET reply_count = if_not_exists(reply_count, :zero) + :minusOne",
-        ConditionExpression: "if_not_exists(reply_count, :zero) >= :one",
+        // Same if_not_exists()-in-ConditionExpression fix as the scene
+        // counter update above (#defect-1).
+        ConditionExpression: "attribute_not_exists(reply_count) OR reply_count >= :one",
         ExpressionAttributeValues: {
           ":zero": { N: "0" },
           ":one": { N: "1" },

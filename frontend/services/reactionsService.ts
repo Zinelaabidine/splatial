@@ -1,6 +1,7 @@
 "use client";
 
 import { authenticatedFetch } from "@/services/apiClient";
+import { commentReactionPath } from "@/lib/api/commentPaths";
 import type { ReactionSummary, ReactionType } from "@/types/api";
 
 export async function setReaction(
@@ -8,7 +9,7 @@ export async function setReaction(
   type: ReactionType,
   signal?: AbortSignal,
 ): Promise<ReactionSummary> {
-  return authenticatedFetch(`/api/v1/scenes/${sceneId}/reaction`, {
+  return authenticatedFetch(`/api/v1/scenes/${encodeURIComponent(sceneId)}/reaction`, {
     method: "PUT",
     body: JSON.stringify({ type }),
     signal,
@@ -19,7 +20,7 @@ export async function removeReaction(
   sceneId: string,
   signal?: AbortSignal,
 ): Promise<ReactionSummary> {
-  return authenticatedFetch(`/api/v1/scenes/${sceneId}/reaction`, {
+  return authenticatedFetch(`/api/v1/scenes/${encodeURIComponent(sceneId)}/reaction`, {
     method: "DELETE",
     signal,
   }) as Promise<ReactionSummary>;
@@ -31,14 +32,11 @@ export async function setCommentReaction(
   type: ReactionType,
   signal?: AbortSignal,
 ): Promise<ReactionSummary> {
-  return authenticatedFetch(
-    `/api/v1/scenes/${sceneId}/comments/${commentId}/reaction`,
-    {
-      method: "PUT",
-      body: JSON.stringify({ type }),
-      signal,
-    },
-  ) as Promise<ReactionSummary>;
+  return authenticatedFetch(commentReactionPath(sceneId, commentId), {
+    method: "PUT",
+    body: JSON.stringify({ type }),
+    signal,
+  }) as Promise<ReactionSummary>;
 }
 
 export async function removeCommentReaction(
@@ -46,11 +44,8 @@ export async function removeCommentReaction(
   commentId: string,
   signal?: AbortSignal,
 ): Promise<ReactionSummary> {
-  return authenticatedFetch(
-    `/api/v1/scenes/${sceneId}/comments/${commentId}/reaction`,
-    {
-      method: "DELETE",
-      signal,
-    },
-  ) as Promise<ReactionSummary>;
+  return authenticatedFetch(commentReactionPath(sceneId, commentId), {
+    method: "DELETE",
+    signal,
+  }) as Promise<ReactionSummary>;
 }

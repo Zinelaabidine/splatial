@@ -4,7 +4,7 @@
   "description": "Multipart upload init Lambda",
   "main": "upload.js",
   "scripts": {
-    "test": "node test/rbac.test.js && node test/account-status.test.js"
+    "test": "node test/rbac.test.js && node test/account-status.test.js && node test/comment-delete.test.js"
   },
   "dependencies": {
     "@aws-sdk/client-apigatewaymanagementapi": "^3.0.0",

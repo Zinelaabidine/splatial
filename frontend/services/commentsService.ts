@@ -1,6 +1,11 @@
 "use client";
 
 import { authenticatedFetch } from "@/services/apiClient";
+import {
+  commentPath,
+  commentRepliesPath,
+  commentsListPath,
+} from "@/lib/api/commentPaths";
 import type {
   Comment,
   CommentsResponse,
@@ -15,7 +20,7 @@ export async function listComments(
   cursor?: string,
   signal?: AbortSignal,
 ): Promise<CommentsResponse> {
-  const base = `/api/v1/scenes/${encodeURIComponent(sceneId)}/comments`;
+  const base = commentsListPath(sceneId);
   const path =
     cursor != null && cursor !== ""
       ? `${base}?cursor=${encodeURIComponent(cursor)}`
@@ -28,14 +33,11 @@ export async function createComment(
   body: string,
   signal?: AbortSignal,
 ): Promise<Comment> {
-  return authenticatedFetch(
-    `/api/v1/scenes/${encodeURIComponent(sceneId)}/comments`,
-    {
-      method: "POST",
-      body: JSON.stringify({ body }),
-      signal,
-    },
-  ) as Promise<Comment>;
+  return authenticatedFetch(commentsListPath(sceneId), {
+    method: "POST",
+    body: JSON.stringify({ body }),
+    signal,
+  }) as Promise<Comment>;
 }
 
 export async function deleteComment(
@@ -43,13 +45,10 @@ export async function deleteComment(
   commentId: string,
   signal?: AbortSignal,
 ): Promise<DeleteCommentResponse> {
-  return authenticatedFetch(
-    `/api/v1/scenes/${encodeURIComponent(sceneId)}/comments/${encodeURIComponent(commentId)}`,
-    {
-      method: "DELETE",
-      signal,
-    },
-  ) as Promise<DeleteCommentResponse>;
+  return authenticatedFetch(commentPath(sceneId, commentId), {
+    method: "DELETE",
+    signal,
+  }) as Promise<DeleteCommentResponse>;
 }
 
 export async function listReplies(
@@ -58,7 +57,7 @@ export async function listReplies(
   cursor?: string,
   signal?: AbortSignal,
 ): Promise<RepliesResponse> {
-  const base = `/api/v1/scenes/${encodeURIComponent(sceneId)}/comments/${encodeURIComponent(commentId)}/replies`;
+  const base = commentRepliesPath(sceneId, commentId);
   const path =
     cursor != null && cursor !== ""
       ? `${base}?cursor=${encodeURIComponent(cursor)}`
@@ -72,12 +71,9 @@ export async function createReply(
   body: string,
   signal?: AbortSignal,
 ): Promise<Comment> {
-  return authenticatedFetch(
-    `/api/v1/scenes/${encodeURIComponent(sceneId)}/comments/${encodeURIComponent(commentId)}/replies`,
-    {
-      method: "POST",
-      body: JSON.stringify({ body }),
-      signal,
-    },
-  ) as Promise<Comment>;
+  return authenticatedFetch(commentRepliesPath(sceneId, commentId), {
+    method: "POST",
+    body: JSON.stringify({ body }),
+    signal,
+  }) as Promise<Comment>;
 }

@@ -11,6 +11,7 @@ import {
   translate4,
   type Matrix4,
 } from "@/math/matrix4x4";
+import { isEditableTarget } from "@/lib/viewer/isEditableTarget";
 
 export type ViewerControlState = {
   viewMatrix: Matrix4;
@@ -80,6 +81,13 @@ export function createViewerControls(
   };
 
   const onKeyDown = (e: KeyboardEvent) => {
+    // Comment inputs, textareas, selects, and contenteditable editors live
+    // in the same document as the viewer canvas. Without this guard, typing
+    // in a comment box (digits, +/-, v, p, arrows, wasd, space, ijkl...)
+    // also drives camera movement/carousel/camera-switching underneath it.
+    // Early-return here rather than suppressing individual keys below, so
+    // movement resumes automatically the moment focus leaves the editor.
+    if (isEditableTarget(e.target)) return;
     carousel = false;
     if (!activeKeys.includes(e.code)) activeKeys.push(e.code);
     if (/\d/.test(e.key)) {
