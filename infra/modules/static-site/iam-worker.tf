@@ -49,6 +49,16 @@ resource "aws_iam_role_policy" "worker_policy" {
           "sqs:ChangeMessageVisibility",
           "sqs:GetQueueAttributes",
           "sqs:GetQueueUrl",
+          # SendMessage lets an interrupted worker re-enqueue its own job as a
+          # NEW message and delete the old one, instead of releasing visibility
+          # to zero. Releasing increments ApproximateReceiveCount, so with
+          # maxReceiveCount = 3 (sqs.tf) three Spot interruptions sent a job to
+          # a DLQ that has no redrive-back policy — the job was simply lost.
+          # Re-enqueueing resets the receive count, so interruptions no longer
+          # consume the budget reserved for genuinely poisonous messages, while
+          # a per-attempt requeue_count cap (backend/lib/attempt-lease.js)
+          # prevents an interruption loop from requeueing forever.
+          "sqs:SendMessage",
         ]
         Resource = [
           aws_sqs_queue.processing_queue.arn,

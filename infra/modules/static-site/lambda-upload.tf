@@ -221,6 +221,15 @@ resource "aws_lambda_function" "upload_lambda" {
       MANUAL_MODE_ALERT_MINUTES          = tostring(var.manual_mode_alert_minutes)
       NODE_ENV                           = "production"
 
+      # Attempt-lease recovery (see reaper.tf + backend/lib/attempt-lease.js).
+      # ATTEMPT_REAPER_DRY_RUN is a string because Lambda env values must be
+      # strings; attempts-reap.js arms itself only on the exact value "false",
+      # so any typo leaves the reaper in observe-only mode rather than letting
+      # an unvalidated sweep write to live attempts.
+      ATTEMPT_LEASE_SECONDS  = tostring(var.attempt_lease_seconds)
+      ATTEMPT_MAX_REQUEUES   = tostring(var.attempt_max_requeues)
+      ATTEMPT_REAPER_DRY_RUN = var.attempt_reaper_dry_run ? "true" : "false"
+
       # Outbound notification email (see backend/lib/email.js + ses.tf).
       NOTIFICATIONS_FROM_EMAIL = "notifications@${var.domain_name}"
       APP_BASE_URL             = "https://${var.domain_name}"

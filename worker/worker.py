@@ -120,6 +120,7 @@ import time
 import zipfile
 from collections import deque
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import requests
@@ -399,6 +400,9 @@ INSTANCE_LIFECYCLE = instance_lifecycle
 
 # Runtime Config Variables
 API_BASE_URL = os.getenv("API_BASE_URL", "").rstrip("/")
+# Fallback cap for messages that predate the reaper and carry no maxRequeues.
+# Keep in step with attempt_max_requeues in infra .../variables.tf.
+DEFAULT_MAX_REQUEUES = getenv_int("ATTEMPT_MAX_REQUEUES", 5)
 QUEUE_NAME = os.getenv("QUEUE_NAME", "splatial-dev-splat-processing-queue")
 DLQ_NAME = os.getenv("DLQ_NAME", "splatial-dev-splat-processing-dlq")
 
@@ -815,6 +819,8 @@ class ApiCallResult:
     # True when the backend told us this attempt has been cancelled — either a
     # 409 from PATCH /api/attempts/:id or cancelRequested from the heartbeat.
     cancel_requested: bool = False
+    # True when the backend told us another worker now owns this attempt.
+    lease_lost: bool = False
 
 @dataclass
 class WorkItem:
@@ -838,6 +844,17 @@ class WorkItem:
     # widening simulate_processing's return tuple) to match the existing
     # delete_poison_message pattern and avoid touching every return site.
     cancelled: bool = False
+    # True when the backend told us we no longer hold this attempt (the reaper
+    # gave it to someone else). Stand down quietly: write nothing, drop the
+    # message, do not mark the attempt terminal.
+    lease_lost: bool = False
+    # Infrastructure requeues so far (Spot interruptions + reaper recoveries).
+    # Absent on messages written before this existed, hence the 0 default.
+    requeue_count: int = 0
+    max_requeues: int = 5
+    # Set when this worker successfully re-enqueued its own job, so main() knows
+    # the message was already replaced and must not be released again.
+    requeued: bool = False
 
 def parse_message_body(body: str) -> Optional[WorkItem]:
     """
@@ -898,6 +915,16 @@ def parse_message_body(body: str) -> Optional[WorkItem]:
             log.warning("colmapConfig is present but not a dict; ignoring it")
             colmap_config = None
 
+        # Infrastructure requeue accounting. Both are absent on messages written
+        # before the reaper existed, so they default rather than rejecting the
+        # message — an old in-flight message must still parse after deploy.
+        requeue_count = int(data.get("requeueCount") or data.get("requeue_count") or 0)
+        max_requeues = int(
+            data.get("maxRequeues")
+            or data.get("max_requeues")
+            or DEFAULT_MAX_REQUEUES
+        )
+
         # Infer input_file_type if missing or unknown
         if input_file_type not in ("images", "video", "zip"):
             if re.search(r"\.(zip)$", input_prefix, re.IGNORECASE):
@@ -923,10 +950,44 @@ def parse_message_body(body: str) -> Optional[WorkItem]:
             api_base_url=api_base_url.rstrip("/") if api_base_url else None,
             train_config=train_config,
             colmap_config=colmap_config,
+            requeue_count=requeue_count,
+            max_requeues=max_requeues,
         )
     except Exception as e:
         log.warning("Error parsing message body: %s", e)
         return None
+
+def build_requeue_body(item: WorkItem) -> str:
+    """
+    Rebuild this job's SQS message body with an incremented requeue count.
+
+    Mirrors backend/lib/job-message.js — keep both in sync when adding a field.
+    Only the fields worker.py itself parses are emitted, so a message this
+    function writes round-trips through parse_message_body() unchanged apart
+    from requeueCount.
+    """
+    return json.dumps({
+        "sceneId": item.scene_id,
+        "attemptId": item.attempt_id,
+        "userId": item.user_id,
+        "sceneName": "",
+        "attemptNumber": item.attempt_number,
+        "inputBucket": item.input_bucket,
+        "inputPrefix": item.input_prefix_or_key,
+        "inputFileType": item.input_file_type,
+        "inputFileCount": item.input_file_count,
+        "inputSizeBytes": item.input_size_bytes,
+        "outputBucket": item.output_bucket,
+        "outputPrefix": item.output_prefix,
+        "apiBaseUrl": item.api_base_url or API_BASE_URL,
+        "apiAuthToken": item.api_auth_token,
+        "queuedAt": datetime.now(timezone.utc).isoformat(),
+        "maxAttempts": 3,
+        "trainConfig": item.train_config,
+        "colmapConfig": item.colmap_config,
+        "requeueCount": item.requeue_count + 1,
+        "maxRequeues": item.max_requeues,
+    })
 
 def train_config_to_args(train_cfg: Dict[str, Any]) -> List[str]:
     """
@@ -1117,6 +1178,25 @@ def _response_signals_cancel(resp: Any) -> bool:
         return True
     return False
 
+def _response_signals_lease_lost(resp: Any) -> bool:
+    """
+    True when the backend says this worker no longer owns the attempt.
+
+    Distinct from cancellation on purpose. A cancelled worker PATCHes CANCELLED
+    on its way out; doing that here would mark an attempt terminal that the
+    reaper has already handed to a replacement worker, destroying a live run.
+    Lease loss means "stand down quietly": write nothing, drop the message.
+    """
+    try:
+        payload = resp.json()
+    except Exception:
+        return False
+    if not isinstance(payload, dict):
+        return False
+    if payload.get("leaseLost") is True:
+        return True
+    return str(payload.get("reason", "")).upper() == "LEASE_LOST"
+
 def patch_attempt(attempt_id: str, token: str, body: Dict[str, Any], api_base_url: Optional[str] = None) -> ApiCallResult:
     """
     PATCH /api/attempts/:attemptId.
@@ -1212,8 +1292,11 @@ def post_heartbeat(
         log.info("Heartbeat response: status=%d, body=%s", r.status_code, r.text[:200])
         ok = 200 <= r.status_code < 300
         cancelled = _response_signals_cancel(r)
+        lease_lost = _response_signals_lease_lost(r)
         if cancelled:
             log.warning("Heartbeat reports cancel requested for attempt %s", attempt_id)
+        elif lease_lost:
+            log.warning("Heartbeat reports lease lost for attempt %s", attempt_id)
         elif not ok:
             log.warning("Heartbeat failed: status=%d", r.status_code)
         return ApiCallResult(
@@ -1221,6 +1304,7 @@ def post_heartbeat(
             status_code=r.status_code,
             body_preview=r.text[:200],
             cancel_requested=cancelled,
+            lease_lost=lease_lost,
         )
     except Exception as e:
         log.error("Heartbeat request failed: %s", e, exc_info=True)
@@ -3256,6 +3340,17 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
         item.cancelled = True
         interrupt_event.set()
 
+    def _request_lease_lost_stop() -> None:
+        """
+        Stand down: the reaper decided this worker was dead and gave the attempt
+        to someone else. Unwinds through the same interrupt path, but
+        _handle_stop resolves it without writing anything.
+        """
+        if not item.lease_lost:
+            _event("job.lease_lost_observed", level=logging.WARNING, phase=job_progress["phase"])
+        item.lease_lost = True
+        interrupt_event.set()
+
     # Start monitoring for spot interruptions
     def monitor_interruptions():
         log.debug("Starting spot interruption monitoring thread")
@@ -3299,9 +3394,11 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
                 eta_seconds=eta_seconds,
             )
             last_heartbeat = time.time()
-            # The heartbeat is the cancel-delivery channel for in-flight work.
+            # The heartbeat is the delivery channel for both stop signals.
             if result.cancel_requested:
                 _request_cancel_stop()
+            elif result.lease_lost:
+                _request_lease_lost_stop()
             return result
         else:
             next_in = max(0.0, interval - (now - last_heartbeat))
@@ -3321,24 +3418,102 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
             except Exception as e:
                 log.warning("Failed to release message visibility (best effort): %s", e)
 
+    def _requeue_message() -> bool:
+        """
+        Re-enqueue this job as a NEW message and delete the current one.
+
+        Replaces the old change_message_visibility(0) approach. Releasing
+        visibility redelivers the SAME message, which increments
+        ApproximateReceiveCount — so with maxReceiveCount = 3 (sqs.tf), three
+        Spot interruptions were enough to move a perfectly good job to a DLQ
+        that has no redrive-back policy. It was simply lost.
+
+        Sending a fresh message resets the receive count, so interruptions stop
+        consuming the retry budget that exists to catch genuinely poisonous
+        messages. requeue_count on the message carries the real interruption
+        tally, capped by max_requeues, so an interruption loop still terminates.
+
+        Returns True when the swap succeeded; the caller falls back to releasing
+        visibility if it did not, since losing the message outright is worse
+        than an extra receive-count increment.
+        """
+        if not (receipt_handle and queue_url):
+            return False
+
+        if item.requeue_count + 1 > item.max_requeues:
+            log.error(
+                "Attempt %s hit the requeue cap (%d); leaving the message to "
+                "retry normally so it can reach the DLQ for inspection",
+                attempt_id,
+                item.max_requeues,
+            )
+            _event(
+                "job.requeue_cap_reached",
+                level=logging.ERROR,
+                requeue_count=item.requeue_count,
+                max_requeues=item.max_requeues,
+            )
+            return False
+
+        try:
+            sqs.send_message(QueueUrl=queue_url, MessageBody=build_requeue_body(item))
+        except Exception as e:
+            log.warning("Requeue send failed (%s); will release visibility instead", e)
+            return False
+
+        # Only delete the original AFTER the replacement is safely enqueued —
+        # the reverse order risks losing the job entirely if the send fails.
+        if not delete_message_with_retries(sqs, queue_url, receipt_handle, attempt_id):
+            log.error(
+                "Requeued attempt %s but failed to delete the original message; "
+                "it will be redelivered as a duplicate and dropped on its "
+                "opening PATCH",
+                attempt_id,
+            )
+
+        item.requeued = True
+        _event(
+            "job.requeued",
+            level=logging.WARNING,
+            requeue_count=item.requeue_count + 1,
+            max_requeues=item.max_requeues,
+        )
+        return True
+
     def _handle_stop(phase: str, local_percent: float = 0.0) -> Tuple[bool, bool]:
         """
-        Unwind a stopped job, reporting it as either cancelled or interrupted.
+        Unwind a stopped job, reporting it as cancelled, abandoned or interrupted.
 
-        Cancellation and Spot interruption both arrive as interrupt_event, but
-        they must be resolved differently:
+        All three arrive as interrupt_event, but they resolve differently:
 
           cancelled   → PATCH CANCELLED, DELETE the message (the work is not
                         wanted, so redelivering it would burn a receive-count
                         slot and eventually DLQ a message nobody will consume),
                         and report was_interrupted=False so main() does not
                         preserve ASG capacity for a replacement.
-          interrupted → PATCH INTERRUPTED, RELEASE the message for immediate
-                        redelivery, and report was_interrupted=True.
+          lease lost  → write NOTHING and delete the message. The reaper handed
+                        this attempt to another worker; marking it terminal here
+                        would destroy the replacement's run.
+          interrupted → PATCH INTERRUPTED, RE-ENQUEUE as a fresh message, and
+                        report was_interrupted=True.
 
         Returns the (ok, was_interrupted) pair for simulate_processing.
         """
         percent = overall_percent(phase, local_percent)
+
+        if item.lease_lost:
+            log.warning(
+                "Stopping attempt %s: lease lost, another worker now owns it",
+                attempt_id,
+            )
+            # Deliberately no PATCH: the token has been rotated, so a write
+            # would 403 anyway, and CANCELLED/FAILED here would be a lie.
+            if receipt_handle and queue_url:
+                delete_message_with_retries(sqs, queue_url, receipt_handle, attempt_id)
+            _set_job_progress(phase, percent)
+            _event("job.lease_lost", level=logging.WARNING, phase=phase, percent=percent)
+            log_envelope.flush_logs()
+            return False, False
 
         if cancel_event.is_set() or item.cancelled:
             log.warning("Stopping attempt %s: cancelled by user", attempt_id)
@@ -3364,7 +3539,12 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
             "progressPhase": phase,
             "progressPercent": percent,
         }, api_base_url=api_url)
-        _release_message_visibility()
+        # Prefer a fresh message so the interruption does not consume a
+        # maxReceiveCount slot; fall back to releasing visibility if the swap
+        # fails or the cap is reached, which preserves the old behaviour rather
+        # than dropping the job.
+        if not _requeue_message():
+            _release_message_visibility()
         _set_job_progress(phase, percent)
         _emit_spot_interrupted()
         return False, True
@@ -4188,15 +4368,35 @@ def main() -> None:
             log_envelope.clear_job()
             log_envelope.flush_logs()
 
-        # A cancelled attempt has already deleted its own message inside
-        # simulate_processing (it holds the receipt handle), so skip the
-        # delete/retry bookkeeping below entirely.
+        # Cancelled and lease-lost attempts have already removed their own
+        # message inside simulate_processing (it holds the receipt handle), so
+        # skip the delete/retry bookkeeping below entirely.
         if item.cancelled:
             log.info(
                 "Attempt %s was cancelled; message already removed, terminating self",
                 item.attempt_id,
             )
             terminate_self("job_cancelled", decrement_desired=True)
+            return
+
+        if item.lease_lost:
+            log.info(
+                "Attempt %s is owned by another worker; standing down",
+                item.attempt_id,
+            )
+            terminate_self("lease_lost", decrement_desired=True)
+            return
+
+        # An interrupted attempt that re-enqueued itself already swapped its
+        # message for a fresh one, so there is nothing left to delete or release.
+        # Capacity is still preserved for a replacement worker.
+        if item.requeued:
+            log.info(
+                "Attempt %s re-enqueued as a new message; terminating without "
+                "decrementing ASG desired capacity",
+                item.attempt_id,
+            )
+            terminate_self("spot_interruption_requeued", decrement_desired=False)
             return
 
         poison_deleted = False

@@ -29,6 +29,7 @@ has nothing to do, and releasing a cancelled message's visibility redelivers
 work nobody wants until it DLQs.
 """
 
+import json
 import logging
 import os
 import sys
@@ -47,18 +48,27 @@ import worker  # noqa: E402  (import after env/argv setup)
 
 # ── Fakes ─────────────────────────────────────────────────────────────────────
 
-calls = {"patch": [], "deleted": [], "released": [], "setup_ws": 0}
+calls = {"patch": [], "deleted": [], "released": [], "sent": [], "setup_ws": 0}
 
 
 def reset_calls():
-    calls.update({"patch": [], "deleted": [], "released": [], "setup_ws": 0})
+    calls.update({"patch": [], "deleted": [], "released": [], "sent": [], "setup_ws": 0})
 
 
 class FakeSqs:
-    """Records visibility changes instead of talking to SQS."""
+    """Records visibility changes and sends instead of talking to SQS."""
+
+    def __init__(self, send_fails=False):
+        self.send_fails = send_fails
 
     def change_message_visibility(self, **kw):
         calls["released"].append(kw["VisibilityTimeout"])
+
+    def send_message(self, **kw):
+        if self.send_fails:
+            raise RuntimeError("simulated SQS outage")
+        calls["sent"].append(kw["MessageBody"])
+        return {"MessageId": "m-1"}
 
 
 def fake_delete_message(sqs_client, queue_url, receipt_handle, msg_id="unknown"):
@@ -242,7 +252,12 @@ def test_cancelled_mid_flight_via_heartbeat():
     assert elapsed < 25, f"must stop early, not run the full 30s job (took {elapsed:.1f}s)"
 
 
-def test_spot_interrupt_still_behaves_as_before():
+def test_spot_interrupt_requeues_instead_of_releasing():
+    """
+    The headline fix. Releasing visibility redelivers the SAME message, which
+    increments ApproximateReceiveCount — so with maxReceiveCount = 3 three Spot
+    interruptions were enough to lose a good job to a DLQ with no redrive-back.
+    """
     item = make_item()
     global_stop = threading.Event()
     global_stop.set()
@@ -256,8 +271,135 @@ def test_spot_interrupt_still_behaves_as_before():
     assert item.cancelled is False, "an interruption is not a cancellation"
     assert "INTERRUPTED" in calls["patch"], calls["patch"]
     assert "CANCELLED" not in calls["patch"], calls["patch"]
-    assert calls["released"] == [0], "visibility released for immediate redelivery"
-    assert calls["deleted"] == [], "an interrupted message must be kept"
+
+    assert len(calls["sent"]) == 1, "a fresh message must be enqueued"
+    assert item.requeued is True
+    assert calls["deleted"] == ["rh-3"], "and the original deleted, so no duplicate"
+    assert calls["released"] == [], (
+        "must NOT release visibility — that is what burned the receive count"
+    )
+
+    body = json.loads(calls["sent"][0])
+    assert body["attemptId"] == "att-1"
+    assert body["apiAuthToken"] == "worker-token", "token carried forward"
+    assert body["requeueCount"] == 1, "interruption tally increments on the message"
+    assert body["outputPrefix"] == item.output_prefix
+    # A message this worker writes must survive its own parser, or the requeued
+    # job DLQs after three receives having never run.
+    reparsed = worker.parse_message_body(calls["sent"][0])
+    assert reparsed is not None, "requeued message must be parseable"
+    assert reparsed.attempt_id == "att-1"
+    assert reparsed.requeue_count == 1
+
+
+def test_requeue_cap_falls_back_to_release():
+    # At the cap, stop re-enqueueing and let the message retry normally so it
+    # can reach the DLQ for inspection rather than looping forever.
+    item = make_item()
+    item.requeue_count = 5
+    item.max_requeues = 5
+    global_stop = threading.Event()
+    global_stop.set()
+
+    ok, was_interrupted = worker.simulate_processing(
+        item, global_stop, receipt_handle="rh-6", queue_url="q"
+    )
+
+    assert ok is False and was_interrupted is True
+    assert calls["sent"] == [], "must not requeue past the cap"
+    assert item.requeued is False
+    assert calls["released"] == [0], "falls back to the old release behaviour"
+    assert calls["deleted"] == [], "message kept so it can retry and DLQ"
+
+
+def test_requeue_send_failure_falls_back_to_release():
+    # Losing the message outright is worse than an extra receive-count
+    # increment, so a failed send must not also delete the original.
+    worker.sqs = FakeSqs(send_fails=True)
+    item = make_item()
+    global_stop = threading.Event()
+    global_stop.set()
+
+    ok, was_interrupted = worker.simulate_processing(
+        item, global_stop, receipt_handle="rh-7", queue_url="q"
+    )
+
+    assert ok is False and was_interrupted is True
+    assert calls["sent"] == []
+    assert item.requeued is False
+    assert calls["released"] == [0], "fell back to releasing visibility"
+    assert calls["deleted"] == [], "original must survive a failed requeue"
+
+
+def test_lease_lost_stands_down_without_writing():
+    """
+    The reaper decided this worker was dead and gave the attempt to someone
+    else. Marking it CANCELLED or FAILED here would destroy the replacement's
+    run, so the correct behaviour is to write nothing and drop the message.
+    """
+    seen = {"n": 0}
+
+    def heartbeat_loses_lease(
+        attempt_id, token, phase, percent, api_base_url=None, sub_phase=None, eta_seconds=None
+    ):
+        seen["n"] += 1
+        return worker.ApiCallResult(
+            ok=seen["n"] < 3,
+            status_code=200 if seen["n"] < 3 else 409,
+            body_preview="",
+            lease_lost=seen["n"] >= 3,
+        )
+
+    worker.post_heartbeat = heartbeat_loses_lease
+
+    item = make_item()
+    started = time.time()
+    ok, was_interrupted = worker.simulate_processing(
+        item, threading.Event(), receipt_handle="rh-8", queue_url="q"
+    )
+    elapsed = time.time() - started
+
+    assert ok is False
+    assert was_interrupted is False, "must not preserve ASG capacity for itself"
+    assert item.lease_lost is True
+    assert item.cancelled is False, "lease loss is not cancellation"
+    assert "CANCELLED" not in calls["patch"], (
+        "must not mark terminal an attempt another worker now owns"
+    )
+    assert "INTERRUPTED" not in calls["patch"], calls["patch"]
+    assert calls["sent"] == [], "must not requeue — the reaper already did"
+    assert calls["deleted"] == ["rh-8"], "drops its superseded message"
+    assert elapsed < 25, f"must stop promptly (took {elapsed:.1f}s)"
+
+
+def test_response_signals_lease_lost():
+    f = worker._response_signals_lease_lost
+
+    assert f(FakeResponse(409, {"reason": "LEASE_LOST", "leaseLost": True})) is True
+    assert f(FakeResponse(409, {"leaseLost": True})) is True
+    assert f(FakeResponse(409, {"reason": "LEASE_LOST"})) is True
+    # Must not be confused with cancellation, which resolves differently
+    assert f(FakeResponse(409, {"reason": "CANCELLED", "cancelRequested": True})) is False
+    assert f(FakeResponse(200, {"received": True, "leaseLost": False})) is False
+    assert f(FakeResponse(403, {"error": "Invalid worker token"})) is False
+    assert f(FakeResponse(500, None, text="boom")) is False
+
+
+def test_requeue_fields_default_for_old_messages():
+    # A message enqueued before the reaper existed carries no requeueCount /
+    # maxRequeues. It must still parse rather than being rejected as invalid.
+    body = json.dumps({
+        "attemptId": "att-old",
+        "sceneId": "sc-old",
+        "apiAuthToken": "tok",
+        "inputPrefix": "uploads/u/scene.zip",
+    })
+    parsed = worker.parse_message_body(body)
+    assert parsed is not None, "old messages must remain valid after deploy"
+    assert parsed.requeue_count == 0
+    assert parsed.max_requeues == worker.DEFAULT_MAX_REQUEUES
+    assert parsed.requeued is False
+    assert parsed.lease_lost is False
 
 
 def test_happy_path_unaffected():
@@ -299,9 +441,18 @@ def main():
     section("worker.py — cancellation outcomes")
     test("cancelled while QUEUED: no workspace, no training, message deleted", test_cancelled_while_queued)
     test("cancelled mid-flight: stops within a heartbeat, message deleted", test_cancelled_mid_flight_via_heartbeat)
-    test("Spot interrupt: PATCH INTERRUPTED, visibility released, message kept", test_spot_interrupt_still_behaves_as_before)
     test("uncancelled job still succeeds", test_happy_path_unaffected)
     test("deleted-attempt 404 stays distinct from a cancel", test_deleted_attempt_404_stays_distinct)
+
+    section("worker.py — interruption requeue (stops burning maxReceiveCount)")
+    test("Spot interrupt re-enqueues a fresh message and deletes the old", test_spot_interrupt_requeues_instead_of_releasing)
+    test("at the requeue cap, falls back to releasing visibility", test_requeue_cap_falls_back_to_release)
+    test("a failed requeue send falls back rather than losing the message", test_requeue_send_failure_falls_back_to_release)
+    test("old messages without requeue fields still parse", test_requeue_fields_default_for_old_messages)
+
+    section("worker.py — lease loss (reaper handed the attempt away)")
+    test("_response_signals_lease_lost across 7 response shapes", test_response_signals_lease_lost)
+    test("stands down without writing or requeueing", test_lease_lost_stands_down_without_writing)
 
     print(f"\n{_passed} tests passed\n")
 

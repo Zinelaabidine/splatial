@@ -11,6 +11,12 @@ const { TIER_LIMITS } = require("../lib/user-tier");
 const { recordQuotaEvent } = require("../lib/quota");
 const { sumObjectSizesUnderPrefix, getObjectSizeBytes, adjustStorageUsedBytes } = require("../lib/storage-quota");
 const { computeRawExpiresAt } = require("../lib/retention");
+const {
+  applyLeaseClaim,
+  applyLeaseRelease,
+  buildUpdateExpression,
+  statusHoldsLease,
+} = require("../lib/attempt-lease");
 
 const dynamo = new DynamoDBClient({});
 const s3 = new S3Client({});
@@ -137,7 +143,20 @@ exports.handler = async (event) => {
     exprValues[":reason"] = { S: reason };
   }
 
+  // Lease bookkeeping. RUNNING claims a lease; every other reported status
+  // means no worker is holding this attempt any more and must drop it out of
+  // the sparse lease GSI, or the reaper will re-enqueue finished work. See
+  // lib/attempt-lease.js for the full contract.
+  const exprRemoveParts = [];
   const mappedStatus = status && STATUS_MAP[status];
+  if (mappedStatus) {
+    if (statusHoldsLease(mappedStatus)) {
+      applyLeaseClaim(exprParts, exprValues, exprNames, new Date(now));
+    } else {
+      applyLeaseRelease(exprRemoveParts, exprNames);
+    }
+  }
+
   if (mappedStatus) {
     exprParts.push("#s = :attemptStatus");
     exprNames["#s"] = "status";
@@ -202,7 +221,7 @@ exports.handler = async (event) => {
       new UpdateItemCommand({
         TableName: TABLE,
         Key: { scene_id: { S: attemptId } },
-        UpdateExpression: "SET " + exprParts.join(", "),
+        UpdateExpression: buildUpdateExpression(exprParts, exprRemoveParts),
         ConditionExpression: attemptGuards.join(" AND "),
         ...(Object.keys(exprNames).length > 0 ? { ExpressionAttributeNames: exprNames } : {}),
         ExpressionAttributeValues: exprValues,

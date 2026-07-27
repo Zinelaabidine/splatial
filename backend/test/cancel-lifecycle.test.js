@@ -30,9 +30,16 @@ process.env.PROFILES_TABLE_NAME = "test-profiles";
 process.env.SPLAT_SCENES_BUCKET_NAME = "test-output-bucket";
 
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
+const { S3Client } = require("@aws-sdk/client-s3");
 
 const sentCommands = [];
 let responses = [];
+
+// attempt-patch.js measures output size on SUCCEEDED. Stubbed so the sizing
+// call resolves quietly instead of warning about a missing AWS connection.
+S3Client.prototype.send = async function send() {
+  return { Contents: [], KeyCount: 0, ContentLength: 0 };
+};
 
 class ConditionalCheckFailedException extends Error {
   constructor() {
@@ -324,6 +331,109 @@ async function test(name, fn) {
       heartbeatEvent({ progressPhase: "TRAINING", progressPercent: 55 }),
     );
     assert.equal(res.statusCode, 200, "must not 500 when the scene was cancelled");
+  });
+
+  console.log("\nlease lifecycle — the sparse GSI contract");
+
+  // The invariant: an attempt in a state where no worker is running must not
+  // carry lease_status, or the reaper re-enqueues finished work.
+  await test("RUNNING claims a lease", async () => {
+    responses = [{ Item: attemptItem({ status: "QUEUED" }) }, {}, {}];
+
+    await attemptPatch.handler(patchEvent({ status: "RUNNING", progressPhase: "INIT" }));
+
+    const update = commandsOfType("UpdateItemCommand")[0];
+    assert.match(update.input.UpdateExpression, /#leaseStatus = :leaseActive/);
+    assert.equal(update.input.ExpressionAttributeValues[":leaseActive"].S, "ACTIVE");
+    assert.ok(
+      update.input.ExpressionAttributeValues[":leaseExpiry"].S > new Date().toISOString(),
+      "lease must expire in the future",
+    );
+    assert.doesNotMatch(update.input.UpdateExpression, /REMOVE/);
+  });
+
+  for (const [workerStatus, why] of [
+    ["SUCCEEDED", "finished work must not be reaped"],
+    ["FAILED", "failed work must not be reaped"],
+    ["INTERRUPTED", "the worker re-enqueued it itself, so it needs no recovery"],
+  ]) {
+    await test(`${workerStatus} releases the lease — ${why}`, async () => {
+      // SUCCEEDED is the longest path (quota event, output sizing, parent
+      // output_size_bytes read, storage delta, then the notification lookup),
+      // so the queue is sized for it. The assertions below read
+      // UpdateItemCommand[0], which is the attempt write in every case.
+      responses = [
+        { Item: attemptItem({ status: "PROCESSING" }) }, // attempt read
+        {}, // quota event PutItem   (SUCCEEDED only)
+        {}, // attempt UpdateItem
+        { Item: { output_size_bytes: { N: "0" } } }, // parent read (SUCCEEDED only)
+        {}, // parent UpdateItem
+        {}, // storage delta        (SUCCEEDED only)
+        { Item: {} }, // profile read -> no email address, nothing sent
+      ];
+
+      await attemptPatch.handler(
+        patchEvent({ status: workerStatus, reason: "WORKER_ERROR" }),
+      );
+
+      const update = commandsOfType("UpdateItemCommand")[0];
+      assert.match(update.input.UpdateExpression, /REMOVE .*#leaseStatus/);
+      assert.match(update.input.UpdateExpression, /lease_expires_at/);
+      assert.doesNotMatch(
+        update.input.UpdateExpression,
+        /#leaseStatus = :leaseActive/,
+        "must not claim and release in the same write",
+      );
+    });
+  }
+
+  await test("a heartbeat renews the lease", async () => {
+    responses = [{ Item: attemptItem({ status: "PROCESSING" }) }, {}, {}];
+
+    await attemptHeartbeat.handler(
+      heartbeatEvent({ progressPhase: "TRAINING", progressPercent: 40 }),
+    );
+
+    const update = commandsOfType("UpdateItemCommand")[0];
+    assert.match(update.input.UpdateExpression, /#leaseStatus = :leaseActive/);
+    assert.match(
+      update.input.UpdateExpression,
+      /last_heartbeat_at = :now/,
+      "last_heartbeat_at finally has a consumer",
+    );
+  });
+
+  await test("a heartbeat only renews while the attempt is PROCESSING", async () => {
+    responses = [{ Item: attemptItem({ status: "PROCESSING" }) }, {}, {}];
+
+    await attemptHeartbeat.handler(heartbeatEvent({ progressPhase: "TRAINING" }));
+
+    const update = commandsOfType("UpdateItemCommand")[0];
+    assert.match(update.input.ConditionExpression, /#s = :processing/);
+  });
+
+  await test("a fenced-out worker gets leaseLost, not cancelRequested", async () => {
+    responses = [
+      { Item: attemptItem({ status: "PROCESSING" }) },
+      new ConditionalCheckFailedException(), // reaper already requeued it
+    ];
+
+    const res = await attemptHeartbeat.handler(
+      heartbeatEvent({ progressPhase: "TRAINING", progressPercent: 40 }),
+    );
+    const body = JSON.parse(res.body);
+
+    assert.equal(res.statusCode, 409);
+    assert.equal(body.reason, "LEASE_LOST");
+    assert.equal(body.leaseLost, true);
+    // Critical distinction: a cancelled worker PATCHes CANCELLED on the way
+    // out, which here would mark terminal an attempt the reaper has already
+    // handed to a replacement — destroying a live run.
+    assert.equal(
+      body.cancelRequested,
+      false,
+      "lease loss must not be reported as cancellation",
+    );
   });
 
   console.log(`\n${passed} assertions passed\n`);

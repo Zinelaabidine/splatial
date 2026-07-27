@@ -11,6 +11,8 @@ const { getUserTier, TIER_LIMITS } = require("../lib/user-tier");
 const { getRollingWindowCount, recordQuotaEvent } = require("../lib/quota");
 const { getPoolForTier, getPoolConfig } = require("../lib/worker-pool");
 const { getUserStatus, blockReasonForNewWork } = require("../lib/account-status");
+const { buildJobMessage, buildOutputPrefix } = require("../lib/job-message");
+const { MAX_REQUEUES } = require("../lib/attempt-lease");
 
 const sqs   = new SQSClient({});
 const dynamo = new DynamoDBClient({});
@@ -188,7 +190,7 @@ exports.handler = async (event) => {
   const attemptId    = randomUUID();
   const workerToken  = randomUUID();
   const now          = new Date().toISOString();
-  const outputPrefix = `${s3Key}/output/attempt-${attemptId}/`;
+  const outputPrefix = buildOutputPrefix(s3Key, attemptId);
   const inputFileCount = inputType === "zip" ? 1 : 0;
 
   // Atomically transition status and increment the attempt counter
@@ -272,7 +274,7 @@ exports.handler = async (event) => {
   await sqs.send(
     new SendMessageCommand({
       QueueUrl:    QUEUE_URL,
-      MessageBody: JSON.stringify({
+      MessageBody: buildJobMessage({
         sceneId,
         attemptId,
         userId,
@@ -291,6 +293,8 @@ exports.handler = async (event) => {
         maxAttempts:    MAX_ATTEMPTS,
         trainConfig:    resolvedTrainConfig,
         colmapConfig:   resolvedColmapConfig,
+        requeueCount:   0,
+        maxRequeues:    MAX_REQUEUES,
       }),
     })
   );

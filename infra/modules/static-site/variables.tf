@@ -196,3 +196,45 @@ variable "manual_mode_alert_minutes" {
     error_message = "manual_mode_alert_minutes must be at least 1."
   }
 }
+
+# ── Attempt-lease recovery (reaper.tf, backend/lib/attempt-lease.js) ──────────
+
+variable "attempt_lease_seconds" {
+  description = "How long a training attempt's lease stays valid without a heartbeat before the reaper treats the worker as dead. Deliberately generous relative to worker.py's HEARTBEAT_INTERVAL_SECONDS (30s): expiring too early costs duplicate GPU work, expiring late costs only a few minutes of delayed recovery, so a transient API outage must not look like a crash."
+  type        = number
+  default     = 600
+
+  validation {
+    condition     = var.attempt_lease_seconds >= 120
+    error_message = "attempt_lease_seconds must be at least 120 — anything shorter risks reaping a live worker between heartbeats."
+  }
+}
+
+variable "attempt_max_requeues" {
+  description = "Infrastructure requeues (Spot interruptions plus reaper recoveries) allowed for a single attempt before it is failed with reason LEASE_EXPIRED. Does not count user-visible retries, which create separate attempts. Without a cap, a scene that reliably crashes its worker would be re-enqueued forever."
+  type        = number
+  default     = 5
+
+  validation {
+    condition     = var.attempt_max_requeues >= 1 && var.attempt_max_requeues <= 20
+    error_message = "attempt_max_requeues must be between 1 and 20."
+  }
+}
+
+variable "attempt_reaper_dry_run" {
+  description = "When true the reaper logs every action it would take and writes nothing. A reaper bug can mass-requeue or mass-fail live work, so ship each environment in dry-run, confirm one real cycle in the logs, then set false to arm it."
+  type        = bool
+  default     = true
+}
+
+variable "attempt_reaper_enabled" {
+  description = "Whether the reaper's EventBridge schedule is ENABLED. Setting this false is the rollback: recovery stops and nothing corrupts, because the reaper only ever writes against leases that have already expired."
+  type        = bool
+  default     = true
+}
+
+variable "attempt_reaper_schedule" {
+  description = "EventBridge schedule expression for the attempt-lease reaper. Should be comfortably shorter than attempt_lease_seconds so an expired lease is noticed promptly."
+  type        = string
+  default     = "rate(5 minutes)"
+}

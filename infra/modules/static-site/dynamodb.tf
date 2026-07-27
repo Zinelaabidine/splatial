@@ -50,6 +50,16 @@ resource "aws_dynamodb_table" "scenes" {
     type = "S"
   }
 
+  attribute {
+    name = "lease_status"
+    type = "S"
+  }
+
+  attribute {
+    name = "lease_expires_at"
+    type = "S"
+  }
+
   # GSI for listing a user's scenes by status (e.g. PENDING_UPLOAD, READY).
   global_secondary_index {
     name = "user_id-status-index"
@@ -118,6 +128,39 @@ resource "aws_dynamodb_table" "scenes" {
 
     key_schema {
       attribute_name = "raw_expires_at"
+      key_type       = "RANGE"
+    }
+
+    projection_type = "KEYS_ONLY"
+  }
+
+  # Sparse GSI: lease_status is set (to "ACTIVE") only while a worker is holding
+  # a claim on a training attempt — written by attempt-patch.js when the worker
+  # reports RUNNING, renewed by attempt-heartbeat.js, and REMOVEd on every
+  # terminal or requeued status (see backend/lib/attempt-lease.js). The index
+  # therefore contains exactly the set of live claims, letting attempts-reap.js
+  # Query "every claim past its deadline" instead of scanning the table.
+  #
+  # A worker that is merely Spot-interrupted re-enqueues itself and clears its
+  # own lease, so it never appears here. What this index catches is the case no
+  # worker-side code can: a hard crash, OOM kill, or Spot hardware termination
+  # that sends no PATCH at all, leaving the attempt PROCESSING forever.
+  #
+  # Single-value hash key, so all entries share one partition — the same
+  # trade-off already accepted by raw_retention_status-raw_expires_at-index
+  # above, and sound at this job volume. If concurrent training ever grows
+  # enough to make it hot, shard the value ("ACTIVE#<0-9>") and have the reaper
+  # Query each shard.
+  global_secondary_index {
+    name = "lease_status-lease_expires_at-index"
+
+    key_schema {
+      attribute_name = "lease_status"
+      key_type       = "HASH"
+    }
+
+    key_schema {
+      attribute_name = "lease_expires_at"
       key_type       = "RANGE"
     }
 

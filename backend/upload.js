@@ -20,6 +20,7 @@ const submitJob        = require("./handlers/submit-job");
 const cancelJob        = require("./handlers/cancel-job");
 const attemptPatch     = require("./handlers/attempt-patch");
 const attemptHeartbeat = require("./handlers/attempt-heartbeat");
+const attemptsReap     = require("./handlers/attempts-reap");
 const adminAttemptsList = require("./handlers/admin-attempts-list");
 const adminAttemptsLogs = require("./handlers/admin-attempts-logs");
 const adminAsgConfigGet = require("./handlers/admin-asg-config-get");
@@ -267,6 +268,9 @@ exports.handler = async (event) => {
         return response(200, { ok: true });
       case "INTERNAL /retention/sweep":
         await retentionSweep.handler(event);
+        return response(200, { ok: true });
+      case "INTERNAL /attempts/reap":
+        await attemptsReap.handler(event);
         return response(200, { ok: true });
 
       default:
