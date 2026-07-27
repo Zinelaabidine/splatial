@@ -35,6 +35,7 @@ __pycache__/
 .next/
 out/
 frontend/redesign-preview.html
+design/
 
 # Environment variables (Prevent secret leaks)
 .env
