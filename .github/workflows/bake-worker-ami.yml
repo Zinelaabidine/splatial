@@ -138,7 +138,9 @@ jobs:
       - name: Package worker files
         run: |
           tar czf worker-bake.tar.gz -C worker \
-            worker.py convert.py imds_extract.py aws_config.py log_envelope.py gaussian-worker.service
+            --exclude='.cursorrules' \
+            --exclude='.gitignore' \
+            .
 
       - name: Stage worker files in S3
         id: stage
@@ -208,11 +210,14 @@ jobs:
           mkdir -p /tmp/ami-bake
           cd /tmp/ami-bake
           curl -fsSL "${{ steps.stage.outputs.presign_url }}" -o worker-bake.tar.gz
-          tar xzf worker-bake.tar.gz
+          mkdir -p worker-bake
+          tar xzf worker-bake.tar.gz -C worker-bake
           sudo mkdir -p /home/ubuntu/gaussian-splatting
-          sudo cp worker.py convert.py imds_extract.py aws_config.py log_envelope.py /home/ubuntu/gaussian-splatting/
-          sudo chown ubuntu:ubuntu /home/ubuntu/gaussian-splatting/*.py
-          sudo cp gaussian-worker.service /etc/systemd/system/gaussian-worker.service
+          sudo cp -a worker-bake/. /home/ubuntu/gaussian-splatting/
+          sudo chown -R ubuntu:ubuntu /home/ubuntu/gaussian-splatting
+          if [ -f /home/ubuntu/gaussian-splatting/gaussian-worker.service ]; then
+            sudo cp /home/ubuntu/gaussian-splatting/gaussian-worker.service /etc/systemd/system/gaussian-worker.service
+          fi
           sudo systemctl daemon-reload
           echo "== nvidia-smi =="
           nvidia-smi

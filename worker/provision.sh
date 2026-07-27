@@ -103,11 +103,12 @@ colmap --version || true
 sudo -u "${WORKER_USER}" mkdir -p "${PROJECT_DIR}"
 # The bake workflow overwrites these same paths on every incremental bake —
 # keep this list in sync with bake-worker-ami.yml's file-copy step.
-for f in worker.py convert.py imds_extract.py aws_config.py log_envelope.py; do
-  if [ -f "./${f}" ]; then
-    sudo -u "${WORKER_USER}" cp "./${f}" "${PROJECT_DIR}/${f}"
-  fi
-done
+while IFS= read -r -d '' src; do
+  rel="${src#./}"
+  dest="${PROJECT_DIR}/${rel}"
+  sudo -u "${WORKER_USER}" mkdir -p "$(dirname "${dest}")"
+  sudo -u "${WORKER_USER}" cp "${src}" "${dest}"
+done < <(find . -type f ! -name '.cursorrules' ! -name '.gitignore' -print0)
 
 # ── 7. systemd unit ────────────────────────────────────────────────────────────
 sudo cp ./gaussian-worker.service /etc/systemd/system/gaussian-worker.service
