@@ -902,6 +902,7 @@ data "aws_iam_policy_document" "github_deploy_network_policy" {
     ]
     resources = [
       "arn:aws:events:${var.aws_region}:886601940523:rule/${local.name_prefix}-asg-manual-mode-check",
+      "arn:aws:events:${var.aws_region}:886601940523:rule/${local.name_prefix}-attempts-reap",
       "arn:aws:events:${var.aws_region}:886601940523:rule/${local.name_prefix}-retention-sweep",
     ]
   }
