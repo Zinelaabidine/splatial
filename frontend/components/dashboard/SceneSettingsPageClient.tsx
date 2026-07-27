@@ -12,10 +12,7 @@ import {
 } from "lucide-react";
 
 import SceneTagsInput from "@/components/features/scenes/SceneTagsInput";
-import {
-  SceneVisibilityBadge,
-  SceneVisibilityToggle,
-} from "@/components/features/scenes/SceneVisibilityControl";
+import { SceneVisibilityToggle } from "@/components/features/scenes/SceneVisibilityControl";
 import StatusDot, { STATUS_LABELS } from "@/components/splatworks/StatusDot";
 import { Button } from "@/components/ui/button";
 import { usePageSearch } from "@/components/layout/AppShellContext";
@@ -81,9 +78,11 @@ function SceneEditorViewer({ sceneId }: { sceneId: string }) {
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   if (value === null || value === undefined || value === "") return null;
   return (
-    <div className="flex items-center justify-between gap-3 py-1.5 text-sm">
-      <span className="text-[var(--nord-slate)]">{label}</span>
-      <span className="min-w-0 truncate text-right font-medium text-[var(--nord-ink)]">
+    <div className="flex items-center justify-between gap-3 py-2 text-sm">
+      <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--nord-slate)]">
+        {label}
+      </span>
+      <span className="min-w-0 truncate text-right text-sm font-semibold text-[var(--nord-ink)]">
         {value}
       </span>
     </div>
@@ -131,7 +130,7 @@ export default function SceneSettingsPageClient() {
   }, [loadScene]);
 
   return (
-    <div className="mx-auto w-full max-w-6xl">
+    <div className="mx-auto w-full max-w-7xl">
       <nav aria-label="Breadcrumb" className="mb-3 flex items-center gap-1.5 text-xs text-[var(--nord-slate)]">
         <Link href="/scenes" className="transition-colors hover:text-[var(--nord-ink)]">
           Scenes
@@ -188,7 +187,7 @@ export default function SceneSettingsPageClient() {
 
 function LoadingState() {
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_440px]">
       <div className="space-y-6">
         <div className="h-64 animate-pulse rounded-2xl border border-[var(--nord-hairline)] bg-[var(--nord-surface)]" />
         <div className="h-40 animate-pulse rounded-2xl border border-[var(--nord-hairline)] bg-[var(--nord-surface)]" />
@@ -378,10 +377,10 @@ function SceneSettingsEditor({
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_440px]">
         {/* Left column — metadata */}
         <div className="space-y-6">
-          <section className="rounded-2xl border border-[var(--nord-hairline)] bg-[var(--nord-surface)] p-5">
+          <section className="rounded-2xl border border-[var(--nord-hairline)] bg-[var(--nord-surface)] p-5 shadow-sm">
             <h2 className="text-sm font-semibold text-[var(--nord-ink)]">Details</h2>
             <p className="mt-0.5 text-xs text-[var(--nord-slate)]">
               Name, category, tags and who can see this scene.
@@ -435,33 +434,32 @@ function SceneSettingsEditor({
               <Link href="/scenes">
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="ghost"
+                  size="lg"
                   disabled={busy}
-                  className="border-[var(--nord-hairline)] bg-transparent text-[var(--nord-ink)] hover:bg-[var(--nord-surface)] hover:text-[var(--nord-ink)]"
+                  className="text-[var(--nord-slate)] hover:bg-[var(--nord-tint)] hover:text-[var(--nord-ink)]"
                 >
                   Cancel
                 </Button>
               </Link>
               <Button
                 type="button"
+                size="lg"
                 disabled={busy || !name.trim() || !hasChanges}
                 onClick={() => void handleSave()}
+                className="bg-[var(--nord-pine)] font-semibold text-white shadow-sm hover:bg-[var(--nord-pine-hover)] hover:shadow-md"
               >
                 {saving ? "Saving…" : "Save changes"}
               </Button>
             </div>
           </section>
 
-          <section className="rounded-2xl border border-[var(--nord-hairline)] bg-[var(--nord-surface)] p-5">
+          <section className="rounded-2xl border border-[var(--nord-hairline)] bg-[var(--nord-surface)] p-5 shadow-sm">
             <h2 className="text-sm font-semibold text-[var(--nord-ink)]">Scene info</h2>
             <p className="mt-0.5 text-xs text-[var(--nord-slate)]">
               Read-only details from the processing pipeline.
             </p>
             <div className="mt-3 divide-y divide-[var(--nord-hairline)]">
-              <InfoRow
-                label="Visibility"
-                value={<SceneVisibilityBadge visibility={visibility} />}
-              />
               <InfoRow
                 label="Status"
                 value={
@@ -500,7 +498,7 @@ function SceneSettingsEditor({
         </div>
 
         {/* Right column — thumbnail */}
-        <section className="h-fit rounded-2xl border border-[var(--nord-hairline)] bg-[var(--nord-surface)] p-5">
+        <section className="h-fit rounded-2xl border border-[var(--nord-hairline)] bg-[var(--nord-surface)] p-5 shadow-sm">
           <h2 className="text-sm font-semibold text-[var(--nord-ink)]">Thumbnail</h2>
           <p className="mt-0.5 text-xs text-[var(--nord-slate)]">
             {editable
@@ -511,7 +509,7 @@ function SceneSettingsEditor({
           {editable ? (
             <>
               <div className="relative mt-4 overflow-hidden rounded-xl border border-[var(--nord-hairline)] bg-[var(--nord-bg)]">
-                <div className="relative h-[280px] w-full [&_.splat-viewer-container]:h-full [&_#canvas]:h-full [&_#canvas]:w-full">
+                <div className="relative h-[300px] w-full [&_.splat-viewer-container]:h-full [&_#canvas]:h-full [&_#canvas]:w-full">
                   <SceneEditorViewer sceneId={sceneId} />
                 </div>
                 <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center bg-gradient-to-t from-[var(--nord-scrim)] to-transparent px-4 pb-4 pt-10">
@@ -520,10 +518,10 @@ function SceneSettingsEditor({
                     size="sm"
                     disabled={busy}
                     onClick={() => void handleCaptureThumbnail()}
-                    className="pointer-events-auto bg-[var(--nord-tint)] text-[var(--nord-ink)] backdrop-blur hover:bg-[var(--nord-tint)]"
+                    className="pointer-events-auto bg-[var(--nord-pine)] font-semibold text-white shadow-lg hover:bg-[var(--nord-pine-hover)]"
                   >
                     <Camera data-icon="inline-start" />
-                    {capturing ? "Capturing…" : "Set thumbnail from current view"}
+                    {capturing ? "Capturing…" : "Use current view as thumbnail"}
                   </Button>
                 </div>
               </div>
@@ -546,7 +544,7 @@ function SceneSettingsEditor({
               )}
             </>
           ) : (
-            <div className="mt-4 flex h-[280px] items-center justify-center rounded-xl border border-dashed border-[var(--nord-hairline)] bg-[var(--nord-bg)]">
+            <div className="mt-4 flex h-[300px] items-center justify-center rounded-xl border border-dashed border-[var(--nord-hairline)] bg-[var(--nord-bg)]">
               {thumbnailPreview ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img

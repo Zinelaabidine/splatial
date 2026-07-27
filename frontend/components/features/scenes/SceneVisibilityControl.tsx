@@ -65,9 +65,9 @@ export function SceneVisibilityToggle({
         aria-pressed={!isPublic}
         onClick={() => onToggle("PRIVATE")}
         className={cn(
-          "h-6 flex-1 rounded-full px-3 text-[11px] font-medium",
+          "h-6 flex-1 rounded-full px-3 text-[11px] font-semibold",
           !isPublic
-            ? "bg-[var(--nord-surface)] text-[var(--nord-ink)] hover:bg-[var(--nord-surface)]"
+            ? "bg-[var(--nord-ink)] text-white shadow-sm hover:bg-[var(--nord-ink)]"
             : "text-[var(--nord-slate)] hover:bg-transparent hover:text-[var(--nord-ink)]",
         )}
       >
@@ -81,9 +81,9 @@ export function SceneVisibilityToggle({
         aria-pressed={isPublic}
         onClick={() => onToggle("PUBLIC")}
         className={cn(
-          "h-6 flex-1 rounded-full px-3 text-[11px] font-medium",
+          "h-6 flex-1 rounded-full px-3 text-[11px] font-semibold",
           isPublic
-            ? "bg-[var(--nord-surface)] text-[var(--nord-ink)] hover:bg-[var(--nord-surface)]"
+            ? "bg-[var(--nord-pine)] text-white shadow-sm hover:bg-[var(--nord-pine)]"
             : "text-[var(--nord-slate)] hover:bg-transparent hover:text-[var(--nord-ink)]",
         )}
       >
