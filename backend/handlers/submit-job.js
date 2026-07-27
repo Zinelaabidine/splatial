@@ -22,13 +22,22 @@ const OUTPUT_BUCKET  = process.env.SPLAT_SCENES_BUCKET_NAME;
 const API_BASE_URL   = (process.env.API_BASE_URL ?? "").replace(/\/$/, "");
 const MAX_ATTEMPTS   = 3;
 
-const SUBMITTABLE = new Set(["READY", "FAILED", "UPLOADED"]);
+// CANCELLED is included because cancellation is terminal for a processing
+// *attempt*, not for the scene. Cancelling one training run must not make the
+// scene permanently unsubmittable — that mismatch (the frontend's
+// canSubmitScene offers Submit for CANCELLED, this set rejected it) is what
+// produced "Scene is in CANCELLED state and cannot be submitted".
+const SUBMITTABLE = new Set(["READY", "FAILED", "UPLOADED", "CANCELLED"]);
+
+// A scene in one of these states has no prior attempt to charge for, so its
+// first submission is only billed later, on success (see attempt-patch.js).
+const FIRST_SUBMISSION_STATES = new Set(["UPLOADED"]);
 
 /**
  * POST /jobs/submit
  *
- * Re-queues an existing scene for 3DGS training. Useful for scenes in
- * READY, FAILED, or UPLOADED state.
+ * Re-queues an existing scene for 3DGS training. Valid for scenes in
+ * READY, FAILED, UPLOADED or CANCELLED state (see SUBMITTABLE).
  *
  * Request body: { "sceneId": "...", "trainConfig"?: {}, "colmapConfig"?: {} }
  *
@@ -114,12 +123,54 @@ exports.handler = async (event) => {
     return response(409, { error: `Scene is in ${currentStatus} state and cannot be submitted` });
   }
 
-  // Resubmitting a scene that already has a prior attempt (FAILED or READY)
-  // is a manual retry and charges the quota immediately below, regardless of
-  // this attempt's eventual outcome. A first-ever submission (UPLOADED)
-  // charges nothing here — it's only charged later, in attempt-patch.js, if
-  // and when it succeeds.
-  const isManualRetry = currentStatus !== "UPLOADED";
+  // ── Quota: one charge per intent-to-train, carried across cancellations ────
+  //
+  // Resubmitting a scene that already has a prior attempt is a manual retry
+  // and is charged immediately below, regardless of this attempt's eventual
+  // outcome. A first-ever submission (UPLOADED) charges nothing here — it's
+  // only charged later, in attempt-patch.js, if and when it succeeds.
+  //
+  // Cancelling never refunds, so a naive reading would double-bill the
+  // cancel-then-resubmit cycle: FAILED -> submit (charged) -> cancel ->
+  // resubmit (charged again) = two charges for zero outputs. Instead, when the
+  // superseded attempt already holds a charge and was cancelled, this attempt
+  // inherits that charge rather than adding a new one. Cancel-thrashing
+  // therefore costs exactly one slot, not one per cycle.
+  const isFirstSubmission = FIRST_SUBMISSION_STATES.has(currentStatus);
+  const priorAttemptId = Item.last_attempt_id?.S ?? null;
+
+  let inheritedCharge = false;
+  let inheritedFromAttemptId = null;
+  if (!isFirstSubmission && priorAttemptId) {
+    const { Item: priorAttempt } = await dynamo.send(
+      new GetItemCommand({
+        TableName: TABLE,
+        Key: { scene_id: { S: priorAttemptId } },
+        ProjectionExpression: "#s, quota_charged, is_manual_retry",
+        ExpressionAttributeNames: { "#s": "status" },
+      })
+    );
+    // quota_charged is the explicit flag; is_manual_retry is the pre-existing
+    // field that already meant "charged at submit time", so reading it as a
+    // fallback keeps attempts created before this change accounted for.
+    const priorHeldCharge =
+      priorAttempt?.quota_charged?.BOOL === true ||
+      priorAttempt?.is_manual_retry?.BOOL === true;
+    if (priorAttempt?.status?.S === "CANCELLED" && priorHeldCharge) {
+      inheritedCharge = true;
+      inheritedFromAttemptId = priorAttemptId;
+    }
+  }
+
+  // Charge now only for a retry that is not inheriting an existing charge.
+  const shouldChargeNow = !isFirstSubmission && !inheritedCharge;
+
+  // Whether THIS attempt holds a quota charge — fresh or inherited. Written to
+  // is_manual_retry because attempt-patch.js already reads that field to mean
+  // "already paid, do not charge a COMPLETION on success", which is exactly
+  // the semantics needed here.
+  const attemptHoldsCharge = shouldChargeNow || inheritedCharge;
+  const isManualRetry = attemptHoldsCharge;
 
   const s3Key = Item.s3_key?.S;
   if (!s3Key) return response(422, { error: "No file attached to this scene. Upload a file before submitting." });
@@ -149,7 +200,9 @@ exports.handler = async (event) => {
         Key: { scene_id: { S: sceneId } },
         UpdateExpression:
           "SET #s = :queued, updated_at = :now, worker_token = :token, last_attempt_id = :attemptId ADD attempt_count :one",
-        ConditionExpression: "#s IN (:r1, :r2, :r3)",
+        // Kept in lockstep with SUBMITTABLE above — the pre-read check produces
+        // the user-facing message, this makes the transition atomic.
+        ConditionExpression: "#s IN (:r1, :r2, :r3, :r4)",
         ExpressionAttributeNames: { "#s": "status" },
         ExpressionAttributeValues: {
           ":queued":    { S: "QUEUED" },
@@ -160,6 +213,7 @@ exports.handler = async (event) => {
           ":r1":        { S: "READY" },
           ":r2":        { S: "FAILED" },
           ":r3":        { S: "UPLOADED" },
+          ":r4":        { S: "CANCELLED" },
         },
         ReturnValues: "ALL_NEW",
       })
@@ -198,6 +252,13 @@ exports.handler = async (event) => {
         // ran (not whatever it is by the time it completes).
         tier:            { S: tier },
         is_manual_retry: { BOOL: isManualRetry },
+        // Explicit successor to is_manual_retry's overloaded meaning: true when
+        // this attempt holds a quota charge, whether charged below or inherited
+        // from a cancelled predecessor.
+        quota_charged:   { BOOL: attemptHoldsCharge },
+        ...(inheritedFromAttemptId
+          ? { quota_carried_from: { S: inheritedFromAttemptId } }
+          : {}),
       },
     })
   );
@@ -236,7 +297,7 @@ exports.handler = async (event) => {
 
   log.event("job.queued", { attemptId, data: { queue: QUEUE_URL, pool } });
 
-  if (quotaLimit !== null && isManualRetry) {
+  if (quotaLimit !== null && shouldChargeNow) {
     await recordQuotaEvent(dynamo, userId, {
       eventType: "MANUAL_RETRY",
       attemptId,
@@ -247,6 +308,12 @@ exports.handler = async (event) => {
       attemptId,
       data: { tier, event_type: "MANUAL_RETRY" },
     });
+  } else if (inheritedCharge) {
+    log.event("quota.carried_forward", {
+      sceneId,
+      attemptId,
+      data: { tier, from_attempt_id: inheritedFromAttemptId },
+    });
   }
 
   log.event("job.submitted", {
@@ -254,6 +321,9 @@ exports.handler = async (event) => {
     attemptId,
     data: {
       attempt_number: attemptNumber,
+      from_status: currentStatus,
+      quota_charged_now: shouldChargeNow,
+      quota_inherited: inheritedCharge,
       train_config: resolvedTrainConfig,
       colmap_config: resolvedColmapConfig,
     },

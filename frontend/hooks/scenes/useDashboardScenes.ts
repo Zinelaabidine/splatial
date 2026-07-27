@@ -4,6 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import {
+  isMissingUploadError,
+  isQuotaExceededError,
+  isSubmitConflictError,
+} from "@/lib/api/apiErrors";
+import {
   apiSceneToCard,
   isActiveSceneStatus,
   POLL_INTERVAL_MS,
@@ -189,11 +194,24 @@ export function useDashboardScenes() {
             : s,
         ),
       );
+      setActionMessage(null);
       try {
         await submitJob(scene.sceneId);
         await fetchScenes(true);
       } catch (err) {
         console.error("[useDashboardScenes] submit failed", err);
+        // This used to fail silently: the optimistic "preprocessing" state was
+        // reverted by the refetch with no explanation, so a rejected submit
+        // looked like the click had simply not registered.
+        if (isQuotaExceededError(err)) {
+          setActionMessage("You've reached your weekly training limit.");
+        } else if (isMissingUploadError(err)) {
+          setActionMessage("This scene has no file attached. Upload one before submitting.");
+        } else if (isSubmitConflictError(err)) {
+          setActionMessage("This scene already has a job in progress.");
+        } else {
+          setActionMessage("Failed to submit scene. Please try again.");
+        }
         await fetchScenes(true);
       }
     },
