@@ -340,7 +340,81 @@ def test_drain_defaults_are_safe():
     assert worker.MAX_JOBS_PER_INSTANCE == 0, "unlimited by default"
 
 
+# ── aws_config version-skew preflight ─────────────────────────────────────────
+
+
+def test_surface_check_passes_against_real_aws_config():
+    assert worker.missing_aws_config_attrs() == [], (
+        "the aws_config.py shipped in this repo must satisfy worker.py's needs"
+    )
+
+
+def test_surface_check_detects_the_reported_skew():
+    """
+    Reproduces the live failure:
+
+        AttributeError: module 'aws_config' has no attribute
+        'spot_interruption_notice'
+
+    raised inside a daemon thread, which killed Spot interruption detection
+    while the worker carried on polling and looked healthy in every other log
+    line. The preflight turns that into an immediate, named startup error.
+    """
+    import aws_config
+
+    saved = aws_config.spot_interruption_notice
+    del aws_config.spot_interruption_notice
+    try:
+        missing = worker.missing_aws_config_attrs()
+        assert missing == ["spot_interruption_notice"], missing
+    finally:
+        aws_config.spot_interruption_notice = saved
+
+    assert worker.missing_aws_config_attrs() == [], "must restore cleanly"
+
+
+def test_surface_check_rejects_non_callables():
+    # A name that exists but is not callable is still a broken deploy.
+    import aws_config
+
+    saved = aws_config.is_ec2
+    aws_config.is_ec2 = "not a function"
+    try:
+        assert "is_ec2" in worker.missing_aws_config_attrs()
+    finally:
+        aws_config.is_ec2 = saved
+
+
+def test_required_attrs_cover_every_aws_config_use():
+    """
+    Every aws_config.<name> worker.py actually calls must be in the required
+    list, or the preflight gives false confidence about a partial deploy.
+    """
+    import re
+
+    src_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "worker.py")
+    with open(src_path, encoding="utf-8-sig") as fh:
+        src = fh.read()
+
+    # Require an opening paren so prose mentions of the filename ("aws_config.py")
+    # and attribute reads like aws_config.__file__ are not mistaken for calls.
+    used = set(re.findall(r"aws_config\.([a-zA-Z_][a-zA-Z0-9_]*)\s*\(", src))
+    declared = set(worker.REQUIRED_AWS_CONFIG_ATTRS)
+
+    unchecked = used - declared
+    assert unchecked == set(), (
+        f"worker.py calls aws_config.{{{', '.join(sorted(unchecked))}}} but the "
+        f"preflight does not verify it"
+    )
+
+
 def main():
+    section("worker.py — aws_config version-skew preflight")
+    test("passes against the repo's aws_config.py", test_surface_check_passes_against_real_aws_config)
+    test("detects the reported missing spot_interruption_notice", test_surface_check_detects_the_reported_skew)
+    test("rejects names that exist but are not callable", test_surface_check_rejects_non_callables)
+    test("required list covers every aws_config call in worker.py", test_required_attrs_cover_every_aws_config_use)
+
     section("worker.py — job outcome classification")
     test("success gives up capacity", test_outcome_success)
     test("plain failure gives up capacity", test_outcome_plain_failure)

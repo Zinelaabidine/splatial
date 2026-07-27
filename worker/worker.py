@@ -769,6 +769,37 @@ def spot_interruption_notice() -> bool:
         return True
     return aws_config.spot_interruption_notice()
 
+# Functions worker.py requires from the aws_config module shipped beside it.
+# Both files are copied together by the AMI bake, so a mismatch means a partial
+# deploy — worker.py updated without aws_config.py, or vice versa.
+REQUIRED_AWS_CONFIG_ATTRS = (
+    "get_session",
+    "get_instance_metadata",
+    "is_ec2",
+    "spot_interruption_notice",
+)
+
+def missing_aws_config_attrs() -> List[str]:
+    """
+    Names this worker needs from aws_config but cannot find.
+
+    Exists because a stale aws_config.py fails in the worst possible way: the
+    AttributeError surfaces inside two *daemon* threads
+    (_monitor_spot_instance_events and simulate_processing's
+    monitor_interruptions), killing both. The worker then keeps polling and
+    processing jobs while every Spot interruption goes undetected — no
+    INTERRUPTED patch, no requeue, no checkpoint. It looks healthy in every log
+    except one buried traceback at startup.
+
+    Note FORCE_SPOT_INTERRUPT short-circuits before the aws_config call, so
+    testing interruption handling with that flag would not reveal the problem.
+    """
+    return [
+        name
+        for name in REQUIRED_AWS_CONFIG_ATTRS
+        if not callable(getattr(aws_config, name, None))
+    ]
+
 # ----------------------------
 # 9. Processing Logic
 # ----------------------------
@@ -3461,17 +3492,45 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
         item.lease_lost = True
         interrupt_event.set()
 
-    # Start monitoring for spot interruptions
+    # Start monitoring for spot interruptions.
+    #
+    # Same hardening as main()'s _monitor_spot_instance_events: an unhandled
+    # exception in this daemon thread stops interruption detection for the rest
+    # of the job while the job itself carries on looking healthy.
     def monitor_interruptions():
         log.debug("Starting spot interruption monitoring thread")
         check_count = 0
+        consecutive_failures = 0
+        max_consecutive_failures = 5
         while not interrupt_event.is_set() and not global_stop.is_set():
             check_count += 1
-            if spot_interruption_notice():
-                log.warning("Spot interruption detected after %d checks", check_count)
-                _emit_spot_interrupted()
-                interrupt_event.set()
-                break
+            try:
+                if spot_interruption_notice():
+                    log.warning("Spot interruption detected after %d checks", check_count)
+                    _emit_spot_interrupted()
+                    interrupt_event.set()
+                    break
+                consecutive_failures = 0
+            except Exception as e:
+                consecutive_failures += 1
+                if consecutive_failures >= max_consecutive_failures:
+                    log.error(
+                        "In-job Spot interruption monitor failed %d times "
+                        "consecutively (%s); giving up for attempt %s.",
+                        consecutive_failures,
+                        e,
+                        attempt_id,
+                        exc_info=True,
+                    )
+                    _event(
+                        "job.spot_monitor_dead",
+                        level=logging.ERROR,
+                        error=str(e),
+                        error_type=type(e).__name__,
+                    )
+                    return
+                log.warning("In-job Spot interruption check failed (%d/%d): %s",
+                            consecutive_failures, max_consecutive_failures, e)
             # Log every 30 seconds to show the thread is working
             if check_count % 30 == 0:
                 log.debug("Spot interruption monitor: %d checks completed, no interruption", check_count)
@@ -4444,6 +4503,42 @@ def main() -> None:
         log.error("If running locally, set SQS_QUEUE_URL or QURL explicitly")
         return
 
+    # Version-skew preflight. worker.py and aws_config.py ship together in the
+    # AMI, so a missing function means one was deployed without the other.
+    # Checked here, loudly, rather than left to explode inside a daemon thread
+    # where it silently disables Spot interruption handling.
+    missing = missing_aws_config_attrs()
+    if missing:
+        log.error(
+            "aws_config is missing %s — worker.py and aws_config.py are out of "
+            "sync (partial deploy). Loaded aws_config from: %s",
+            ", ".join(missing),
+            getattr(aws_config, "__file__", "<unknown>"),
+        )
+        _event(
+            "worker.aws_config_skew",
+            level=logging.ERROR,
+            missing=missing,
+            aws_config_path=getattr(aws_config, "__file__", None),
+            lifecycle=INSTANCE_LIFECYCLE,
+        )
+        log_envelope.flush_logs()
+
+        # On Spot, interruption handling is load-bearing: without it an
+        # interrupted job is killed mid-training with no INTERRUPTED patch and
+        # no requeue. Refuse to run rather than burn GPU time on work that
+        # cannot be recovered cleanly. Exits non-zero so systemd reports failure
+        # instead of "Deactivated successfully".
+        if str(INSTANCE_LIFECYCLE).lower() == "spot":
+            log.error("Refusing to run a Spot worker without interruption detection.")
+            raise SystemExit(1)
+
+        log.error(
+            "Continuing without Spot interruption detection (lifecycle=%s); "
+            "redeploy aws_config.py to restore it.",
+            INSTANCE_LIFECYCLE,
+        )
+
     _event(
         "worker.started",
         queue=qurl,
@@ -4452,12 +4547,42 @@ def main() -> None:
 
     # Start global Spot interruption monitor
     def _monitor_spot_instance_events() -> None:
-        # Detect Spot interruption notice and request graceful shutdown
+        # Detect Spot interruption notice and request graceful shutdown.
+        #
+        # Wrapped because an unhandled exception here kills the thread without
+        # killing the worker: interruption detection stops while every other log
+        # line still says healthy. A stale aws_config.py did exactly that.
+        # Transient IMDS blips are tolerated; a persistent fault is reported once
+        # and loudly rather than spamming a line per second forever.
+        consecutive_failures = 0
+        max_consecutive_failures = 5
         while not stop_event.is_set():
-            if spot_interruption_notice():
-                log.warning("Spot interruption notice detected; stopping worker to allow replacement.")
-                stop_event.set()
-                break
+            try:
+                if spot_interruption_notice():
+                    log.warning("Spot interruption notice detected; stopping worker to allow replacement.")
+                    stop_event.set()
+                    break
+                consecutive_failures = 0
+            except Exception as e:
+                consecutive_failures += 1
+                if consecutive_failures >= max_consecutive_failures:
+                    log.error(
+                        "Spot interruption monitor failed %d times consecutively "
+                        "(%s); giving up. Interruptions will NOT be detected.",
+                        consecutive_failures,
+                        e,
+                        exc_info=True,
+                    )
+                    _event(
+                        "worker.spot_monitor_dead",
+                        level=logging.ERROR,
+                        error=str(e),
+                        error_type=type(e).__name__,
+                    )
+                    log_envelope.flush_logs()
+                    return
+                log.warning("Spot interruption check failed (%d/%d): %s",
+                            consecutive_failures, max_consecutive_failures, e)
             time.sleep(1)
 
     spot_evt_thread = threading.Thread(target=_monitor_spot_instance_events, daemon=True)
