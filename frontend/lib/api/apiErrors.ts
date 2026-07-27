@@ -44,3 +44,24 @@ export function isQuotaExceededError(err: unknown): boolean {
   }
   return err.message.includes("Weekly training quota exceeded");
 }
+
+/**
+ * A submit was refused because the scene's state moved under us — almost
+ * always because a job is already queued or running for it (see
+ * submit-job.js's SUBMITTABLE set and its ConditionExpression).
+ *
+ * Worth distinguishing from a generic failure: refetching the scene list
+ * resolves it, and telling the user to "try again" is actively misleading
+ * when the real answer is "it's already running".
+ */
+export function isSubmitConflictError(err: unknown): boolean {
+  return err instanceof ApiRequestError && err.statusCode === 409;
+}
+
+/**
+ * A scene has no file attached, so there is nothing to train.
+ * submit-job.js answers 422 for this rather than 409.
+ */
+export function isMissingUploadError(err: unknown): boolean {
+  return err instanceof ApiRequestError && err.statusCode === 422;
+}

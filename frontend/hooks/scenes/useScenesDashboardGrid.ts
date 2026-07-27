@@ -10,7 +10,12 @@ import {
 } from "@/lib/scenes/sceneMappers";
 import { cancelJob, submitJob, type SubmitJobOptions } from "@/services/jobsService";
 import { deleteScene, listScenes, updateScene } from "@/services/scenesService";
-import { ApiRequestError, isQuotaExceededError } from "@/lib/api/apiErrors";
+import {
+  ApiRequestError,
+  isMissingUploadError,
+  isQuotaExceededError,
+  isSubmitConflictError,
+} from "@/lib/api/apiErrors";
 import { sceneSettingsUrl, sceneViewerUrl } from "@/lib/scenes/viewerUrls";
 import type { SceneVisibility } from "@/types/api";
 import type { DashboardScene, SceneStatus } from "@/types/splatworks";
@@ -155,6 +160,12 @@ export function useScenesDashboardGrid(search: string) {
           // at least visible in the console/CloudWatch-forwarded logs.
           console.info("[analytics] quota_limit_reached", { sceneId: scene.sceneId });
           setQuotaLimitReached(true);
+        } else if (isMissingUploadError(err)) {
+          setActionError("This scene has no file attached. Upload one before submitting.");
+        } else if (isSubmitConflictError(err)) {
+          // The fetchScenes below resyncs the card, so the state the user sees
+          // will already reflect reality by the time they read this.
+          setActionError("This scene already has a job in progress.");
         } else {
           setActionError("Failed to submit scene. Please try again.");
         }
