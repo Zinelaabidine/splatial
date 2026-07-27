@@ -36,3 +36,11 @@ export function isExpectedSceneConflict(err: unknown): boolean {
     msg.includes("no PLY file")
   );
 }
+
+/** Free-plan weekly training quota exhausted (see backend/lib/quota.js). */
+export function isQuotaExceededError(err: unknown): boolean {
+  if (!(err instanceof ApiRequestError) || err.statusCode !== 429) {
+    return false;
+  }
+  return err.message.includes("Weekly training quota exceeded");
+}

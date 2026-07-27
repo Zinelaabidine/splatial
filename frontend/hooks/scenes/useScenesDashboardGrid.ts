@@ -10,7 +10,7 @@ import {
 } from "@/lib/scenes/sceneMappers";
 import { cancelJob, submitJob, type SubmitJobOptions } from "@/services/jobsService";
 import { deleteScene, listScenes, updateScene } from "@/services/scenesService";
-import { ApiRequestError } from "@/lib/api/apiErrors";
+import { ApiRequestError, isQuotaExceededError } from "@/lib/api/apiErrors";
 import { sceneViewerUrl } from "@/lib/scenes/viewerUrls";
 import type { SceneVisibility } from "@/types/api";
 import type { DashboardScene, SceneStatus } from "@/types/splatworks";
@@ -60,6 +60,7 @@ export function useScenesDashboardGrid(search: string) {
   const [modalCancelling, setModalCancelling] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [quotaLimitReached, setQuotaLimitReached] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<DashboardScene | null>(null);
   const [editTarget, setEditTarget] = useState<DashboardScene | null>(null);
   const [editSaving, setEditSaving] = useState(false);
@@ -133,6 +134,7 @@ export function useScenesDashboardGrid(search: string) {
       setSubmittingId(scene.sceneId);
       setActionError(null);
       setActionMessage(null);
+      setQuotaLimitReached(false);
       setScenes((prev) =>
         prev.map((s) =>
           s.sceneId === scene.sceneId
@@ -150,7 +152,15 @@ export function useScenesDashboardGrid(search: string) {
         await fetchScenes(true);
       } catch (err) {
         console.error("[useScenesDashboardGrid] submit failed", err);
-        setActionError("Failed to submit scene. Please try again.");
+        if (isQuotaExceededError(err)) {
+          // TODO(analytics): route through the app's real event-tracking
+          // provider once one is wired up. Logged for now so this state is
+          // at least visible in the console/CloudWatch-forwarded logs.
+          console.info("[analytics] quota_limit_reached", { sceneId: scene.sceneId });
+          setQuotaLimitReached(true);
+        } else {
+          setActionError("Failed to submit scene. Please try again.");
+        }
         await fetchScenes(true);
       } finally {
         setSubmittingId(null);
@@ -356,6 +366,7 @@ export function useScenesDashboardGrid(search: string) {
     setViewMode,
     actionError,
     actionMessage,
+    quotaLimitReached,
     submittingId,
     cancellingId,
     modalCancelling,
@@ -365,7 +376,10 @@ export function useScenesDashboardGrid(search: string) {
     cancelScene,
     handleCancelFromModal,
     createScene,
-    clearActionError: () => setActionError(null),
+    clearActionError: () => {
+      setActionError(null);
+      setQuotaLimitReached(false);
+    },
     clearActionMessage: () => setActionMessage(null),
     deleteTarget,
     deleting,

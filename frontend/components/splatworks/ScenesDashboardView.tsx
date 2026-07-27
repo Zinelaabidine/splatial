@@ -8,6 +8,7 @@ import DashboardSceneCard from "@/components/splatworks/DashboardSceneCard";
 import DashboardSceneListRow from "@/components/splatworks/DashboardSceneListRow";
 import SceneCardSkeleton from "@/components/splatworks/SceneCardSkeleton";
 import DashboardToolbar from "@/components/splatworks/dashboard/DashboardToolbar";
+import { Button } from "@/components/ui/button";
 import { usePageSearch } from "@/components/layout/AppShellContext";
 import {
   useScenesDashboardGrid,
@@ -69,6 +70,7 @@ export default function ScenesDashboardView() {
     setViewMode,
     actionError,
     actionMessage,
+    quotaLimitReached,
     submittingId,
     cancellingId,
     modalCancelling,
@@ -225,6 +227,32 @@ export default function ScenesDashboardView() {
           >
             Retry
           </button>
+        </div>
+      ) : quotaLimitReached ? (
+        <div className="mb-4 rounded-xl border border-[var(--nord-danger)] bg-[var(--nord-danger-tint)] px-5 py-4 text-sm text-[var(--nord-danger)]">
+          <p className="font-semibold text-[var(--nord-ink)]">Weekly limit reached</p>
+          <p className="mt-1">
+            Your free plan includes one scene training per week. Upgrade to train more
+            scenes and unlock more processing capacity.
+          </p>
+          <div className="mt-3 flex items-center gap-3">
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => {
+                // TODO: point this at the upgrade/billing flow once one exists.
+              }}
+            >
+              Upgrade plan
+            </Button>
+            <button
+              type="button"
+              onClick={clearActionError}
+              className="font-medium underline underline-offset-2 hover:text-[var(--nord-danger)]"
+            >
+              Dismiss
+            </button>
+          </div>
         </div>
       ) : actionError ? (
         <div className="mb-4 rounded-xl border border-[var(--nord-danger)] bg-[var(--nord-danger-tint)] px-5 py-4 text-sm text-[var(--nord-danger)]">
