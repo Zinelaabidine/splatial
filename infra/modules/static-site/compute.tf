@@ -47,6 +47,23 @@ resource "aws_vpc_security_group_ingress_rule" "worker_ssh" {
   depends_on = [time_sleep.compute_iam_propagation]
 }
 
+resource "aws_vpc_security_group_ingress_rule" "worker_ssh_from_public_subnets" {
+  for_each = var.worker_ssh_key_name != "" && var.worker_ssh_allowed_cidr != "" ? {
+    for cidr in var.public_cidrs : cidr => cidr
+  } : {}
+
+  provider = aws.this
+
+  security_group_id = aws_security_group.worker.id
+  from_port         = 22
+  to_port           = 22
+  ip_protocol       = "tcp"
+  cidr_ipv4         = each.value
+  description       = "SSH from public subnet CIDRs"
+
+  depends_on = [time_sleep.compute_iam_propagation]
+}
+
 # ── Launch Template ───────────────────────────────────────────────────────────
 
 resource "aws_launch_template" "worker" {
