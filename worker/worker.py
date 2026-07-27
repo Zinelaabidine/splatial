@@ -168,6 +168,10 @@ DEFAULTS = {
     "DELETE_MESSAGE_MAX_RETRIES": "5",  # Max retries for robust delete
     "SELF_TERMINATE": "true",
     "SELF_TERMINATE_METHOD": "api",
+    # Queue draining (one instance, many jobs). See main()'s loop.
+    "CLEANUP_WORKSPACE_AFTER_JOB": "true",
+    "MIN_FREE_DISK_BYTES": "21474836480",  # 20 GiB
+    "MAX_JOBS_PER_INSTANCE": "0",          # 0 = unlimited
 }
 
 for key, val in DEFAULTS.items():
@@ -419,7 +423,27 @@ SIM_UPDATE_INTERVAL_SECONDS = getenv_int("SIM_UPDATE_INTERVAL_SECONDS", 5)
 TRAINING_PROGRESS_INTERVAL_SECONDS = max(1, getenv_int("TRAINING_PROGRESS_INTERVAL_SECONDS", 5))
 TRAINING_ESTIMATED_SECONDS = max(60, getenv_int("TRAINING_ESTIMATED_SECONDS", 900))
 FORCE_SPOT_INTERRUPT = getenv_bool("FORCE_SPOT_INTERRUPT", False)
+# When true, process exactly one message then terminate (the historical
+# one-message-per-instance behaviour). Until the queue-draining loop landed this
+# flag was read here and then used only in a log line — the knob existed but was
+# never wired to the control flow. It is now the documented rollback for
+# draining: set RUN_ONCE=true in /etc/splatial-worker.env, no redeploy needed.
 RUN_ONCE = getenv_bool("RUN_ONCE", False)
+
+# Reclaim each job's scratch space before taking the next message. Irrelevant
+# when an instance handled a single job and then died; essential once one
+# instance drains many, since nothing else ever deletes a workspace.
+CLEANUP_WORKSPACE_AFTER_JOB = getenv_bool("CLEANUP_WORKSPACE_AFTER_JOB", True)
+
+# Refuse to accept a new job below this much free space on the workspace volume.
+# A 3DGS job needs room for extracted images, COLMAP output and the trained
+# model at once, so running out mid-training wastes the whole run.
+MIN_FREE_DISK_BYTES = getenv_int("MIN_FREE_DISK_BYTES", 20 * 1024 * 1024 * 1024)
+
+# Retire the instance after this many jobs (0 = unlimited). A hedge against slow
+# leaks — CUDA context growth, fragmentation, file handles — that a
+# single-job-per-instance worker could never accumulate.
+MAX_JOBS_PER_INSTANCE = max(0, getenv_int("MAX_JOBS_PER_INSTANCE", 0))
 IDLE_EXIT_SECONDS = max(0, getenv_int("IDLE_EXIT_SECONDS", 0))
 WORKSPACE_ROOT = os.getenv("WORKSPACE_ROOT", "/tmp/streaming-splat")
 
@@ -1567,6 +1591,75 @@ def setup_workspace(attempt_id: str) -> str:
         os.makedirs(os.path.join(ws, subdir), exist_ok=True)
     log.info("Workspace created: %s", ws)
     return ws
+
+def free_disk_bytes(path: str = None) -> int:
+    """
+    Free bytes on the volume holding the workspace root.
+
+    Returns sys.maxsize when the check itself fails, so an unexpected stat error
+    degrades to "assume there is room" rather than wedging the worker into
+    refusing all work.
+    """
+    target = path or WORKSPACE_ROOT
+    try:
+        os.makedirs(target, exist_ok=True)
+        usage = shutil.disk_usage(target)
+        return int(usage.free)
+    except Exception as e:
+        log.warning("Could not determine free disk space at %s: %s", target, e)
+        return sys.maxsize
+
+def cleanup_job_paths(paths: List[str]) -> int:
+    """
+    Delete a finished job's scratch directories. Returns bytes reclaimed
+    (best effort, for logging).
+
+    Two locations matter, and they are NOT nested:
+      - the workspace under WORKSPACE_ROOT (extracted inputs, staged outputs)
+      - 3DGS train.py's output folder, which lives under the gaussian-splatting
+        checkout and is discovered by parsing train.py's "Output folder:" line
+
+    Nothing deleted these before, because an instance processed one job and then
+    terminated. Once one instance drains many jobs, an uncleaned workspace is a
+    slow disk leak that eventually fails a job mid-training.
+
+    Refuses any path that is not under WORKSPACE_ROOT or the gaussian-splatting
+    root — an rmtree driven by a parsed log line deserves a guard rail.
+    """
+    allowed_roots = [os.path.abspath(WORKSPACE_ROOT)]
+    try:
+        allowed_roots.append(os.path.abspath(_gaussian_splatting_root()))
+    except Exception:
+        pass
+
+    reclaimed = 0
+    for raw in paths:
+        if not raw:
+            continue
+        target = os.path.abspath(raw)
+        if not os.path.isdir(target):
+            continue
+
+        if not any(
+            os.path.commonpath([root, target]) == root and target != root
+            for root in allowed_roots
+        ):
+            log.warning("Refusing to clean path outside known roots: %s", target)
+            continue
+
+        try:
+            for dirpath, _dirnames, filenames in os.walk(target):
+                for fname in filenames:
+                    try:
+                        reclaimed += os.path.getsize(os.path.join(dirpath, fname))
+                    except OSError:
+                        pass
+            shutil.rmtree(target, ignore_errors=True)
+            log.info("Cleaned up %s", target)
+        except Exception as e:
+            log.warning("Cleanup failed for %s (continuing): %s", target, e)
+
+    return reclaimed
 
 def _safe_extract_zip(zip_path: str, dest_dir: str) -> None:
     """Safely extract a zip to dest_dir (prevents path traversal / Zip Slip)."""
@@ -3299,6 +3392,11 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
     job_started_at = time.time()
     job_progress = {"phase": "INIT", "percent": 0}
 
+    # Scratch directories to reclaim in the finally block. Collected as they are
+    # created rather than derived afterwards, so an early return still cleans up
+    # whatever had been allocated by then.
+    cleanup_targets: List[str] = []
+
     def _set_job_progress(phase: str, percent: int) -> None:
         job_progress["phase"] = phase
         job_progress["percent"] = percent
@@ -3608,6 +3706,7 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
 
         # Claim accepted — now it is worth allocating local resources.
         workspace = setup_workspace(attempt_id)
+        cleanup_targets.append(workspace)
 
         _send_heartbeat_if_due("INIT", 0, force=True)
         _set_job_progress("INIT", 0)
@@ -3854,7 +3953,14 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
                 expected_iterations=int(merge_train_config(item.train_config).get("iterations", DEFAULT_TRAIN_CONFIG["iterations"])),
                 train_config=item.train_config,
             )
-            
+
+            # Registered here rather than on the success path so a failed or
+            # interrupted run still has its partial output reclaimed. train.py
+            # writes under the gaussian-splatting checkout, not the workspace,
+            # so this is a second disk leak once one instance drains many jobs.
+            if training_output_folder:
+                cleanup_targets.append(training_output_folder)
+
             patch_attempt(attempt_id, token, {
                 "progressPhase": "TRAINING",
                 "progressPercent": overall_percent("TRAINING", 100),
@@ -4131,6 +4237,28 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
         interrupt_event.set()
         monitor_thread.join(timeout=2)
 
+        # Reclaim scratch space on every exit path — success, failure, cancel,
+        # interruption and crash alike. There is no checkpointing, so a requeued
+        # job restarts from scratch and its partial output is worthless; keeping
+        # it would just be a disk leak. Never allowed to raise: a cleanup fault
+        # must not turn a completed job into a failed one.
+        if CLEANUP_WORKSPACE_AFTER_JOB and cleanup_targets:
+            try:
+                reclaimed = cleanup_job_paths(cleanup_targets)
+                free_after = free_disk_bytes()
+                log.info(
+                    "Reclaimed ~%.1f MiB; %.1f GiB free",
+                    reclaimed / (1024 * 1024),
+                    free_after / (1024 * 1024 * 1024),
+                )
+                _event(
+                    "job.workspace_cleaned",
+                    reclaimed_bytes=reclaimed,
+                    free_disk_bytes=free_after,
+                )
+            except Exception as e:
+                log.warning("Workspace cleanup raised (ignored): %s", e)
+
 def delete_message_with_retries(sqs_client: Any, queue_url: str, receipt_handle: str, msg_id: str = "unknown") -> bool:
     """
     Delete SQS message with exponential backoff retries to prevent duplicate processing.
@@ -4218,6 +4346,76 @@ def _handle_signal(signum: int, _frame: Any) -> None:
     log.info("Received signal %s, stopping...", signum)
     stop_event.set()
 
+# Outcomes after which this instance cannot usefully take another message.
+# Everything else is recoverable, so the worker keeps draining the queue.
+#
+#   spot_interruption / spot_interruption_requeued
+#       The instance is being reclaimed; it has ~2 minutes and must not start
+#       work it cannot finish. Capacity is preserved so the ASG replaces it.
+#   disk_exhausted
+#       A 3DGS job needs room for extracted images, COLMAP output and the
+#       trained model at once. Below the floor, every job would fail
+#       mid-training, so retire and let a replacement take the work.
+_TERMINAL_OUTCOMES = frozenset({
+    "spot_interruption",
+    "spot_interruption_requeued",
+    "disk_exhausted",
+})
+
+def classify_job_outcome(
+    item: WorkItem,
+    ok: bool,
+    was_interrupted: bool,
+    poison_deleted: bool,
+) -> Tuple[str, bool]:
+    """
+    Map a finished job to (reason, decrement_desired).
+
+    Extracted from main()'s inline if/elif chain so the drain decision is
+    testable without booting a worker. `reason` also selects termination via
+    _TERMINAL_OUTCOMES, and feeds terminate_self() for the CloudWatch trail.
+
+    decrement_desired=False means "the ASG should replace this instance", which
+    is correct only when the instance itself is going away with work left to do.
+    Getting it backwards either strands capacity at zero with a full queue, or
+    leaves an idle instance billing.
+    """
+    if item.cancelled:
+        return "job_cancelled", True
+    if item.lease_lost:
+        # Not this instance's fault and not its problem — another worker owns
+        # the attempt now. Perfectly healthy, so keep draining.
+        return "lease_lost", True
+    if item.requeued:
+        return "spot_interruption_requeued", False
+    if ok:
+        return "job_success", True
+    if was_interrupted:
+        return "spot_interruption", False
+    if poison_deleted:
+        return "orphan_attempt", True
+    return "job_failure", True
+
+def should_keep_draining(reason: str, jobs_completed: int) -> Tuple[bool, str]:
+    """
+    Decide whether to poll for another message. Returns (keep_going, why_not).
+
+    Before the drain loop existed main() called terminate_self() on every path
+    unconditionally, so N queued jobs required N instance launches — each paying
+    full boot plus AMI-pull latency and each racing the scale-out alarm. RUN_ONCE
+    existed to express exactly this behaviour but was never wired to the control
+    flow; it now is, which makes it the zero-redeploy rollback for draining.
+    """
+    if reason in _TERMINAL_OUTCOMES:
+        return False, reason
+    if RUN_ONCE:
+        return False, "run_once"
+    if MAX_JOBS_PER_INSTANCE and jobs_completed >= MAX_JOBS_PER_INSTANCE:
+        return False, "max_jobs_per_instance"
+    if free_disk_bytes() < MIN_FREE_DISK_BYTES:
+        return False, "disk_exhausted"
+    return True, ""
+
 def main() -> None:
     signal.signal(signal.SIGINT, _handle_signal)
     signal.signal(signal.SIGTERM, _handle_signal)
@@ -4261,11 +4459,36 @@ def main() -> None:
     last_received_time = time.time()
     poll_count = 0
     consecutive_empty_polls = 0
-    message_processed = False  # Track if we've processed a message (for one-per-instance)
+    jobs_completed = 0
+    message_processed = False  # Track whether this instance ever did any work
 
     while not stop_event.is_set():
         poll_count += 1
-        
+
+        # Disk floor, checked before polling rather than after receiving: taking
+        # a message we cannot process would hide it for the visibility timeout
+        # (2700s) before anyone else could pick it up.
+        free_bytes = free_disk_bytes()
+        if free_bytes < MIN_FREE_DISK_BYTES:
+            log.error(
+                "Only %.1f GiB free (floor %.1f GiB); retiring rather than "
+                "starting a job that would fail mid-training.",
+                free_bytes / (1024 * 1024 * 1024),
+                MIN_FREE_DISK_BYTES / (1024 * 1024 * 1024),
+            )
+            _event(
+                "worker.disk_exhausted",
+                level=logging.ERROR,
+                free_disk_bytes=free_bytes,
+                min_free_disk_bytes=MIN_FREE_DISK_BYTES,
+                jobs_completed=jobs_completed,
+            )
+            log_envelope.flush_logs()
+            # decrement_desired=False: work may remain and this instance cannot
+            # do it, so the ASG should stand up a healthy replacement.
+            terminate_self("disk_exhausted", decrement_desired=False)
+            return
+
         # Check idle timeout for scale-to-zero
         if IDLE_EXIT_SECONDS > 0:
             idle_elapsed = time.time() - last_received_time
@@ -4274,8 +4497,15 @@ def main() -> None:
                     "IDLE_EXIT_SECONDS (%d) exceeded without receiving messages; terminating self for scale-to-zero.",
                     IDLE_EXIT_SECONDS,
                 )
-                _event("worker.idle_exit", idle_seconds=int(idle_elapsed))
+                _event(
+                    "worker.idle_exit",
+                    idle_seconds=int(idle_elapsed),
+                    jobs_completed=jobs_completed,
+                )
                 log_envelope.flush_logs()
+                # With draining, this is the primary scale-to-zero path: the
+                # instance stays up until the queue is genuinely empty for
+                # IDLE_EXIT_SECONDS, rather than dying after every job.
                 terminate_self("idle_timeout", decrement_desired=True)
                 return
 
@@ -4325,10 +4555,15 @@ def main() -> None:
                 else:
                     log.error("Failed to delete invalid message ID=%s after retries", msg_id)
             
-            # ONE MESSAGE PER INSTANCE: Terminate even on invalid message
-            log.info("Invalid message processed; terminating self (one-message-per-instance policy)")
-            terminate_self("invalid_message_processed", decrement_desired=True)
-            return
+            # An unparseable message says nothing about this instance's health,
+            # so there is no reason to retire over it — keep draining unless
+            # RUN_ONCE asked for the old one-per-instance behaviour.
+            if RUN_ONCE:
+                log.info("Invalid message handled; terminating self (RUN_ONCE)")
+                terminate_self("invalid_message_processed", decrement_desired=True)
+                return
+            log.info("Invalid message handled; continuing to poll")
+            continue
 
         log_envelope.bind_job(item.attempt_id, item.scene_id)
         _event(
@@ -4368,40 +4603,16 @@ def main() -> None:
             log_envelope.clear_job()
             log_envelope.flush_logs()
 
-        # Cancelled and lease-lost attempts have already removed their own
-        # message inside simulate_processing (it holds the receipt handle), so
-        # skip the delete/retry bookkeeping below entirely.
-        if item.cancelled:
-            log.info(
-                "Attempt %s was cancelled; message already removed, terminating self",
-                item.attempt_id,
-            )
-            terminate_self("job_cancelled", decrement_desired=True)
-            return
-
-        if item.lease_lost:
-            log.info(
-                "Attempt %s is owned by another worker; standing down",
-                item.attempt_id,
-            )
-            terminate_self("lease_lost", decrement_desired=True)
-            return
-
-        # An interrupted attempt that re-enqueued itself already swapped its
-        # message for a fresh one, so there is nothing left to delete or release.
-        # Capacity is still preserved for a replacement worker.
-        if item.requeued:
-            log.info(
-                "Attempt %s re-enqueued as a new message; terminating without "
-                "decrementing ASG desired capacity",
-                item.attempt_id,
-            )
-            terminate_self("spot_interruption_requeued", decrement_desired=False)
-            return
+        # Cancelled, lease-lost and requeued attempts have already dealt with
+        # their own message inside simulate_processing (it holds the receipt
+        # handle), so skip the delete/retry bookkeeping below entirely.
+        already_handled_message = item.cancelled or item.lease_lost or item.requeued
 
         poison_deleted = False
         # Delete message only on success, using robust retry mechanism
-        if ok and receipt:
+        if already_handled_message:
+            pass
+        elif ok and receipt:
             delete_ok = delete_message_with_retries(sqs, qurl, receipt, msg_id)
             if not delete_ok:
                 log.error(
@@ -4427,28 +4638,66 @@ def main() -> None:
         elif not ok:
             log.info("Processing failed for attemptId=%s; message will retry", item.attempt_id)
         
-        # ONE MESSAGE PER INSTANCE: Always terminate after processing
-        # If interruption: preserve ASG desired capacity for immediate replacement (decrement_desired=False)
-        # If success/normal failure: scale down ASG desired capacity (decrement_desired=True)
-        
-        if ok:
-            log.info("Message processed successfully; terminating self (one-message-per-instance policy)")
-            terminate_self("job_success", decrement_desired=True)
-        elif was_interrupted:
-            log.info("Message processing interrupted (Spot/signal); terminating self without decrementing ASG desired capacity")
-            terminate_self("spot_interruption", decrement_desired=False)
-        elif poison_deleted:
-            log.info("Orphan SQS message removed; terminating self (one-message-per-instance policy)")
-            terminate_self("orphan_attempt", decrement_desired=True)
+        # DRAIN: keep taking messages while this instance is still useful.
+        # Booting a GPU instance costs a full AMI pull, so paying that per job
+        # was the dominant latency for a queue of several jobs.
+        jobs_completed += 1
+        reason, decrement = classify_job_outcome(item, ok, was_interrupted, poison_deleted)
+        keep_going, stop_reason = should_keep_draining(reason, jobs_completed)
+
+        if keep_going:
+            log.info(
+                "Job %d finished (%s); draining — polling for more work",
+                jobs_completed,
+                reason,
+            )
+            _event(
+                "worker.job_drained",
+                outcome=reason,
+                jobs_completed=jobs_completed,
+                free_disk_bytes=free_disk_bytes(),
+            )
+            continue
+
+        # stop_reason can differ from reason: the job may have succeeded while
+        # the instance still has to retire (RUN_ONCE, job cap, disk floor).
+        final_reason = stop_reason if stop_reason != reason else reason
+        if final_reason in ("run_once", "max_jobs_per_instance"):
+            # A clean retirement after finishing work: give up capacity.
+            final_decrement = True
+        elif final_reason == "disk_exhausted":
+            # Broken instance, work may remain — let the ASG replace it.
+            final_decrement = False
         else:
-            log.info("Message processing failed; terminating self (one-message-per-instance policy)")
-            terminate_self("job_failure", decrement_desired=True)
+            final_decrement = decrement
+
+        log.info(
+            "Job %d finished (%s); terminating self (%s)",
+            jobs_completed,
+            reason,
+            final_reason,
+        )
+        _event(
+            "worker.retiring",
+            outcome=reason,
+            stop_reason=final_reason,
+            jobs_completed=jobs_completed,
+            decrement_desired=final_decrement,
+        )
+        log_envelope.flush_logs()
+        terminate_self(final_reason, decrement_desired=final_decrement)
         return
 
-    log.info("Worker stopped after %d polls.", poll_count)
-    
-    # If we're stopping due to signal but never processed a message, terminate for clean ASG state
-    if not message_processed:
+    log.info("Worker stopped after %d polls, %d jobs.", poll_count, jobs_completed)
+
+    # The loop exits when stop_event is set — a SIGTERM or a Spot interruption
+    # notice observed between jobs. Preserve capacity so the ASG replaces this
+    # instance if work remains, unless it never did anything, in which case a
+    # clean scale-down is right.
+    if message_processed:
+        log.info("Worker stopping after draining %d job(s); terminating self", jobs_completed)
+        terminate_self("stopped_while_draining", decrement_desired=False)
+    else:
         log.info("Worker stopping without processing any messages; terminating self")
         terminate_self("no_message_processed", decrement_desired=True)
 
