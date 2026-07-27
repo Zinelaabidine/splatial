@@ -152,18 +152,33 @@ export default function DashboardSceneCard({
           className="absolute left-2 top-2 border-[var(--nord-hairline)] bg-[var(--nord-scrim)] text-[9px] text-[var(--nord-scrim-fg)] backdrop-blur-sm"
         />
 
-        {scene.status !== "completed" && (
-          <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full border border-[var(--nord-hairline)] bg-[var(--nord-scrim)] px-1.5 py-0.5 font-sw-mono text-[9px] font-medium uppercase tracking-wide text-[var(--nord-scrim-fg)] backdrop-blur-sm">
-            <StatusDot status={scene.status} pulse={styles.dotPulse} className="h-1.5 w-1.5" />
-            {scene.apiStatus === "UPLOADED"
-              ? "Ready"
-              : scene.apiStatus === "PENDING_UPLOAD"
-                ? "Importing"
-                : scene.apiStatus === "CANCELLED"
-                  ? "Cancelled"
-                  : STATUS_LABELS[scene.status]}
-          </span>
-        )}
+        <div className="absolute right-2 top-2 flex items-center gap-1.5">
+          {scene.status !== "completed" && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-[var(--nord-hairline)] bg-[var(--nord-scrim)] px-1.5 py-0.5 font-sw-mono text-[9px] font-medium uppercase tracking-wide text-[var(--nord-scrim-fg)] backdrop-blur-sm">
+              <StatusDot status={scene.status} pulse={styles.dotPulse} className="h-1.5 w-1.5" />
+              {scene.apiStatus === "UPLOADED"
+                ? "Ready"
+                : scene.apiStatus === "PENDING_UPLOAD"
+                  ? "Importing"
+                  : scene.apiStatus === "CANCELLED"
+                    ? "Cancelled"
+                    : STATUS_LABELS[scene.status]}
+            </span>
+          )}
+          <SceneCardMenu
+            showEdit={scene.status === "completed"}
+            visibility={visibility}
+            visibilityUpdating={visibilityUpdating}
+            onEdit={() => onEditScene?.(scene)}
+            onDelete={() => onDeleteScene?.(scene)}
+            onVisibilityChange={
+              onVisibilityChange
+                ? (next) => onVisibilityChange(scene, next)
+                : undefined
+            }
+            buttonClassName="rounded-full border border-[var(--nord-hairline)] bg-[var(--nord-scrim)] text-[var(--nord-scrim-fg)] opacity-90 backdrop-blur-sm hover:bg-[var(--nord-scrim)] hover:text-[var(--nord-scrim-fg)] hover:opacity-100"
+          />
+        </div>
       </div>
 
       <div className="sw-card-body flex flex-1 flex-col px-3 py-2.5">
@@ -179,21 +194,8 @@ export default function DashboardSceneCard({
                 {scene.title}
               </h3>
             </div>
-            <div className="mt-1 flex items-center justify-between gap-2">
+            <div className="mt-1">
               <SceneCreatorRow inline />
-              <SceneCardMenu
-                showEdit={scene.status === "completed"}
-                visibility={visibility}
-                visibilityUpdating={visibilityUpdating}
-                onEdit={() => onEditScene?.(scene)}
-                onDelete={() => onDeleteScene?.(scene)}
-                onVisibilityChange={
-                  onVisibilityChange
-                    ? (next) => onVisibilityChange(scene, next)
-                    : undefined
-                }
-                buttonClassName="opacity-70 group-hover:opacity-100"
-              />
             </div>
           </div>
         </div>
