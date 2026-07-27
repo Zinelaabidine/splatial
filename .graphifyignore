@@ -1,0 +1,38 @@
+# Graphify: source code only
+# Excludes docs, assets, and non-application paths. Built-in graphify skips
+# (node_modules, .git, dist, build, coverage, graphify-out, etc.) still apply.
+
+# Documentation
+docs/
+*.md
+*.mdx
+*.pdf
+*.rst
+*.txt
+
+# Static assets / media
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.svg
+*.ico
+*.mp4
+*.mp3
+*.wav
+
+# Build / dependency / VCS (explicit; also built-in skips)
+node_modules/
+dist/
+build/
+.git/
+coverage/
+
+# CI, agent skills, and design mockups (not application source)
+.github/
+.claude/
+design/
+
+# Vendored static frontend bundle and public assets
+frontend/public/

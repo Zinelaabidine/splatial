@@ -40,7 +40,14 @@ const STATUS_MAP = {
   SUCCEEDED:   "READY",
   FAILED:      "FAILED",
   INTERRUPTED: "QUEUED",  // message will be re-delivered; worker sets RUNNING again
+  CANCELLED:   "CANCELLED", // worker acknowledging a cancel it observed mid-flight
 };
+
+// Once an attempt is CANCELLED it is terminal: no worker PATCH may move it out
+// of that state. Re-asserting CANCELLED is allowed so a worker that stops
+// mid-flight can acknowledge idempotently (it may retry the PATCH, and it may
+// race cancel-job.js which sets CANCELLED first).
+const TERMINAL_CANCELLED_EXCEPTIONS = new Set(["CANCELLED"]);
 
 /**
  * PATCH /api/attempts/:attemptId
@@ -82,12 +89,21 @@ exports.handler = async (event) => {
     viewKey, plyKey,
   } = body;
 
-  if (Item.status?.S === "CANCELLED" && status === "RUNNING") {
-    return response(200, {
+  // CANCELLED is terminal for the attempt. This MUST be a 4xx: worker.py
+  // computes `ok = 200 <= status_code < 300`, so the 200 this used to return
+  // was read as success and the worker went on to run a full COLMAP + 3DGS
+  // job on a cancelled scene. 409 is what makes cancellation observable.
+  const currentAttemptStatus = Item.status?.S;
+  if (currentAttemptStatus === "CANCELLED" && !TERMINAL_CANCELLED_EXCEPTIONS.has(status)) {
+    log.event("attempt.patch_rejected_cancelled", {
       attemptId,
-      updated: false,
-      skipped: true,
+      data: { requested_status: status ?? null },
+    });
+    return response(409, {
+      attemptId,
+      error: "Attempt is CANCELLED and cannot be updated",
       reason: "CANCELLED",
+      cancelRequested: true,
     });
   }
 
@@ -168,16 +184,48 @@ exports.handler = async (event) => {
     exprValues[":outsize"] = { N: String(outputSizeBytes) };
   }
 
-  // Update the attempt record
-  await dynamo.send(
-    new UpdateItemCommand({
-      TableName: TABLE,
-      Key: { scene_id: { S: attemptId } },
-      UpdateExpression: "SET " + exprParts.join(", "),
-      ...(Object.keys(exprNames).length > 0 ? { ExpressionAttributeNames: exprNames } : {}),
-      ExpressionAttributeValues: exprValues,
-    })
-  );
+  // Update the attempt record.
+  //
+  // Guarded so the read-then-write above is not a TOCTOU window: cancel-job.js
+  // can land between our GetItem and this update, and without the condition a
+  // worker's in-flight PATCH would silently overwrite the cancellation. Setting
+  // CANCELLED itself is exempt (idempotent re-assert, see STATUS_MAP).
+  const attemptGuards = ["attribute_exists(scene_id)"];
+  if (!TERMINAL_CANCELLED_EXCEPTIONS.has(status)) {
+    attemptGuards.push("#s <> :cancelledGuard");
+    exprNames["#s"] = "status";
+    exprValues[":cancelledGuard"] = { S: "CANCELLED" };
+  }
+
+  try {
+    await dynamo.send(
+      new UpdateItemCommand({
+        TableName: TABLE,
+        Key: { scene_id: { S: attemptId } },
+        UpdateExpression: "SET " + exprParts.join(", "),
+        ConditionExpression: attemptGuards.join(" AND "),
+        ...(Object.keys(exprNames).length > 0 ? { ExpressionAttributeNames: exprNames } : {}),
+        ExpressionAttributeValues: exprValues,
+      })
+    );
+  } catch (err) {
+    if (err.name === "ConditionalCheckFailedException") {
+      // Lost the race: the attempt was cancelled (or deleted) after our read.
+      // Report it the same way as the pre-read check so the worker takes the
+      // same path regardless of which side of the race it landed on.
+      log.event("attempt.patch_lost_cancel_race", {
+        attemptId,
+        data: { requested_status: status ?? null },
+      });
+      return response(409, {
+        attemptId,
+        error: "Attempt is CANCELLED or no longer exists",
+        reason: "CANCELLED",
+        cancelRequested: true,
+      });
+    }
+    throw err;
+  }
 
   if (mappedStatus) {
     log.event("attempt.status_changed", {
@@ -228,6 +276,12 @@ exports.handler = async (event) => {
   // Cascade status and progress to the parent scene when present.
   // Attempt records created by the new submit-job handler carry parent_scene_id.
   const parentSceneId = Item.parent_scene_id?.S;
+  // Whether the cascade write actually landed, and the storage delta it owes.
+  // Declared out here because the notification block further down must not
+  // email the user about a scene it failed to update.
+  let parentUpdated = false;
+  let pendingStorageDelta = 0;
+
   if (parentSceneId) {
     const parentParts  = ["updated_at = :now"];
     const parentNames  = {};
@@ -275,23 +329,59 @@ exports.handler = async (event) => {
         parentValues[":rawexp"] = { S: rawExpiresAtIso };
       }
 
-      if (outputDelta !== 0) {
-        await adjustStorageUsedBytes(dynamo, Item.user_id?.S, outputDelta);
+      pendingStorageDelta = outputDelta;
+    }
+
+    // Same guard as the attempt write above, and the reason cancellation used
+    // not to stick: this cascade had no condition, so a still-running worker's
+    // next PATCH would flip a CANCELLED scene back to PROCESSING/READY/FAILED.
+    const parentGuards = ["attribute_exists(scene_id)"];
+    if (!TERMINAL_CANCELLED_EXCEPTIONS.has(status)) {
+      parentGuards.push("#s <> :cancelledGuard");
+      parentNames["#s"] = "status";
+      parentValues[":cancelledGuard"] = { S: "CANCELLED" };
+    }
+
+    try {
+      await dynamo.send(
+        new UpdateItemCommand({
+          TableName: TABLE,
+          Key: { scene_id: { S: parentSceneId } },
+          UpdateExpression: "SET " + parentParts.join(", "),
+          ConditionExpression: parentGuards.join(" AND "),
+          ...(Object.keys(parentNames).length > 0 ? { ExpressionAttributeNames: parentNames } : {}),
+          ExpressionAttributeValues: parentValues,
+        })
+      );
+      parentUpdated = true;
+    } catch (err) {
+      if (err.name === "ConditionalCheckFailedException") {
+        log.event("attempt.scene_cascade_skipped", {
+          attemptId,
+          sceneId: parentSceneId,
+          data: { requested_status: status ?? null, reason: "scene cancelled or deleted" },
+        });
+      } else {
+        throw err;
       }
     }
 
-    await dynamo.send(
-      new UpdateItemCommand({
-        TableName: TABLE,
-        Key: { scene_id: { S: parentSceneId } },
-        UpdateExpression: "SET " + parentParts.join(", "),
-        ...(Object.keys(parentNames).length > 0 ? { ExpressionAttributeNames: parentNames } : {}),
-        ExpressionAttributeValues: parentValues,
-      })
-    );
+    // Storage is only charged once the scene row actually records the new
+    // output size — otherwise a skipped cascade would leave the user billed
+    // for bytes no scene row points at.
+    if (parentUpdated && pendingStorageDelta !== 0) {
+      await adjustStorageUsedBytes(dynamo, Item.user_id?.S, pendingStorageDelta);
+    }
   }
 
-  if (mappedStatus === "READY" || mappedStatus === "FAILED") {
+  // Only notify when the scene row actually took the new status. A scene the
+  // user cancelled must not receive a "your scene is ready" email because a
+  // worker that had not yet noticed the cancel finished its run.
+  const shouldNotify =
+    (mappedStatus === "READY" || mappedStatus === "FAILED") &&
+    (!parentSceneId || parentUpdated);
+
+  if (shouldNotify) {
     const ownerId = Item.user_id?.S;
     let sceneName = Item.name?.S;
     if (!sceneName && parentSceneId) {
@@ -314,5 +404,9 @@ exports.handler = async (event) => {
     });
   }
 
-  return response(200, { attemptId, updated: true });
+  return response(200, {
+    attemptId,
+    updated: true,
+    sceneUpdated: parentSceneId ? parentUpdated : null,
+  });
 };

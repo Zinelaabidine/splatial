@@ -812,6 +812,9 @@ class ApiCallResult:
     ok: bool
     status_code: Optional[int]
     body_preview: Optional[str]
+    # True when the backend told us this attempt has been cancelled — either a
+    # 409 from PATCH /api/attempts/:id or cancelRequested from the heartbeat.
+    cancel_requested: bool = False
 
 @dataclass
 class WorkItem:
@@ -831,6 +834,10 @@ class WorkItem:
     train_config: Optional[Dict[str, Any]] = None  # Optional training parameters
     colmap_config: Optional[Dict[str, Any]] = None  # Optional COLMAP/convert.py parameters
     delete_poison_message: bool = False  # True when SQS body references a deleted attempt/scene
+    # True when the user cancelled this attempt. Set on the item (rather than
+    # widening simulate_processing's return tuple) to match the existing
+    # delete_poison_message pattern and avoid touching every return site.
+    cancelled: bool = False
 
 def parse_message_body(body: str) -> Optional[WorkItem]:
     """
@@ -1082,6 +1089,34 @@ def build_progress_body(
     return body
 
 
+def _response_signals_cancel(resp: Any) -> bool:
+    """
+    True when a backend response indicates this attempt has been cancelled.
+
+    Two shapes carry the signal:
+      - PATCH /api/attempts/:id  → HTTP 409 with reason "CANCELLED"
+      - POST  .../heartbeat      → HTTP 200 with cancelRequested: true
+
+    The 409 matters because it used to be a 200: `ok = 200 <= status < 300`
+    read that as success, so the worker trained cancelled scenes to completion.
+    Falls back to a substring check if the body is not valid JSON, so a cancel
+    is never missed just because the payload shape changed.
+    """
+    try:
+        payload = resp.json()
+    except Exception:
+        text = (getattr(resp, "text", "") or "")
+        return resp.status_code == 409 and "CANCELLED" in text.upper()
+
+    if not isinstance(payload, dict):
+        return resp.status_code == 409
+
+    if payload.get("cancelRequested") is True:
+        return True
+    if resp.status_code == 409 and str(payload.get("reason", "")).upper() == "CANCELLED":
+        return True
+    return False
+
 def patch_attempt(attempt_id: str, token: str, body: Dict[str, Any], api_base_url: Optional[str] = None) -> ApiCallResult:
     """
     PATCH /api/attempts/:attemptId.
@@ -1102,9 +1137,17 @@ def patch_attempt(attempt_id: str, token: str, body: Dict[str, Any], api_base_ur
         r = session.patch(url, headers=_auth_headers(token), json=body, timeout=10)
         log.info("PATCH response: status=%d, body=%s", r.status_code, r.text[:200])
         ok = 200 <= r.status_code < 300
-        if not ok:
+        cancelled = _response_signals_cancel(r)
+        if cancelled:
+            log.warning("PATCH rejected: attempt %s is CANCELLED", attempt_id)
+        elif not ok:
             log.warning("PATCH failed: status=%d", r.status_code)
-        return ApiCallResult(ok=ok, status_code=r.status_code, body_preview=r.text[:200])
+        return ApiCallResult(
+            ok=ok,
+            status_code=r.status_code,
+            body_preview=r.text[:200],
+            cancel_requested=cancelled,
+        )
     except Exception as e:
         log.error("PATCH request failed: %s", e, exc_info=True)
         return ApiCallResult(ok=False, status_code=None, body_preview=None)
@@ -1168,9 +1211,17 @@ def post_heartbeat(
         r = session.post(url, headers=_auth_headers(token), json=payload, timeout=10)
         log.info("Heartbeat response: status=%d, body=%s", r.status_code, r.text[:200])
         ok = 200 <= r.status_code < 300
-        if not ok:
+        cancelled = _response_signals_cancel(r)
+        if cancelled:
+            log.warning("Heartbeat reports cancel requested for attempt %s", attempt_id)
+        elif not ok:
             log.warning("Heartbeat failed: status=%d", r.status_code)
-        return ApiCallResult(ok=ok, status_code=r.status_code, body_preview=r.text[:200])
+        return ApiCallResult(
+            ok=ok,
+            status_code=r.status_code,
+            body_preview=r.text[:200],
+            cancel_requested=cancelled,
+        )
     except Exception as e:
         log.error("Heartbeat request failed: %s", e, exc_info=True)
         return ApiCallResult(ok=False, status_code=None, body_preview=None)
@@ -3189,6 +3240,22 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
     # Create shared interruption event
     interrupt_event = threading.Event()
 
+    # Cancellation rides on top of interrupt_event rather than introducing a
+    # third event at every check site. interrupt_event is already threaded
+    # through every phase loop and every subprocess runner, so setting both
+    # stops the work through code paths that are already exercised; cancel_event
+    # only changes how the stop is *reported* (CANCELLED, delete the message)
+    # versus an interruption (INTERRUPTED, release it for redelivery).
+    cancel_event = threading.Event()
+
+    def _request_cancel_stop() -> None:
+        """Mark this attempt cancelled and unwind through the interrupt path."""
+        if not cancel_event.is_set():
+            cancel_event.set()
+            _event("job.cancel_observed", level=logging.WARNING, phase=job_progress["phase"])
+        item.cancelled = True
+        interrupt_event.set()
+
     # Start monitoring for spot interruptions
     def monitor_interruptions():
         log.debug("Starting spot interruption monitoring thread")
@@ -3232,12 +3299,15 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
                 eta_seconds=eta_seconds,
             )
             last_heartbeat = time.time()
+            # The heartbeat is the cancel-delivery channel for in-flight work.
+            if result.cancel_requested:
+                _request_cancel_stop()
             return result
         else:
             next_in = max(0.0, interval - (now - last_heartbeat))
             log.debug("Heartbeat suppressed for %s (%d%%); next in %.1fs", phase, percent, next_in)
             return ApiCallResult(ok=True, status_code=None, body_preview=None)
-    
+
     def _release_message_visibility():
         """Release message visibility immediately for fast retry (best effort)."""
         if receipt_handle and queue_url:
@@ -3251,10 +3321,63 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
             except Exception as e:
                 log.warning("Failed to release message visibility (best effort): %s", e)
 
+    def _handle_stop(phase: str, local_percent: float = 0.0) -> Tuple[bool, bool]:
+        """
+        Unwind a stopped job, reporting it as either cancelled or interrupted.
+
+        Cancellation and Spot interruption both arrive as interrupt_event, but
+        they must be resolved differently:
+
+          cancelled   → PATCH CANCELLED, DELETE the message (the work is not
+                        wanted, so redelivering it would burn a receive-count
+                        slot and eventually DLQ a message nobody will consume),
+                        and report was_interrupted=False so main() does not
+                        preserve ASG capacity for a replacement.
+          interrupted → PATCH INTERRUPTED, RELEASE the message for immediate
+                        redelivery, and report was_interrupted=True.
+
+        Returns the (ok, was_interrupted) pair for simulate_processing.
+        """
+        percent = overall_percent(phase, local_percent)
+
+        if cancel_event.is_set() or item.cancelled:
+            log.warning("Stopping attempt %s: cancelled by user", attempt_id)
+            # Best-effort: attempt-patch.js already set CANCELLED when the user
+            # cancelled, and it answers a re-assert idempotently, so a failure
+            # here does not change the outcome.
+            patch_attempt(attempt_id, token, {
+                "status": "CANCELLED",
+                "progressPhase": phase,
+                "progressPercent": percent,
+            }, api_base_url=api_url)
+            item.cancelled = True
+            if receipt_handle and queue_url:
+                delete_message_with_retries(sqs, queue_url, receipt_handle, attempt_id)
+            _set_job_progress(phase, percent)
+            _event("job.cancelled", level=logging.WARNING, phase=phase, percent=percent)
+            log_envelope.flush_logs()
+            return False, False
+
+        log.warning("Stopping attempt %s: interrupted (Spot/signal)", attempt_id)
+        patch_attempt(attempt_id, token, {
+            "status": "INTERRUPTED",
+            "progressPhase": phase,
+            "progressPercent": percent,
+        }, api_base_url=api_url)
+        _release_message_visibility()
+        _set_job_progress(phase, percent)
+        _emit_spot_interrupted()
+        return False, True
+
     try:
         # Phase 0: Mark as RUNNING with INIT phase - fail fast if attempt doesn't exist
+        #
+        # This claim happens BEFORE setup_workspace so a cancelled or deleted
+        # attempt costs nothing: no directories created, no input downloaded,
+        # no GPU time. This is the "ignore on consume" half of cancellation —
+        # a cancel that landed while the message sat in the queue is caught
+        # here and the message is dropped without training.
         log.info("Marking attempt as RUNNING for attemptId=%s, sceneId=%s", attempt_id, scene_id)
-        workspace = setup_workspace(attempt_id)
         _set_job_progress("INIT", 0)
 
         start_patch = {
@@ -3267,11 +3390,27 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
             start_patch["ec2InstanceId"] = current_instance_id
         if SPOT_REQUEST_ID:
             start_patch["spotRequestId"] = SPOT_REQUEST_ID
-        
+
         start_result = patch_attempt_start_running(
             attempt_id, token, start_patch, api_base_url=api_url
         )
         if not start_result.ok:
+            if start_result.cancel_requested:
+                # Cancelled before we ever started. Nothing to unwind, nothing
+                # to report — just take the message off the queue so it is not
+                # redelivered until it DLQs.
+                log.warning(
+                    "Attempt %s was cancelled before processing began; "
+                    "discarding message without training",
+                    attempt_id,
+                )
+                item.cancelled = True
+                cancel_event.set()
+                if receipt_handle and queue_url:
+                    delete_message_with_retries(sqs, queue_url, receipt_handle, attempt_id)
+                _event("job.cancelled_before_start", level=logging.WARNING, phase="INIT", percent=0)
+                log_envelope.flush_logs()
+                return False, False
             if start_result.status_code in (404, 403):
                 log.error(
                     "Attempt not found or worker token rejected (%s); "
@@ -3286,6 +3425,9 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
                 )
             _emit_job_failed("INIT", "WORKER_ERROR", "Initial RUNNING patch failed")
             return False, False
+
+        # Claim accepted — now it is worth allocating local resources.
+        workspace = setup_workspace(attempt_id)
 
         _send_heartbeat_if_due("INIT", 0, force=True)
         _set_job_progress("INIT", 0)
@@ -3329,15 +3471,8 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
         else:
             dl_ok, dl_error = download_s3_objects(item, workspace, interrupt_event)
         if interrupt_event.is_set() or global_stop.is_set():
-            log.warning("Interrupted during download")
-            patch_attempt(attempt_id, token, {
-                "status": "INTERRUPTED",
-                "progressPhase": "INIT",
-                "progressPercent": 0,
-            }, api_base_url=api_url)
-            _release_message_visibility()
-            _emit_spot_interrupted()
-            return False, True
+            log.warning("Stopped during download")
+            return _handle_stop("INIT", 0)
 
         if not dl_ok:
             log.error("Download failed: %s", dl_error)
@@ -3460,16 +3595,8 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
             )
 
             if interrupt_event.is_set() or global_stop.is_set():
-                log.warning("COLMAP was interrupted")
-                patch_attempt(attempt_id, token, {
-                    "status": "INTERRUPTED",
-                    "progressPhase": "COLMAP",
-                    "progressPercent": overall_percent("COLMAP", 50),
-                }, api_base_url=api_url)
-                _release_message_visibility()
-                _set_job_progress("COLMAP", overall_percent("COLMAP", 50))
-                _emit_spot_interrupted()
-                return False, True
+                log.warning("COLMAP was stopped")
+                return _handle_stop("COLMAP", 50)
 
             if not colmap_ok:
                 log.error("COLMAP failed")
@@ -3559,16 +3686,8 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
             
             # Check for interruption
             if interrupt_event.is_set() or global_stop.is_set():
-                log.warning("Training was interrupted")
-                patch_attempt(attempt_id, token, {
-                    "status": "INTERRUPTED",
-                    "progressPhase": "TRAINING",
-                    "progressPercent": overall_percent("TRAINING", 50),
-                }, api_base_url=api_url)
-                _release_message_visibility()
-                _set_job_progress("TRAINING", overall_percent("TRAINING", 50))
-                _emit_spot_interrupted()
-                return False, True
+                log.warning("Training was stopped")
+                return _handle_stop("TRAINING", 50)
 
             if not training_success:
                 log.error("Training failed")
@@ -3643,16 +3762,8 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
                 
                 # Check for interruption
                 if interrupt_event.is_set() or global_stop.is_set():
-                    log.warning("Interrupted during post-processing")
-                    patch_attempt(attempt_id, token, {
-                        "status": "INTERRUPTED",
-                        "progressPhase": "POST_PROCESSING",
-                        "progressPercent": overall_percent("POST_PROCESSING", 50),
-                    }, api_base_url=api_url)
-                    _release_message_visibility()
-                    _set_job_progress("POST_PROCESSING", overall_percent("POST_PROCESSING", 50))
-                    _emit_spot_interrupted()
-                    return False, True
+                    log.warning("Stopped during post-processing")
+                    return _handle_stop("POST_PROCESSING", 50)
 
                 if not post_ok:
                     log.error("Post-processing failed: %s", post_error)
@@ -3723,29 +3834,11 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
 
                 if global_stop.is_set():
                     log.warning("Global stop signal received during simulation")
-                    local_pct = _local_percent_for(elapsed)
-                    patch_attempt(attempt_id, token, {
-                        "status": "INTERRUPTED",
-                        "progressPhase": "TRAINING",
-                        "progressPercent": overall_percent("TRAINING", local_pct),
-                    }, api_base_url=api_url)
-                    _release_message_visibility()
-                    _set_job_progress("TRAINING", overall_percent("TRAINING", local_pct))
-                    _emit_spot_interrupted()
-                    return False, True
+                    return _handle_stop("TRAINING", _local_percent_for(elapsed))
 
                 if interrupt_event.is_set():
-                    log.warning("Spot interruption during simulation")
-                    local_pct = _local_percent_for(elapsed)
-                    patch_attempt(attempt_id, token, {
-                        "status": "INTERRUPTED",
-                        "progressPhase": "TRAINING",
-                        "progressPercent": overall_percent("TRAINING", local_pct),
-                    }, api_base_url=api_url)
-                    _release_message_visibility()
-                    _set_job_progress("TRAINING", overall_percent("TRAINING", local_pct))
-                    _emit_spot_interrupted()
-                    return False, True
+                    log.warning("Stop signal during simulation")
+                    return _handle_stop("TRAINING", _local_percent_for(elapsed))
 
                 if elapsed >= sim_duration:
                     break
@@ -3764,17 +3857,8 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
                 remaining = max(sim_duration - elapsed, 0.0)
                 sleep_time = min(SIM_UPDATE_INTERVAL_SECONDS, remaining)
                 if interrupt_event.wait(timeout=sleep_time):
-                    log.warning("Spot interruption detected during sleep")
-                    local_pct = _local_percent_for(elapsed)
-                    patch_attempt(attempt_id, token, {
-                        "status": "INTERRUPTED",
-                        "progressPhase": "TRAINING",
-                        "progressPercent": overall_percent("TRAINING", local_pct),
-                    }, api_base_url=api_url)
-                    _release_message_visibility()
-                    _set_job_progress("TRAINING", overall_percent("TRAINING", local_pct))
-                    _emit_spot_interrupted()
-                    return False, True
+                    log.warning("Stop signal detected during sleep")
+                    return _handle_stop("TRAINING", _local_percent_for(elapsed))
 
             log.info("Simulation complete")
 
@@ -3821,6 +3905,12 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
             
             # Only return True if backend accepted the final patch
             if not final_result.ok:
+                # A cancel that lands during EXPORT/FINALIZE gets a 409 here.
+                # Resolve it as a cancel so the message is deleted now, rather
+                # than redelivered only to be discarded on the next start PATCH.
+                if final_result.cancel_requested:
+                    log.warning("Attempt %s was cancelled before it could be finalised", attempt_id)
+                    return _handle_stop("FINALIZE", 100)
                 log.error("Final SUCCEEDED patch failed (status=%s); returning False to prevent message deletion", final_result.status_code)
                 _emit_job_failed("FINALIZE", "WORKER_ERROR", "Final SUCCEEDED patch failed")
                 return False, False
@@ -3844,6 +3934,12 @@ def simulate_processing(item: WorkItem, global_stop: threading.Event, receipt_ha
 
     except Exception as e:
         log.exception("Crash during processing: %s", e)
+        # A cancellation unwinds by killing subprocesses, which can surface as
+        # an exception on the way out. Reporting that as FAILED would be wrong
+        # (and attempt-patch.js would 409 it anyway), so resolve it as a cancel.
+        if cancel_event.is_set() or item.cancelled:
+            log.warning("Exception raised while unwinding a cancelled attempt; treating as cancelled")
+            return _handle_stop(job_progress["phase"], 0)
         patch_attempt(attempt_id, token, {
             "status": "FAILED",
             "reason": "WORKER_ERROR",
@@ -4091,6 +4187,17 @@ def main() -> None:
                 extender.join(timeout=2)
             log_envelope.clear_job()
             log_envelope.flush_logs()
+
+        # A cancelled attempt has already deleted its own message inside
+        # simulate_processing (it holds the receipt handle), so skip the
+        # delete/retry bookkeeping below entirely.
+        if item.cancelled:
+            log.info(
+                "Attempt %s was cancelled; message already removed, terminating self",
+                item.attempt_id,
+            )
+            terminate_self("job_cancelled", decrement_desired=True)
+            return
 
         poison_deleted = False
         # Delete message only on success, using robust retry mechanism

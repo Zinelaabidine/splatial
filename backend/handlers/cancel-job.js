@@ -10,9 +10,17 @@ const TABLE = process.env.SCENES_TABLE_NAME;
 /**
  * POST /jobs/{sceneId}/cancel
  *
- * Transitions a QUEUED or PROCESSING scene to CANCELLED.
- * The SQS worker checks DynamoDB status before processing — a CANCELLED
- * message is deleted from the queue without running the training job.
+ * Transitions a QUEUED or PROCESSING scene to CANCELLED and marks the live
+ * attempt CANCELLED with cancel_requested = true.
+ *
+ * Cancellation is a soft-invalidate, because SQS cannot delete a specific
+ * message that has not been received. Three layers act on the flag:
+ *
+ *   1. Durable truth (here)   — attempt status CANCELLED + cancel_requested.
+ *   2. Ignore-on-consume      — the worker's opening PATCH gets a 409 and the
+ *                               worker deletes the message without training.
+ *   3. Stop-in-flight         — attempt-heartbeat.js returns cancelRequested,
+ *                               and the worker stops within one interval.
  *
  * Success response (200): { "sceneId": "...", "attemptId": "...", "status": "CANCELLED" }
  */
@@ -62,32 +70,48 @@ exports.handler = async (event) => {
     throw err;
   }
 
+  let attemptCancelled = false;
   if (lastAttemptId) {
     try {
       await dynamo.send(
         new UpdateItemCommand({
           TableName: TABLE,
           Key: { scene_id: { S: lastAttemptId } },
-          UpdateExpression: "SET #s = :cancelled, updated_at = :now",
+          UpdateExpression:
+            "SET #s = :cancelled, updated_at = :now, cancel_requested = :true, cancel_requested_at = :now",
           ConditionExpression: "#s IN (:q, :p)",
           ExpressionAttributeNames: { "#s": "status" },
           ExpressionAttributeValues: {
             ":cancelled": { S: "CANCELLED" },
             ":now":        { S: now },
+            ":true":       { BOOL: true },
             ":q":          { S: "QUEUED" },
             ":p":          { S: "PROCESSING" },
           },
         })
       );
+      attemptCancelled = true;
     } catch (err) {
       if (err.name !== "ConditionalCheckFailedException") throw err;
+      // The attempt already reached a terminal state (SUCCEEDED/FAILED) between
+      // the scene update above and this write. The scene is CANCELLED either
+      // way; there is simply no live attempt left to signal.
+      log.event("job.cancel_attempt_already_terminal", {
+        sceneId,
+        data: { attempt_id: lastAttemptId },
+      });
     }
   }
 
   log.event("job.cancelled", {
     sceneId,
-    data: { attempt_id: lastAttemptId },
+    data: { attempt_id: lastAttemptId, attempt_cancelled: attemptCancelled },
   });
 
-  return response(200, { sceneId, attemptId: lastAttemptId, status: "CANCELLED" });
+  return response(200, {
+    sceneId,
+    attemptId: lastAttemptId,
+    status: "CANCELLED",
+    attemptCancelled,
+  });
 };
