@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef } from "react";
 
 import DeleteSceneModal from "@/components/features/scenes/DeleteSceneModal";
-import EditSceneModal from "@/components/features/scenes/EditSceneModal";
 import DashboardSceneCard from "@/components/splatworks/DashboardSceneCard";
 import DashboardSceneListRow from "@/components/splatworks/DashboardSceneListRow";
 import SceneCardSkeleton from "@/components/splatworks/SceneCardSkeleton";
@@ -86,13 +85,6 @@ export default function ScenesDashboardView() {
     deleteError,
     remove,
     edit,
-    editTarget,
-    editSaving,
-    editError,
-    setEditSaving,
-    setEditError,
-    dismissEditModal,
-    handleSceneEdited,
     toggleSceneVisibility,
     visibilityUpdatingId,
     dismissDeleteModal,
@@ -302,18 +294,6 @@ export default function ScenesDashboardView() {
           </div>
         )
       ) : null}
-
-      {editTarget && (
-        <EditSceneModal
-          scene={editTarget}
-          saving={editSaving}
-          error={editError}
-          onDismiss={dismissEditModal}
-          onSaved={handleSceneEdited}
-          onSavingChange={setEditSaving}
-          onError={setEditError}
-        />
-      )}
 
       {deleteTarget && (
         <DeleteSceneModal

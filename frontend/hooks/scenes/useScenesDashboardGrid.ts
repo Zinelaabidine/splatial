@@ -11,7 +11,7 @@ import {
 import { cancelJob, submitJob, type SubmitJobOptions } from "@/services/jobsService";
 import { deleteScene, listScenes, updateScene } from "@/services/scenesService";
 import { ApiRequestError, isQuotaExceededError } from "@/lib/api/apiErrors";
-import { sceneViewerUrl } from "@/lib/scenes/viewerUrls";
+import { sceneSettingsUrl, sceneViewerUrl } from "@/lib/scenes/viewerUrls";
 import type { SceneVisibility } from "@/types/api";
 import type { DashboardScene, SceneStatus } from "@/types/splatworks";
 import type { SortOption } from "@/types/dashboard";
@@ -62,9 +62,6 @@ export function useScenesDashboardGrid(search: string) {
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [quotaLimitReached, setQuotaLimitReached] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<DashboardScene | null>(null);
-  const [editTarget, setEditTarget] = useState<DashboardScene | null>(null);
-  const [editSaving, setEditSaving] = useState(false);
-  const [editError, setEditError] = useState<string | null>(null);
   const [visibilityUpdatingId, setVisibilityUpdatingId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -223,48 +220,14 @@ export function useScenesDashboardGrid(search: string) {
     setDeleteTarget(scene);
   }, []);
 
-  const handleEditRequest = useCallback((scene: DashboardScene) => {
-    setEditError(null);
-    setEditTarget(scene);
-  }, []);
-
-  const dismissEditModal = useCallback(() => {
-    if (!editSaving) {
-      setEditTarget(null);
-      setEditError(null);
-    }
-  }, [editSaving]);
-
-  const handleSceneEdited = useCallback(
-    (updated: {
-      title: string;
-      thumbnailUrl?: string;
-      visibility?: SceneVisibility;
-      category?: string | null;
-      tags?: string[];
-    }) => {
-      if (!editTarget) return;
-      setScenes((prev) =>
-        prev.map((s) =>
-          s.id === editTarget.id
-            ? {
-                ...s,
-                title: updated.title,
-                ...(updated.visibility ? { visibility: updated.visibility } : {}),
-                ...(updated.category !== undefined ? { category: updated.category } : {}),
-                ...(updated.tags !== undefined ? { tags: updated.tags } : {}),
-                ...(updated.thumbnailUrl
-                  ? { thumbnailUrl: updated.thumbnailUrl, preview: undefined }
-                  : {}),
-              }
-            : s,
-        ),
-      );
-      setEditTarget(null);
-      setEditError(null);
-      setActionMessage("Scene updated.");
+  /** Edit scene now navigates to the dedicated `/scenes/settings` page rather than a modal. */
+  const handleEditRequest = useCallback(
+    (scene: DashboardScene) => {
+      const id = scene.sceneId ?? scene.id;
+      if (!id) return;
+      router.push(sceneSettingsUrl(id));
     },
-    [editTarget],
+    [router],
   );
 
   const toggleSceneVisibility = useCallback(
@@ -386,14 +349,7 @@ export function useScenesDashboardGrid(search: string) {
     deleteError,
     remove: handleDeleteRequest,
     edit: handleEditRequest,
-    editTarget,
-    editSaving,
-    editError,
     visibilityUpdatingId,
-    setEditSaving,
-    setEditError,
-    dismissEditModal,
-    handleSceneEdited,
     toggleSceneVisibility,
     dismissDeleteModal,
     confirmDelete,

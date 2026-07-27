@@ -39,3 +39,8 @@ export function sceneViewerUrl(
 export function sceneEditUrl(sceneId: string): string {
   return `/scenes/edit?id=${encodeURIComponent(sceneId)}`;
 }
+
+/** Build `/scenes/settings` URL for the scene metadata/thumbnail editor. */
+export function sceneSettingsUrl(sceneId: string): string {
+  return `/scenes/settings?id=${encodeURIComponent(sceneId)}`;
+}
