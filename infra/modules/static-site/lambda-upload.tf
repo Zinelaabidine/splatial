@@ -244,6 +244,12 @@ resource "aws_lambda_function" "upload_lambda" {
       WORKER_DLQ_NAME              = aws_sqs_queue.processing_dlq.name
       SPLATIAL_ENV                 = var.environment
 
+      # DLQ *URL* (the name above is not enough). admin-worker-ami-boot.js
+      # injects this into a manually booted instance's /etc/splatial-worker.env
+      # so it matches what aws_launch_template.worker's user_data writes. The
+      # main queue URL is already available above as SQS_QUEUE_URL.
+      WORKER_DLQ_URL = aws_sqs_queue.processing_dlq.url
+
       # Lets admin-asg-config-get.js know whether to surface an SSH command
       # alongside the SSM one (only true when worker_ssh_key_name AND
       # worker_ssh_allowed_cidr are both set — see variables.tf).

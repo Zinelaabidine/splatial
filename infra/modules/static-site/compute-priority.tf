@@ -60,6 +60,10 @@ resource "aws_launch_template" "worker_priority" {
     cat > /etc/splatial-worker.env <<'ENVFILE'
     QUEUE_NAME=${aws_sqs_queue.processing_queue_priority.name}
     DLQ_NAME=${aws_sqs_queue.processing_dlq_priority.name}
+    SQS_QUEUE_URL=${aws_sqs_queue.processing_queue_priority.url}
+    DLQURL=${aws_sqs_queue.processing_dlq_priority.url}
+    AWS_REGION=${var.aws_region}
+    RUN_ENV=ec2
     SPLATIAL_ENV=${var.environment}
     WORKER_LOG_GROUP=${local.worker_log_group}
     LOG_TO_CLOUDWATCH=true

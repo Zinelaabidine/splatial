@@ -137,6 +137,12 @@ try:
 except Exception:
     pass
 
+try:
+    import env_loader
+    env_loader.load_env_file()
+except Exception:
+    pass
+
 # ----------------------------
 # 1. AWS Environment Variables (Critical - Set Before AWS SDK Init)
 # ----------------------------
@@ -678,28 +684,34 @@ _clamp_simulation_params()
 # ----------------------------
 def resolve_queue_urls() -> Tuple[str, str]:
     """
-    Resolves SQS Queue URLs. 
-    Prioritizes explicit Env Vars (QURL/DLQURL), otherwise looks up by name.
-    Provides detailed error logging for troubleshooting.
+    Resolve SQS queue URLs.
+
+    Priority order:
+    1. Explicit environment variables such as QURL / SQS_QUEUE_URL / DLQURL
+    2. Queue names supplied by the instance environment file
+    3. Runtime lookup by queue name when AWS credentials are available
+
+    This keeps EC2 workers working even if the IMDS/AWS session is not yet
+    fully initialized or if the queue URL was injected directly by Terraform.
     """
     qurl = os.getenv("QURL") or os.getenv("SQS_QUEUE_URL")
     dlqurl = os.getenv("DLQURL")
 
     if not qurl:
+        queue_name = os.getenv("QUEUE_NAME", "")
+        if queue_name:
+            log.info("Queue URL not injected; attempting runtime lookup for queue %s", queue_name)
+        else:
+            log.info("Queue URL not injected; no QUEUE_NAME configured")
+
         try:
             log.info("Resolving Queue URL for name: %s in region: %s", QUEUE_NAME, AWS_REGION)
             resp = sqs.get_queue_url(QueueName=QUEUE_NAME)
             qurl = resp["QueueUrl"]
             log.info("Successfully resolved queue URL: %s", qurl)
-            # Update Env for consistency
             os.environ["SQS_QUEUE_URL"] = qurl
         except Exception as e:
-            log.error("Could not resolve main queue '%s' in region '%s': %s", QUEUE_NAME, AWS_REGION, e)
-            log.error("Troubleshooting steps:")
-            log.error("  1. Verify queue exists: aws sqs get-queue-url --queue-name %s --region %s", QUEUE_NAME, AWS_REGION)
-            log.error("  2. Check IAM permissions: sqs:GetQueueUrl on queue ARN")
-            log.error("  3. Verify AWS credentials: aws sts get-caller-identity")
-            log.error("  4. Set SQS_QUEUE_URL directly to bypass auto-resolution")
+            log.warning("Could not resolve main queue '%s' in region '%s': %s", QUEUE_NAME, AWS_REGION, e)
             qurl = ""
 
     if not dlqurl:
@@ -711,7 +723,7 @@ def resolve_queue_urls() -> Tuple[str, str]:
             os.environ["DLQURL"] = dlqurl
         except Exception as e:
             log.debug("Could not resolve DLQ '%s': %s (DLQ is optional)", DLQ_NAME, e)
-            
+
     return qurl or "", dlqurl or ""
 
 # ----------------------------
@@ -4425,11 +4437,11 @@ def main() -> None:
     print_runtime_discovery(qurl, dlqurl)
 
     if not qurl:
-        log.error("No Queue URL found. Check QUEUE_NAME or AWS_REGION.")
+        log.error("No Queue URL found. Check QUEUE_NAME, SQS_QUEUE_URL, or AWS credentials.")
         log.error("Current AWS_REGION: %s", AWS_REGION)
         log.error("Current QUEUE_NAME: %s", QUEUE_NAME)
-        log.error("Try setting SQS_QUEUE_URL or QURL environment variable directly")
-        log.error("Example: export SQS_QUEUE_URL='https://sqs.us-east-1.amazonaws.com/123456789/queue-name'")
+        log.error("Injected queue URLs are expected from /etc/splatial-worker.env on EC2")
+        log.error("If running locally, set SQS_QUEUE_URL or QURL explicitly")
         return
 
     _event(

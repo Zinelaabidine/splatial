@@ -16,6 +16,22 @@ const NAME_PREFIX = `${process.env.WORKER_QUEUE_NAME ?? ""}`.replace(/-splat-pro
  * Builds the same env-file + systemd-enable user_data the Terraform-managed
  * launch template injects (see compute.tf aws_launch_template.worker), so a
  * manually booted instance behaves identically to a real ASG worker.
+ *
+ * This drifted once and cost a debugging session: the env file omitted
+ * SQS_QUEUE_URL, DLQURL, AWS_REGION and RUN_ENV, so a manually booted worker
+ * printed an empty QURL and exited with "No Queue URL found" before polling.
+ *
+ * The queue URL matters more than it looks. worker.py's resolve_queue_urls()
+ * prefers the injected URL and only falls back to sqs:GetQueueUrl by name —
+ * a call that needs working credentials. IAM instance-profile credentials take
+ * a few seconds to appear in IMDS after RunInstances, so a worker that starts
+ * promptly can find metadata (instance id, region) while credentials are still
+ * 404ing. Injecting the URL is exactly what makes the worker independent of
+ * that race, which is why the launch template has always done it.
+ *
+ * Any key added to compute.tf's ENVFILE heredoc must be added here too. The
+ * parity test in backend/test/worker-boot-userdata.test.js reads that heredoc
+ * and fails if the two sets diverge.
  */
 function buildUserData() {
   const lines = [
@@ -24,6 +40,15 @@ function buildUserData() {
     "cat > /etc/splatial-worker.env <<'ENVFILE'",
     `QUEUE_NAME=${process.env.WORKER_QUEUE_NAME ?? ""}`,
     `DLQ_NAME=${process.env.WORKER_DLQ_NAME ?? ""}`,
+    // Injected so the worker never depends on GetQueueUrl (and therefore on
+    // credentials being ready) just to find its own queue.
+    `SQS_QUEUE_URL=${process.env.SQS_QUEUE_URL ?? ""}`,
+    `DLQURL=${process.env.WORKER_DLQ_URL ?? ""}`,
+    `AWS_REGION=${process.env.AWS_REGION ?? "us-east-1"}`,
+    // Makes aws_config.get_session() take the instance-role branch even if
+    // is_ec2() detection is inconclusive, instead of looking for a local
+    // AWS_PROFILE that does not exist on the instance.
+    "RUN_ENV=ec2",
     `SPLATIAL_ENV=${process.env.SPLATIAL_ENV ?? "dev"}`,
     `WORKER_LOG_GROUP=${process.env.WORKER_LOG_GROUP ?? ""}`,
     "LOG_TO_CLOUDWATCH=true",
@@ -35,7 +60,11 @@ function buildUserData() {
     "DROPIN",
     "systemctl daemon-reload",
     "systemctl enable gaussian-worker.service",
-    "systemctl start gaussian-worker.service",
+    // restart, not start: the AMI may already have the unit enabled, in which
+    // case it ran at boot before this env file existed and has since exited.
+    // `start` on a dead unit would re-run it, but `restart` is unambiguous
+    // whether it is stopped, running or failed.
+    "systemctl restart gaussian-worker.service",
   ];
   return Buffer.from(lines.join("\n"), "utf8").toString("base64");
 }
@@ -70,6 +99,20 @@ exports.handler = async (event) => {
     return response(404, { error: `${amiId} is not registered` });
   }
   const ami = workerAmiFromItem(Item);
+
+  // Refuse to launch a worker that cannot find its queue. Without this the
+  // instance boots, prints an empty QURL, exits, and bills for the GPU until
+  // someone notices — the failure this endpoint exists to surface quickly.
+  if (!process.env.SQS_QUEUE_URL) {
+    log.error("worker_boot.misconfigured", {
+      data: { missing: "SQS_QUEUE_URL" },
+    });
+    return response(500, {
+      error:
+        "Worker queue URL is not configured on this function; " +
+        "a booted instance would exit without polling.",
+    });
+  }
 
   let instanceId;
   try {
@@ -146,3 +189,7 @@ exports.handler = async (event) => {
 
   return response(200, { amiId, instanceId });
 };
+
+// Exported for backend/test/worker-boot-userdata.test.js, which asserts this
+// stays in parity with compute.tf's launch-template ENVFILE.
+exports.buildUserData = buildUserData;
