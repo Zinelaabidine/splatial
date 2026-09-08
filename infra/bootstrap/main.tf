@@ -163,6 +163,86 @@ resource "aws_iam_role" "github_deploy" {
   }
 }
 
+# Seed permissions the env deploy role needs BEFORE the app module can attach
+# its split managed policies. After a destroy, only this policy remains (or
+# storage, if that apply completed) — without CreatePolicy/AttachRolePolicy/
+# GetRole the first targeted IAM apply in deploy.yml cannot recreate
+# splatial-*-github-deploy-*-policy. Trust stays in bootstrap; this is
+# identity-policy only, scoped to the deploy-policy family.
+data "aws_iam_policy_document" "github_deploy_seed" {
+  statement {
+    sid    = "ReadDeployRoles"
+    effect = "Allow"
+    actions = [
+      "iam:GetRole",
+      "iam:GetRolePolicy",
+      "iam:ListRolePolicies",
+      "iam:ListAttachedRolePolicies",
+      "iam:ListRoleTags",
+    ]
+    resources = concat(
+      [for env in local.environments : aws_iam_role.github_deploy[env].arn],
+      [aws_iam_role.local_dev.arn],
+    )
+  }
+
+  statement {
+    sid    = "ManageEnvDeployPolicies"
+    effect = "Allow"
+    actions = [
+      "iam:CreatePolicy",
+      "iam:DeletePolicy",
+      "iam:GetPolicy",
+      "iam:GetPolicyVersion",
+      "iam:ListPolicyVersions",
+      "iam:CreatePolicyVersion",
+      "iam:DeletePolicyVersion",
+      "iam:SetDefaultPolicyVersion",
+      "iam:TagPolicy",
+      "iam:UntagPolicy",
+    ]
+    resources = [
+      "arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/${local.cfg.project_name}-*-github-deploy-*",
+    ]
+  }
+
+  statement {
+    sid    = "AttachEnvDeployPolicies"
+    effect = "Allow"
+    actions = [
+      "iam:AttachRolePolicy",
+      "iam:DetachRolePolicy",
+    ]
+    resources = concat(
+      [for env in local.environments : aws_iam_role.github_deploy[env].arn],
+      [aws_iam_role.local_dev.arn],
+    )
+  }
+}
+
+resource "aws_iam_policy" "github_deploy_seed" {
+  name        = "${local.cfg.project_name}-github-deploy-seed-policy"
+  description = "Break-glass IAM so GitHub deploy roles can recreate their env-scoped managed policies after a destroy."
+  policy      = data.aws_iam_policy_document.github_deploy_seed.json
+
+  tags = {
+    ManagedBy = "Terraform/bootstrap"
+    Purpose   = "github-deploy-seed"
+  }
+}
+
+resource "aws_iam_role_policy_attachment" "github_deploy_seed" {
+  for_each = aws_iam_role.github_deploy
+
+  role       = each.value.name
+  policy_arn = aws_iam_policy.github_deploy_seed.arn
+}
+
+resource "aws_iam_role_policy_attachment" "local_dev_seed" {
+  role       = aws_iam_role.local_dev.name
+  policy_arn = aws_iam_policy.github_deploy_seed.arn
+}
+
 # ─── Local Developer Role ─────────────────────────────────────────────────────
 #
 # Used by local IAM users (e.g. terraadmin) running Terraform on workstations.
@@ -295,12 +375,34 @@ data "aws_iam_policy_document" "bootstrap_ci_permissions" {
       "iam:GetRolePolicy",
       "iam:PutRolePolicy",
       "iam:DeleteRolePolicy",
+      "iam:AttachRolePolicy",
+      "iam:DetachRolePolicy",
     ]
     resources = [
       "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.cfg.project_name}-*-github-deploy-role",
       "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.cfg.project_name}-local-dev-role",
       "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.cfg.project_name}-bootstrap-ci-role",
       "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.cfg.project_name}-github-ami-bake-role",
+    ]
+  }
+
+  statement {
+    sid    = "DeploySeedPolicy"
+    effect = "Allow"
+    actions = [
+      "iam:CreatePolicy",
+      "iam:DeletePolicy",
+      "iam:GetPolicy",
+      "iam:GetPolicyVersion",
+      "iam:ListPolicyVersions",
+      "iam:CreatePolicyVersion",
+      "iam:DeletePolicyVersion",
+      "iam:SetDefaultPolicyVersion",
+      "iam:TagPolicy",
+      "iam:UntagPolicy",
+    ]
+    resources = [
+      "arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/${local.cfg.project_name}-github-deploy-seed-policy",
     ]
   }
 

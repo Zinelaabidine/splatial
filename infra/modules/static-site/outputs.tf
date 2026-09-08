@@ -54,12 +54,12 @@ output "site_url" {
 
 output "github_oidc_deploy_role_arn" {
   description = "The ARN of the IAM role used by GitHub Actions to deploy the static site"
-  value       = data.aws_iam_role.github_oidc_deploy_role.arn
+  value       = local.github_deploy_role_arn
 }
 
 output "local_dev_role_arn" {
   description = "IAM role ARN for local Terraform runs (assume via splatial-local-dev-role)"
-  value       = data.aws_iam_role.local_dev_role.arn
+  value       = local.local_dev_role_arn
 }
 
 output "vpc" {

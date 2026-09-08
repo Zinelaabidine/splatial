@@ -7,22 +7,11 @@
 # into a workflow that uses different credentials (static key, not OIDC) and
 # requires a protected environment with human approval.
 #
-# This data source looks up the role that bootstrap already created.
-# Applying infra/envs/<env> will NOT modify the trust policy — only
-# infra/bootstrap can change it.
-data "aws_iam_role" "github_oidc_deploy_role" {
-  provider = aws.this
-
-  name = "${local.name_prefix}-github-deploy-role"
-}
-
-# Shared across all envs — created once in infra/bootstrap. Local developers
-# assume this role (not the GitHub OIDC deploy role) when running Terraform.
-data "aws_iam_role" "local_dev_role" {
-  provider = aws.this
-
-  name = "splatial-local-dev-role"
-}
+# Role names/ARNs are constructed (see locals.github_deploy_role_name) rather
+# than looked up with data.aws_iam_role. That lookup needs iam:GetRole, which
+# the OIDC session does not have until the bootstrap seed policy (or this
+# module's core policy) is attached — so a data source would deadlock the
+# first targeted IAM apply in deploy.yml after a destroy/recreate.
 
 data "aws_iam_policy_document" "github_deploy_policy" {
 
@@ -386,14 +375,14 @@ resource "aws_iam_policy" "github_deploy_storage_policy" {
 }
 
 resource "aws_iam_role_policy_attachment" "github_deploy_storage" {
-  role       = data.aws_iam_role.github_oidc_deploy_role.name
+  role       = local.github_deploy_role_name
   policy_arn = aws_iam_policy.github_deploy_storage_policy.arn
 }
 
 resource "aws_iam_role_policy_attachment" "local_dev_storage" {
   count = var.attach_deploy_policies_to_local_dev_role ? 1 : 0
 
-  role       = data.aws_iam_role.local_dev_role.name
+  role       = local.local_dev_role_name
   policy_arn = aws_iam_policy.github_deploy_storage_policy.arn
 }
 
@@ -408,14 +397,14 @@ resource "time_sleep" "storage_iam_propagation" {
 }
 
 resource "aws_iam_role_policy_attachment" "github_deploy_core" {
-  role       = data.aws_iam_role.github_oidc_deploy_role.name
+  role       = local.github_deploy_role_name
   policy_arn = aws_iam_policy.github_deploy_core_policy.arn
 }
 
 resource "aws_iam_role_policy_attachment" "local_dev_core" {
   count = var.attach_deploy_policies_to_local_dev_role ? 1 : 0
 
-  role       = data.aws_iam_role.local_dev_role.name
+  role       = local.local_dev_role_name
   policy_arn = aws_iam_policy.github_deploy_core_policy.arn
 }
 
@@ -519,23 +508,19 @@ data "aws_iam_policy_document" "github_deploy_compute_policy" {
     actions = [
       "ec2:RunInstances",
     ]
-    resources = concat(
-      [
-        "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:instance/*",
-        "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:launch-template/${aws_launch_template.worker.id}",
-        "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:launch-template/${aws_launch_template.worker.id}/*",
-        # Launch template IDs are assigned by AWS at create time. Do not reference
-        # aws_launch_template.worker_priority here — that would pull the priority
-        # SQS queues into the deploy-role policy bootstrap apply before sqs:CreateQueue
-        # has propagated to the OIDC session.
-        "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:launch-template/*",
-        "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:security-group/${aws_security_group.worker.id}",
-        "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:volume/*",
-        "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:network-interface/*",
-        "arn:aws:ec2:${var.aws_region}::image/${var.worker_ami_id}",
-      ],
-      [for subnet_id in local.worker_asg_subnet_ids : "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:subnet/${subnet_id}"]
-    )
+    resources = [
+      "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:instance/*",
+      # Wildcards, not aws_launch_template.worker.id / aws_security_group.worker.id
+      # / subnet IDs: interpolating those resource IDs would pull VPC/SQS/LT
+      # into the first targeted IAM apply in deploy.yml, before this policy
+      # (which is what grants permission to create them) is attached.
+      "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:launch-template/*",
+      "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:security-group/*",
+      "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:volume/*",
+      "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:network-interface/*",
+      "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:subnet/*",
+      "arn:aws:ec2:${var.aws_region}::image/${var.worker_ami_id}",
+    ]
   }
 
   # Launch template tag_specifications require CreateTags at RunInstances time.
@@ -688,14 +673,14 @@ resource "aws_iam_policy" "github_deploy_compute_policy" {
 }
 
 resource "aws_iam_role_policy_attachment" "github_deploy_compute" {
-  role       = data.aws_iam_role.github_oidc_deploy_role.name
+  role       = local.github_deploy_role_name
   policy_arn = aws_iam_policy.github_deploy_compute_policy.arn
 }
 
 resource "aws_iam_role_policy_attachment" "local_dev_compute" {
   count = var.attach_deploy_policies_to_local_dev_role ? 1 : 0
 
-  role       = data.aws_iam_role.local_dev_role.name
+  role       = local.local_dev_role_name
   policy_arn = aws_iam_policy.github_deploy_compute_policy.arn
 }
 
@@ -917,14 +902,14 @@ resource "aws_iam_policy" "github_deploy_network_policy" {
 }
 
 resource "aws_iam_role_policy_attachment" "github_deploy_network" {
-  role       = data.aws_iam_role.github_oidc_deploy_role.name
+  role       = local.github_deploy_role_name
   policy_arn = aws_iam_policy.github_deploy_network_policy.arn
 }
 
 resource "aws_iam_role_policy_attachment" "local_dev_network" {
   count = var.attach_deploy_policies_to_local_dev_role ? 1 : 0
 
-  role       = data.aws_iam_role.local_dev_role.name
+  role       = local.local_dev_role_name
   policy_arn = aws_iam_policy.github_deploy_network_policy.arn
 }
 
@@ -1185,14 +1170,14 @@ resource "aws_iam_policy" "github_deploy_cdn_policy" {
 }
 
 resource "aws_iam_role_policy_attachment" "github_deploy_cdn" {
-  role       = data.aws_iam_role.github_oidc_deploy_role.name
+  role       = local.github_deploy_role_name
   policy_arn = aws_iam_policy.github_deploy_cdn_policy.arn
 }
 
 resource "aws_iam_role_policy_attachment" "local_dev_cdn" {
   count = var.attach_deploy_policies_to_local_dev_role ? 1 : 0
 
-  role       = data.aws_iam_role.local_dev_role.name
+  role       = local.local_dev_role_name
   policy_arn = aws_iam_policy.github_deploy_cdn_policy.arn
 }
 
