@@ -1,9 +1,9 @@
-import CommentCountBadge from "@/components/splatworks/CommentCountBadge";
-import ForkCountBadge from "@/components/splatworks/ForkCountBadge";
-import ReactionTotalBadge from "@/components/splatworks/ReactionTotalBadge";
+import CommentCountBadge from "@/components/splatial/CommentCountBadge";
+import ForkCountBadge from "@/components/splatial/ForkCountBadge";
+import ReactionTotalBadge from "@/components/splatial/ReactionTotalBadge";
 import { cn } from "@/lib/utils";
 import type { ReactionCounts } from "@/types/api";
-import type { DashboardScene } from "@/types/splatworks";
+import type { DashboardScene } from "@/types/splatial";
 
 type SceneStatChipsProps = {
   forksCount?: number;

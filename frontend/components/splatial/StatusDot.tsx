@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import type { SceneStatus } from "@/types/splatworks";
+import type { SceneStatus } from "@/types/splatial";
 
 type StatusDotProps = {
   status: SceneStatus | "completed-badge";

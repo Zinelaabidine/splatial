@@ -20,13 +20,13 @@ export default function ShareButton({ sceneId, sceneName }: ShareButtonProps) {
       typeof window !== "undefined"
         ? `${window.location.origin}/scenes/view?id=${encodeURIComponent(sceneId)}`
         : "";
-    const title = sceneName?.trim() || "Splatworks scene";
+    const title = sceneName?.trim() || "Splatial scene";
 
     try {
       if (typeof navigator.share === "function") {
         await navigator.share({
           title,
-          text: `Check out ${title} on Splatworks`,
+          text: `Check out ${title} on Splatial`,
           url,
         });
         setNotice("Shared");

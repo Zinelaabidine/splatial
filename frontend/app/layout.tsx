@@ -24,7 +24,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Splatworks",
+  title: "Splatial",
   description: "Gaussian splatting platform",
 };
 

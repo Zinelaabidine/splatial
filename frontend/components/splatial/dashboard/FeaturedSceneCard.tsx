@@ -2,15 +2,15 @@
 
 import { ArrowUpRight, Sparkles } from "lucide-react";
 
-import SceneCreatorRow from "@/components/splatworks/dashboard/SceneCreatorRow";
+import SceneCreatorRow from "@/components/splatial/dashboard/SceneCreatorRow";
 import SceneStatChips, {
   SceneEngagementSummary,
-} from "@/components/splatworks/dashboard/SceneStatChips";
-import PointCloudThumbnail from "@/components/splatworks/PointCloudThumbnail";
+} from "@/components/splatial/dashboard/SceneStatChips";
+import PointCloudThumbnail from "@/components/splatial/PointCloudThumbnail";
 import SceneTaxonomyDisplay from "@/components/features/scenes/SceneTaxonomyDisplay";
 import { SceneVisibilityBadge } from "@/components/features/scenes/SceneVisibilityControl";
 import { cn } from "@/lib/utils";
-import type { DashboardScene } from "@/types/splatworks";
+import type { DashboardScene } from "@/types/splatial";
 
 type FeaturedSceneCardProps = {
   scene: DashboardScene;

@@ -15,7 +15,7 @@ import NotificationBell from "@/components/layout/NotificationBell";
 import TrainingMenu from "@/components/layout/TrainingMenu";
 import ActivityMenu from "@/components/layout/ActivityMenu";
 import SettingsPanel from "@/components/layout/panels/SettingsPanel";
-import SplatworksLogo from "@/components/splatworks/SplatworksLogo";
+import SplatialLogo from "@/components/splatial/SplatialLogo";
 import { useIsAdmin } from "@/lib/auth/useIsAdmin";
 import { cn } from "@/lib/utils";
 
@@ -152,8 +152,8 @@ export default function AppTopBar() {
             )}
           </button>
 
-          <Link href="/scenes" className="shrink-0" aria-label="Splatworks home">
-            <SplatworksLogo variant="light" />
+          <Link href="/scenes" className="shrink-0" aria-label="Splatial home">
+            <SplatialLogo variant="light" />
           </Link>
         </div>
 

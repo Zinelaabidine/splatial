@@ -4,9 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
-import PublicSceneCard from "@/components/splatworks/PublicSceneCard";
-import SceneCardSkeleton from "@/components/splatworks/SceneCardSkeleton";
-import { UserAvatar } from "@/components/splatworks/SplatworksLogo";
+import PublicSceneCard from "@/components/splatial/PublicSceneCard";
+import SceneCardSkeleton from "@/components/splatial/SceneCardSkeleton";
+import { UserAvatar } from "@/components/splatial/SplatialLogo";
 import { Button } from "@/components/ui/button";
 import { ApiRequestError } from "@/lib/api/apiErrors";
 import { apiSceneToDashboardScene } from "@/lib/scenes/sceneMappers";
@@ -18,7 +18,7 @@ import {
   unfollowUser,
 } from "@/services/profileService";
 import type { Profile } from "@/types/api";
-import type { DashboardScene } from "@/types/splatworks";
+import type { DashboardScene } from "@/types/splatial";
 
 function initialsFromDisplayName(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);

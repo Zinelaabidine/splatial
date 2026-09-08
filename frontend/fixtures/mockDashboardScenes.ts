@@ -1,4 +1,4 @@
-import type { DashboardScene, DashboardStats } from "@/types/splatworks";
+import type { DashboardScene, DashboardStats } from "@/types/splatial";
 
 export const MOCK_DASHBOARD_STATS: DashboardStats = {
   totalScenes: 12,

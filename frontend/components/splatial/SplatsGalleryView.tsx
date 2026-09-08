@@ -5,7 +5,7 @@ import { ChevronDown, RefreshCw } from "lucide-react";
 
 import DeleteSceneModal from "@/components/features/scenes/DeleteSceneModal";
 import { usePageSearch } from "@/components/layout/AppShellContext";
-import SplatCard from "@/components/splatworks/SplatCard";
+import SplatCard from "@/components/splatial/SplatCard";
 import { useSplatsGallery } from "@/hooks/splats/useSplatsGallery";
 
 const SORT_LABELS = {
@@ -72,7 +72,7 @@ export default function SplatsGalleryView() {
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <h1 className="text-xl font-bold tracking-tight text-[var(--nord-ink)] sm:text-2xl">
-            Splatworks: My Splats
+            Splatial: My Splats
             {!loading && totalReady > 0 ? ` (${totalReady})` : ""}
           </h1>
           {loading && (

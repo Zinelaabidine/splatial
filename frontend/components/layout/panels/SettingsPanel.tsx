@@ -5,7 +5,7 @@ import { useAuthenticator } from "@aws-amplify/ui-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Bell, CreditCard, LogOut, UserCog } from "lucide-react";
 
-import { UserAvatar } from "@/components/splatworks/SplatworksLogo";
+import { UserAvatar } from "@/components/splatial/SplatialLogo";
 import { useAppAccount } from "@/hooks/layout/useAppAccount";
 import { useDismissablePopover } from "@/hooks/layout/useDismissablePopover";
 import { ApiRequestError } from "@/lib/api/apiErrors";

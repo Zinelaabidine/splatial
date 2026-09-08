@@ -13,7 +13,7 @@ import { deleteScene, listScenes, updateScene } from "@/services/scenesService";
 import { ApiRequestError, isQuotaExceededError } from "@/lib/api/apiErrors";
 import { sceneSettingsUrl, sceneViewerUrl } from "@/lib/scenes/viewerUrls";
 import type { SceneVisibility } from "@/types/api";
-import type { DashboardScene, SceneStatus } from "@/types/splatworks";
+import type { DashboardScene, SceneStatus } from "@/types/splatial";
 import type { SortOption } from "@/types/dashboard";
 
 export type StatusFilter = SceneStatus | "all";

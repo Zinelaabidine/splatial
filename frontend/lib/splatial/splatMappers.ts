@@ -1,6 +1,6 @@
 import { formatSceneDate, hueFromId } from "@/lib/scenes/sceneMappers";
 import type { Scene } from "@/types/api";
-import type { Splat, SplatAuthor, SplatSubject } from "@/types/splatworks";
+import type { Splat, SplatAuthor, SplatSubject } from "@/types/splatial";
 
 const SUBJECTS: SplatSubject[] = [
   "vase",

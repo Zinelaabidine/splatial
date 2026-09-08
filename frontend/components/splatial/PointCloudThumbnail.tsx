@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import type { SplatPreviewTint } from "@/types/splatworks";
+import type { SplatPreviewTint } from "@/types/splatial";
 
 type PointCloudThumbnailProps = {
   preview: SplatPreviewTint;

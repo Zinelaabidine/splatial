@@ -12,7 +12,7 @@ type BrandMarkProps = {
 /**
  * Shared logo mark used on the public marketing header, footer, and the
  * login shell. Not used inside the authenticated app shell (that keeps its
- * own "Splatworks" breadcrumb treatment in AppTopBar).
+ * own "Splatial" breadcrumb treatment in AppTopBar).
  */
 export default function BrandMark({ href = "/", className, wordmarkClassName }: BrandMarkProps) {
   return (

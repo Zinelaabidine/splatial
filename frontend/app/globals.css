@@ -982,7 +982,7 @@ body {
   }
 }
 
-/* ─── Splatworks design handoff animations ─────────────────────────────── */
+/* ─── Splatial design handoff animations ─────────────────────────────── */
 @keyframes scSpin {
   from {
     transform: rotate(0deg);

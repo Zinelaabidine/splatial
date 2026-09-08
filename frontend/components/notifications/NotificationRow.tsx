@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 
-import { UserAvatar } from "@/components/splatworks/SplatworksLogo";
+import { UserAvatar } from "@/components/splatial/SplatialLogo";
 import {
   initialsFromDisplayName,
   notificationHref,

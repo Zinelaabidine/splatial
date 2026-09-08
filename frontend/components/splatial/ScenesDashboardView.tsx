@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useRef } from "react";
 
 import DeleteSceneModal from "@/components/features/scenes/DeleteSceneModal";
-import DashboardSceneCard from "@/components/splatworks/DashboardSceneCard";
-import DashboardSceneListRow from "@/components/splatworks/DashboardSceneListRow";
-import SceneCardSkeleton from "@/components/splatworks/SceneCardSkeleton";
-import DashboardToolbar from "@/components/splatworks/dashboard/DashboardToolbar";
+import DashboardSceneCard from "@/components/splatial/DashboardSceneCard";
+import DashboardSceneListRow from "@/components/splatial/DashboardSceneListRow";
+import SceneCardSkeleton from "@/components/splatial/SceneCardSkeleton";
+import DashboardToolbar from "@/components/splatial/dashboard/DashboardToolbar";
 import { Button } from "@/components/ui/button";
 import { usePageSearch } from "@/components/layout/AppShellContext";
 import {
@@ -15,7 +15,7 @@ import {
   type StatusFilter,
 } from "@/hooks/scenes/useScenesDashboardGrid";
 import { computeDashboardStats } from "@/lib/scenes/featuredScene";
-import type { DashboardScene } from "@/types/splatworks";
+import type { DashboardScene } from "@/types/splatial";
 import type { MockScene, SceneCardState } from "@/types/dashboard";
 
 function dashboardSceneToModalScene(scene: DashboardScene): MockScene {

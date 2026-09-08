@@ -3,14 +3,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import PublicSceneCardGrid from "@/components/splatworks/PublicSceneCardGrid";
-import SceneCardSkeleton from "@/components/splatworks/SceneCardSkeleton";
+import PublicSceneCardGrid from "@/components/splatial/PublicSceneCardGrid";
+import SceneCardSkeleton from "@/components/splatial/SceneCardSkeleton";
 import { Button } from "@/components/ui/button";
 import { ApiRequestError } from "@/lib/api/apiErrors";
 import { feedSceneToListItem, type PublicSceneListItem } from "@/lib/scenes/feedSceneMappers";
 import { sceneViewerUrl } from "@/lib/scenes/viewerUrls";
 import { getFeed } from "@/services/feedService";
-import type { DashboardScene } from "@/types/splatworks";
+import type { DashboardScene } from "@/types/splatial";
 
 export default function FeedPage() {
   const router = useRouter();

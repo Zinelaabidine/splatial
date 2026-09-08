@@ -6,7 +6,7 @@ import { Loader2, Trash2 } from "lucide-react";
 
 import CommentBody from "@/components/viewer/CommentBody";
 import CommentReactionBar from "@/components/viewer/CommentReactionBar";
-import { UserAvatar } from "@/components/splatworks/SplatworksLogo";
+import { UserAvatar } from "@/components/splatial/SplatialLogo";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { formatRelativeTime } from "@/lib/time/formatRelativeTime";

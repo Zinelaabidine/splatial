@@ -5,11 +5,11 @@ import { RefreshCw, Send, Settings2, XCircle } from "lucide-react";
 
 import { ImageOff } from "lucide-react";
 
-import SceneCardMenu from "@/components/splatworks/dashboard/SceneCardMenu";
-import SceneCreatorRow from "@/components/splatworks/dashboard/SceneCreatorRow";
-import SceneStatChips from "@/components/splatworks/dashboard/SceneStatChips";
-import PointCloudThumbnail from "@/components/splatworks/PointCloudThumbnail";
-import StatusDot, { STATUS_LABELS, STATUS_STYLES } from "@/components/splatworks/StatusDot";
+import SceneCardMenu from "@/components/splatial/dashboard/SceneCardMenu";
+import SceneCreatorRow from "@/components/splatial/dashboard/SceneCreatorRow";
+import SceneStatChips from "@/components/splatial/dashboard/SceneStatChips";
+import PointCloudThumbnail from "@/components/splatial/PointCloudThumbnail";
+import StatusDot, { STATUS_LABELS, STATUS_STYLES } from "@/components/splatial/StatusDot";
 import SceneTaxonomyDisplay from "@/components/features/scenes/SceneTaxonomyDisplay";
 import { SceneVisibilityBadge } from "@/components/features/scenes/SceneVisibilityControl";
 import AdvancedSettingsPanel from "@/components/upload/AdvancedSettingsPanel";
@@ -19,7 +19,7 @@ import { isActiveGpuJobStatus } from "@/lib/scenes/sceneMappers";
 import { cn } from "@/lib/utils";
 import type { SubmitJobOptions } from "@/services/jobsService";
 import type { ColmapConfig, SceneVisibility, TrainConfig } from "@/types/api";
-import type { DashboardScene } from "@/types/splatworks";
+import type { DashboardScene } from "@/types/splatial";
 
 type DashboardSceneCardProps = {
   scene: DashboardScene;

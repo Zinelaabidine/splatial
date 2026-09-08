@@ -1,4 +1,4 @@
-import type { Splat, UserAccount } from "@/types/splatworks";
+import type { Splat, UserAccount } from "@/types/splatial";
 
 export const MOCK_ACCOUNT: UserAccount = {
   name: "Mara Köhler",

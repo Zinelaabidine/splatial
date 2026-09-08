@@ -3,15 +3,15 @@
 import { useEffect, useRef, useState } from "react";
 import { MoreVertical, Pencil, Send, Trash2, XCircle } from "lucide-react";
 
-import SceneStatChips from "@/components/splatworks/dashboard/SceneStatChips";
-import PointCloudThumbnail from "@/components/splatworks/PointCloudThumbnail";
-import StatusDot, { STATUS_LABELS } from "@/components/splatworks/StatusDot";
+import SceneStatChips from "@/components/splatial/dashboard/SceneStatChips";
+import PointCloudThumbnail from "@/components/splatial/PointCloudThumbnail";
+import StatusDot, { STATUS_LABELS } from "@/components/splatial/StatusDot";
 import { SceneVisibilityBadge } from "@/components/features/scenes/SceneVisibilityControl";
 import { Button } from "@/components/ui/button";
 import { isActiveGpuJobStatus } from "@/lib/scenes/sceneMappers";
 import { cn } from "@/lib/utils";
 import type { SubmitJobOptions } from "@/services/jobsService";
-import type { DashboardScene } from "@/types/splatworks";
+import type { DashboardScene } from "@/types/splatial";
 
 type DashboardSceneListRowProps = {
   scene: DashboardScene;

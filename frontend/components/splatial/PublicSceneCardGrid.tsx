@@ -2,10 +2,10 @@
 
 import { Loader2 } from "lucide-react";
 
-import PublicSceneCard from "@/components/splatworks/PublicSceneCard";
+import PublicSceneCard from "@/components/splatial/PublicSceneCard";
 import { Button } from "@/components/ui/button";
 import type { PublicSceneListItem } from "@/lib/scenes/feedSceneMappers";
-import type { DashboardScene } from "@/types/splatworks";
+import type { DashboardScene } from "@/types/splatial";
 
 type PublicSceneCardGridProps = {
   items: PublicSceneListItem[];

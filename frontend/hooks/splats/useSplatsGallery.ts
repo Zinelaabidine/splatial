@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { useAppAccount } from "@/hooks/layout/useAppAccount";
 import { ApiRequestError } from "@/lib/api/apiErrors";
-import { apiSceneToSplat } from "@/lib/splatworks/splatMappers";
+import { apiSceneToSplat } from "@/lib/splatial/splatMappers";
 import {
   deleteScene,
   getSceneDownloadOutput,
@@ -13,7 +13,7 @@ import {
   listScenes,
 } from "@/services/scenesService";
 import type { SceneDownloadResponse } from "@/types/api";
-import type { Splat, SplatsSortOption, SplatsViewMode } from "@/types/splatworks";
+import type { Splat, SplatsSortOption, SplatsViewMode } from "@/types/splatial";
 
 /** Saves a presigned download URL to disk via a throwaway <a download>. */
 function triggerBrowserDownload(url: string, filename: string) {

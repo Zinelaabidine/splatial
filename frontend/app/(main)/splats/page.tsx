@@ -1,4 +1,4 @@
-import SplatsGalleryView from "@/components/splatworks/SplatsGalleryView";
+import SplatsGalleryView from "@/components/splatial/SplatsGalleryView";
 
 export default function SplatsPage() {
   return <SplatsGalleryView />;

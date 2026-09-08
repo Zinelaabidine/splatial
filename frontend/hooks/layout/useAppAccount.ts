@@ -4,7 +4,7 @@ import { useAuthenticator } from "@aws-amplify/ui-react";
 
 import { MOCK_ACCOUNT } from "@/fixtures/mockSplats";
 import { parseUser } from "@/lib/auth/parseUser";
-import type { UserAccount } from "@/types/splatworks";
+import type { UserAccount } from "@/types/splatial";
 
 export function useAppAccount(): UserAccount {
   const { user } = useAuthenticator((ctx) => [ctx.user]);

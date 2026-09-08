@@ -1,6 +1,6 @@
 "use client";
 
-import { UserAvatar } from "@/components/splatworks/SplatworksLogo";
+import { UserAvatar } from "@/components/splatial/SplatialLogo";
 import { useAppAccount } from "@/hooks/layout/useAppAccount";
 import { cn } from "@/lib/utils";
 

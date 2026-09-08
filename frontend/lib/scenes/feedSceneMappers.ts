@@ -1,6 +1,6 @@
 import { apiSceneToDashboardScene } from "@/lib/scenes/sceneMappers";
 import type { FeedScene } from "@/types/api";
-import type { DashboardScene } from "@/types/splatworks";
+import type { DashboardScene } from "@/types/splatial";
 
 export type PublicSceneListItem = {
   scene: DashboardScene;

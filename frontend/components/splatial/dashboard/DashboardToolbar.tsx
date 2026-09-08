@@ -3,7 +3,7 @@
 import { type RefObject } from "react";
 import { ChevronDown, LayoutGrid, List } from "lucide-react";
 
-import { STATUS_LABELS } from "@/components/splatworks/StatusDot";
+import { STATUS_LABELS } from "@/components/splatial/StatusDot";
 import { SORT_LABELS } from "@/lib/scenes/sceneMappers";
 import { cn } from "@/lib/utils";
 import type { StatusFilter } from "@/hooks/scenes/useScenesDashboardGrid";

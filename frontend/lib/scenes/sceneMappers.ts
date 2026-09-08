@@ -1,6 +1,6 @@
 import type { MockScene, SortOption } from "@/types/dashboard";
 import type { Scene } from "@/types/api";
-import type { DashboardScene, SceneStatus } from "@/types/splatworks";
+import type { DashboardScene, SceneStatus } from "@/types/splatial";
 import {
   formatEtaSeconds,
   formatProgressPhase,
@@ -118,7 +118,7 @@ function dashboardCaption(scene: Scene, status: SceneStatus): string {
   }
 }
 
-/** Map API Scene → Splatworks dashboard card model. */
+/** Map API Scene → Splatial dashboard card model. */
 export function apiSceneToDashboardScene(scene: Scene): DashboardScene {
   const status = apiStatusToDashboardStatus(scene.status);
   const card: DashboardScene = {

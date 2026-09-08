@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 
-import type { SplatSubject } from "@/types/splatworks";
+import type { SplatSubject } from "@/types/splatial";
 
 type Particle = {
   x: number;

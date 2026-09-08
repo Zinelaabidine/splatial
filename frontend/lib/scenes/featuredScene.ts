@@ -1,4 +1,4 @@
-import type { DashboardScene } from "@/types/splatworks";
+import type { DashboardScene } from "@/types/splatial";
 
 function engagementScore(scene: DashboardScene): number {
   return (

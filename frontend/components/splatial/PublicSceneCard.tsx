@@ -1,13 +1,13 @@
 "use client";
 
-import PointCloudThumbnail from "@/components/splatworks/PointCloudThumbnail";
-import CommentCountBadge from "@/components/splatworks/CommentCountBadge";
-import ForkCountBadge from "@/components/splatworks/ForkCountBadge";
-import ReactionTotalBadge from "@/components/splatworks/ReactionTotalBadge";
-import FeedAuthorRow from "@/components/splatworks/FeedAuthorRow";
+import PointCloudThumbnail from "@/components/splatial/PointCloudThumbnail";
+import CommentCountBadge from "@/components/splatial/CommentCountBadge";
+import ForkCountBadge from "@/components/splatial/ForkCountBadge";
+import ReactionTotalBadge from "@/components/splatial/ReactionTotalBadge";
+import FeedAuthorRow from "@/components/splatial/FeedAuthorRow";
 import SceneTaxonomyDisplay from "@/components/features/scenes/SceneTaxonomyDisplay";
 import { cn } from "@/lib/utils";
-import type { DashboardScene } from "@/types/splatworks";
+import type { DashboardScene } from "@/types/splatial";
 
 const COMPLETED_TILE =
   "linear-gradient(150deg, rgba(52,211,153,0.18), rgba(8,16,24,0.6))";

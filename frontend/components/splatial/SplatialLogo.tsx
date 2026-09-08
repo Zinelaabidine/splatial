@@ -1,14 +1,14 @@
-type SplatworksLogoProps = {
+type SplatialLogoProps = {
   variant?: "dark" | "light";
   className?: string;
   compact?: boolean;
 };
 
-export default function SplatworksLogo({
+export default function SplatialLogo({
   variant = "dark",
   className,
   compact = false,
-}: SplatworksLogoProps) {
+}: SplatialLogoProps) {
   const fill = variant === "dark" ? "#19c2ad" : "#0e8a7d";
   const textColor = variant === "dark" ? "#f4f7fa" : "#1a1a18";
 
@@ -32,7 +32,7 @@ export default function SplatworksLogo({
             className="text-base font-bold tracking-[-0.01em]"
             style={{ color: textColor }}
           >
-            Splatworks
+            Splatial
           </span>
         )}
       </div>

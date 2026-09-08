@@ -12,11 +12,11 @@ import {
   Trash2,
 } from "lucide-react";
 
-import SplatPreviewVisual from "@/components/splatworks/SplatPreviewVisual";
-import { UserAvatar } from "@/components/splatworks/SplatworksLogo";
-import { formatSplatStats } from "@/lib/splatworks/formatters";
+import SplatPreviewVisual from "@/components/splatial/SplatPreviewVisual";
+import { UserAvatar } from "@/components/splatial/SplatialLogo";
+import { formatSplatStats } from "@/lib/splatial/formatters";
 import { cn } from "@/lib/utils";
-import type { Splat } from "@/types/splatworks";
+import type { Splat } from "@/types/splatial";
 
 type SplatCardProps = {
   splat: Splat;

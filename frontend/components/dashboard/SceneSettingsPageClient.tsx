@@ -16,7 +16,7 @@ import {
   SceneVisibilityBadge,
   SceneVisibilityToggle,
 } from "@/components/features/scenes/SceneVisibilityControl";
-import StatusDot, { STATUS_LABELS } from "@/components/splatworks/StatusDot";
+import StatusDot, { STATUS_LABELS } from "@/components/splatial/StatusDot";
 import { Button } from "@/components/ui/button";
 import { usePageSearch } from "@/components/layout/AppShellContext";
 import { useSceneViewUrl } from "@/hooks/viewer/useSceneViewUrl";
@@ -35,7 +35,7 @@ import {
   uploadThumbnailToS3,
 } from "@/services/scenesService";
 import type { SceneVisibility } from "@/types/api";
-import type { DashboardScene } from "@/types/splatworks";
+import type { DashboardScene } from "@/types/splatial";
 
 const LegacySplatViewer = dynamic(
   () => import("@/components/viewer/LegacySplatViewer"),

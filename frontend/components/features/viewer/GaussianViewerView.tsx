@@ -4,7 +4,7 @@ import { Suspense } from "react";
 
 import BookmarkButton from "@/components/viewer/BookmarkButton";
 import EditButton from "@/components/viewer/EditButton";
-import ForkCountBadge from "@/components/splatworks/ForkCountBadge";
+import ForkCountBadge from "@/components/splatial/ForkCountBadge";
 import ReactionBar from "@/components/viewer/ReactionBar";
 import RemixAttribution from "@/components/viewer/RemixAttribution";
 import RemixButton from "@/components/viewer/RemixButton";

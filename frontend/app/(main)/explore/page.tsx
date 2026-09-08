@@ -4,8 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { X } from "lucide-react";
 
-import PublicSceneCardGrid from "@/components/splatworks/PublicSceneCardGrid";
-import SceneCardSkeleton from "@/components/splatworks/SceneCardSkeleton";
+import PublicSceneCardGrid from "@/components/splatial/PublicSceneCardGrid";
+import SceneCardSkeleton from "@/components/splatial/SceneCardSkeleton";
 import { Button } from "@/components/ui/button";
 import { ApiRequestError } from "@/lib/api/apiErrors";
 import { SCENE_CATEGORIES, isSceneCategory } from "@/lib/scenes/categories";
@@ -13,7 +13,7 @@ import { feedSceneToListItem, type PublicSceneListItem } from "@/lib/scenes/feed
 import { sceneViewerUrl } from "@/lib/scenes/viewerUrls";
 import { cn } from "@/lib/utils";
 import { getExplore } from "@/services/exploreService";
-import type { DashboardScene } from "@/types/splatworks";
+import type { DashboardScene } from "@/types/splatial";
 
 function buildExplorePath(category: string | null, tag: string | null): string {
   const params = new URLSearchParams();
@@ -26,7 +26,7 @@ function buildExplorePath(category: string | null, tag: string | null): string {
 function ExplorePageTitle() {
   return (
     <h1 className="mb-6 bg-gradient-to-r from-[var(--nord-surface)] via-sky-100 to-indigo-200 bg-clip-text text-xl font-bold tracking-tight text-transparent sm:text-2xl">
-      Splatworks: Explore
+      Splatial: Explore
     </h1>
   );
 }

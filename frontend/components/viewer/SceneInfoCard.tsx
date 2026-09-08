@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
 
-import { UserAvatar } from "@/components/splatworks/SplatworksLogo";
+import { UserAvatar } from "@/components/splatial/SplatialLogo";
 import { Button } from "@/components/ui/button";
 import { ApiRequestError } from "@/lib/api/apiErrors";
 import { usePresence } from "@/hooks/viewer/usePresence";
