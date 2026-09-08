@@ -64,9 +64,9 @@ variable "cors_extra_origins" {
 }
 
 variable "worker_ami_id" {
-  description = "AMI for GPU Spot workers (WorkerGaussianSplattingARM_V2, us-east-1)."
+  description = "AMI for GPU Spot workers. ami-01ce7dc9f9762db2c is the restored copy of the original WorkerGaussianSplattingARM_V2 image (ami-0a6913682d6d953eb), which was deregistered."
   type        = string
-  default     = "ami-0a6913682d6d953eb"
+  default     = "ami-01ce7dc9f9762db2c"
 }
 
 variable "worker_spot_dedicated_availability_zone" {

@@ -96,6 +96,16 @@ resource "aws_launch_template" "worker_priority" {
     Project     = var.project_name
     ManagedBy   = "terraform"
   }
+
+  lifecycle {
+    # Same rationale as aws_launch_template.worker in compute.tf: POST
+    # /admin/asg-config can move this template's Default Version to a new
+    # image_id/instance_type at runtime (admin-asg-config-update.js), and
+    # without ignore_changes here the next `terraform apply` would revert
+    # that admin-driven change back to var.worker_ami_id /
+    # var.worker_instance_type.
+    ignore_changes = [image_id, instance_type]
+  }
 }
 
 resource "aws_autoscaling_group" "worker_priority" {

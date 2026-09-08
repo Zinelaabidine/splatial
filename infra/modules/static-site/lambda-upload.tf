@@ -13,9 +13,12 @@ resource "null_resource" "upload_lambda_deps" {
   }
 
   provisioner "local-exec" {
-    # npm install generates package-lock.json on first run; subsequent runs use
-    # the lockfile for reproducibility. --omit=dev keeps node_modules lean.
-    command     = "npm install --omit=dev"
+    # npm ci installs strictly from the committed package-lock.json, so the
+    # zipped node_modules is byte-reproducible and the lockfile is never
+    # rewritten mid-apply. Every dependency here is a "^" range, so the old
+    # `npm install` could silently pull newer minors and leave package-lock.json
+    # dirty after a local deploy. --omit=dev keeps node_modules lean.
+    command     = "npm ci --omit=dev"
     working_dir = local.backend_source_dir
   }
 }
@@ -206,7 +209,7 @@ resource "aws_lambda_function" "upload_lambda" {
       COGNITO_USER_POOL_ID               = aws_cognito_user_pool.this.id
       SQS_QUEUE_URL                      = aws_sqs_queue.processing_queue.url
       SQS_QUEUE_URL_PRIORITY             = aws_sqs_queue.processing_queue_priority.url
-      API_BASE_URL                       = "https://api-${var.environment}.openspacenexus.store"
+      API_BASE_URL                       = "https://api-${var.environment}.${var.hosted_zone_name}"
       GDRIVE_IMPORT_FUNCTION_NAME        = aws_lambda_function.gdrive_import_lambda.function_name
       WORKER_LOG_GROUP                   = local.worker_log_group
       WORKER_ASG_NAME                    = aws_autoscaling_group.worker.name

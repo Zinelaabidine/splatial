@@ -3,6 +3,13 @@ provider "aws" {
   region = "us-east-1"
 }
 
+# Single source of truth for account-wide/cross-environment constants — see
+# infra/config.json. Do not hardcode project_name, domain_name,
+# hosted_zone_name, or certificate_domain_name anywhere else; update them
+# there only.
+locals {
+  cfg = jsondecode(file("${path.module}/../../config.json"))
+}
 
 module "static_site" {
   source = "../../modules/static-site"
@@ -11,16 +18,16 @@ module "static_site" {
     aws.this = aws.us_east_1
   }
 
-  project_name            = "splatial"
+  project_name            = local.cfg.project_name
   environment             = "dev"
   aws_region              = "us-east-1"
-  domain_name             = "splatial-dev.openspacenexus.store"
-  hosted_zone_name        = "openspacenexus.store"
-  certificate_domain_name = "*.openspacenexus.store"
+  domain_name             = local.cfg.domain_names.dev
+  hosted_zone_name        = local.cfg.hosted_zone_name
+  certificate_domain_name = local.cfg.certificate_domain_name
 
   github_owner = "Zinelaabidine"
 
-  name          = "splatial-dev"
+  name          = "${local.cfg.project_name}-dev"
   vpc_cidr      = "10.0.0.0/16"
   azs           = ["us-east-1a", "us-east-1b"]
   public_cidrs  = ["10.0.1.0/24", "10.0.2.0/24"]
@@ -68,6 +75,6 @@ module "api_gateway_domain" {
 
   environment    = "dev"
   api_gateway_id = module.static_site.api_gateway_id
-  domain_name    = "openspacenexus.store"
+  domain_name    = local.cfg.hosted_zone_name
 }
 

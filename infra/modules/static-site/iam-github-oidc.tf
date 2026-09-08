@@ -63,7 +63,7 @@ data "aws_iam_policy_document" "github_deploy_policy" {
       "cognito-idp:ListGroups",
     ]
     resources = [
-      "arn:aws:cognito-idp:${var.aws_region}:886601940523:userpool/*",
+      "arn:aws:cognito-idp:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:userpool/*",
     ]
   }
 
@@ -126,7 +126,7 @@ data "aws_iam_policy_document" "github_deploy_policy" {
       "iam:GetOpenIDConnectProvider",
     ]
     resources = [
-      "arn:aws:iam::886601940523:oidc-provider/token.actions.githubusercontent.com",
+      "arn:aws:iam::${data.aws_caller_identity.worker.account_id}:oidc-provider/token.actions.githubusercontent.com",
     ]
   }
 
@@ -154,27 +154,27 @@ data "aws_iam_policy_document" "github_deploy_policy" {
     ]
     resources = concat(
       [
-        "arn:aws:iam::886601940523:role/${local.name_prefix}-github-deploy-role",
-        "arn:aws:iam::886601940523:role/splatial-local-dev-role",
+        "arn:aws:iam::${data.aws_caller_identity.worker.account_id}:role/${local.name_prefix}-github-deploy-role",
+        "arn:aws:iam::${data.aws_caller_identity.worker.account_id}:role/splatial-local-dev-role",
         # Legacy helloFromLambda scaffold exec role (tear-down only; role removed from config).
-        "arn:aws:iam::886601940523:role/${var.name}-lambda-exec-role",
+        "arn:aws:iam::${data.aws_caller_identity.worker.account_id}:role/${var.name}-lambda-exec-role",
         # Constructed ARN for the upload Lambda execution role (does not exist yet).
-        "arn:aws:iam::886601940523:role/${var.name}-upload-lambda-exec-role",
+        "arn:aws:iam::${data.aws_caller_identity.worker.account_id}:role/${var.name}-upload-lambda-exec-role",
         # Constructed ARN for the Google Drive import Lambda execution role.
-        "arn:aws:iam::886601940523:role/${var.name}-gdrive-import-lambda-exec-role",
+        "arn:aws:iam::${data.aws_caller_identity.worker.account_id}:role/${var.name}-gdrive-import-lambda-exec-role",
         # Constructed ARNs for the presence WebSocket Lambdas (websocket-api.tf).
-        "arn:aws:iam::886601940523:role/${var.name}-presence-authorizer-exec-role",
-        "arn:aws:iam::886601940523:role/${var.name}-presence-lambda-exec-role",
+        "arn:aws:iam::${data.aws_caller_identity.worker.account_id}:role/${var.name}-presence-authorizer-exec-role",
+        "arn:aws:iam::${data.aws_caller_identity.worker.account_id}:role/${var.name}-presence-lambda-exec-role",
         # Account-wide API Gateway CloudWatch role (api-gateway-account.tf; dev only).
-        "arn:aws:iam::886601940523:role/splatial-apigateway-cloudwatch-role",
+        "arn:aws:iam::${data.aws_caller_identity.worker.account_id}:role/splatial-apigateway-cloudwatch-role",
         # Constructed ARN for the GPU worker instance role (does not exist yet).
-        "arn:aws:iam::886601940523:role/${local.name_prefix}-splat-worker-instance-role",
+        "arn:aws:iam::${data.aws_caller_identity.worker.account_id}:role/${local.name_prefix}-splat-worker-instance-role",
       ],
       var.enable_ami_bake_resources ? [
         # Global bake workflow role (bootstrap) — dev state attaches its inline policy.
-        "arn:aws:iam::886601940523:role/splatial-github-ami-bake-role",
+        "arn:aws:iam::${data.aws_caller_identity.worker.account_id}:role/splatial-github-ami-bake-role",
         # Minimal SSM-only builder instance role (iam-github-oidc-bake.tf).
-        "arn:aws:iam::886601940523:role/${local.name_prefix}-ami-bake-instance-role",
+        "arn:aws:iam::${data.aws_caller_identity.worker.account_id}:role/${local.name_prefix}-ami-bake-instance-role",
       ] : [],
     )
   }
@@ -189,12 +189,12 @@ data "aws_iam_policy_document" "github_deploy_policy" {
     ]
     resources = [
       # Constructed ARN for the upload Lambda execution role (does not exist yet).
-      "arn:aws:iam::886601940523:role/${var.name}-upload-lambda-exec-role",
+      "arn:aws:iam::${data.aws_caller_identity.worker.account_id}:role/${var.name}-upload-lambda-exec-role",
       # Constructed ARN for the Google Drive import Lambda execution role.
-      "arn:aws:iam::886601940523:role/${var.name}-gdrive-import-lambda-exec-role",
+      "arn:aws:iam::${data.aws_caller_identity.worker.account_id}:role/${var.name}-gdrive-import-lambda-exec-role",
       # Constructed ARNs for the presence WebSocket Lambdas (websocket-api.tf).
-      "arn:aws:iam::886601940523:role/${var.name}-presence-authorizer-exec-role",
-      "arn:aws:iam::886601940523:role/${var.name}-presence-lambda-exec-role",
+      "arn:aws:iam::${data.aws_caller_identity.worker.account_id}:role/${var.name}-presence-authorizer-exec-role",
+      "arn:aws:iam::${data.aws_caller_identity.worker.account_id}:role/${var.name}-presence-lambda-exec-role",
     ]
     condition {
       test     = "StringEquals"
@@ -466,10 +466,10 @@ data "aws_iam_policy_document" "github_deploy_compute_policy" {
       "sqs:UntagQueue",
     ]
     resources = [
-      "arn:aws:sqs:${var.aws_region}:886601940523:${local.name_prefix}-splat-processing-queue",
-      "arn:aws:sqs:${var.aws_region}:886601940523:${local.name_prefix}-splat-processing-dlq",
-      "arn:aws:sqs:${var.aws_region}:886601940523:${local.name_prefix}-splat-processing-queue-priority",
-      "arn:aws:sqs:${var.aws_region}:886601940523:${local.name_prefix}-splat-processing-dlq-priority",
+      "arn:aws:sqs:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:${local.name_prefix}-splat-processing-queue",
+      "arn:aws:sqs:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:${local.name_prefix}-splat-processing-dlq",
+      "arn:aws:sqs:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:${local.name_prefix}-splat-processing-queue-priority",
+      "arn:aws:sqs:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:${local.name_prefix}-splat-processing-dlq-priority",
     ]
   }
 
@@ -521,20 +521,20 @@ data "aws_iam_policy_document" "github_deploy_compute_policy" {
     ]
     resources = concat(
       [
-        "arn:aws:ec2:${var.aws_region}:886601940523:instance/*",
-        "arn:aws:ec2:${var.aws_region}:886601940523:launch-template/${aws_launch_template.worker.id}",
-        "arn:aws:ec2:${var.aws_region}:886601940523:launch-template/${aws_launch_template.worker.id}/*",
+        "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:instance/*",
+        "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:launch-template/${aws_launch_template.worker.id}",
+        "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:launch-template/${aws_launch_template.worker.id}/*",
         # Launch template IDs are assigned by AWS at create time. Do not reference
         # aws_launch_template.worker_priority here — that would pull the priority
         # SQS queues into the deploy-role policy bootstrap apply before sqs:CreateQueue
         # has propagated to the OIDC session.
-        "arn:aws:ec2:${var.aws_region}:886601940523:launch-template/*",
-        "arn:aws:ec2:${var.aws_region}:886601940523:security-group/${aws_security_group.worker.id}",
-        "arn:aws:ec2:${var.aws_region}:886601940523:volume/*",
-        "arn:aws:ec2:${var.aws_region}:886601940523:network-interface/*",
+        "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:launch-template/*",
+        "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:security-group/${aws_security_group.worker.id}",
+        "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:volume/*",
+        "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:network-interface/*",
         "arn:aws:ec2:${var.aws_region}::image/${var.worker_ami_id}",
       ],
-      [for subnet_id in local.worker_asg_subnet_ids : "arn:aws:ec2:${var.aws_region}:886601940523:subnet/${subnet_id}"]
+      [for subnet_id in local.worker_asg_subnet_ids : "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:subnet/${subnet_id}"]
     )
   }
 
@@ -546,8 +546,8 @@ data "aws_iam_policy_document" "github_deploy_compute_policy" {
       "ec2:CreateTags",
     ]
     resources = [
-      "arn:aws:ec2:${var.aws_region}:886601940523:instance/*",
-      "arn:aws:ec2:${var.aws_region}:886601940523:volume/*",
+      "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:instance/*",
+      "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:volume/*",
     ]
     condition {
       test     = "StringEquals"
@@ -591,8 +591,8 @@ data "aws_iam_policy_document" "github_deploy_compute_policy" {
       "autoscaling:DisableMetricsCollection",
     ]
     resources = [
-      "arn:aws:autoscaling:${var.aws_region}:886601940523:autoScalingGroup:*:autoScalingGroupName/${local.name_prefix}-splat-worker-asg",
-      "arn:aws:autoscaling:${var.aws_region}:886601940523:autoScalingGroup:*:autoScalingGroupName/${local.name_prefix}-splat-worker-priority-asg",
+      "arn:aws:autoscaling:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:autoScalingGroup:*:autoScalingGroupName/${local.name_prefix}-splat-worker-asg",
+      "arn:aws:autoscaling:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:autoScalingGroup:*:autoScalingGroupName/${local.name_prefix}-splat-worker-priority-asg",
     ]
   }
 
@@ -613,10 +613,10 @@ data "aws_iam_policy_document" "github_deploy_compute_policy" {
     ]
     resources = concat(
       [
-        "arn:aws:iam::886601940523:instance-profile/${local.name_prefix}-splat-worker-instance-profile",
+        "arn:aws:iam::${data.aws_caller_identity.worker.account_id}:instance-profile/${local.name_prefix}-splat-worker-instance-profile",
       ],
       var.enable_ami_bake_resources ? [
-        "arn:aws:iam::886601940523:instance-profile/${local.name_prefix}-ami-bake-instance-profile",
+        "arn:aws:iam::${data.aws_caller_identity.worker.account_id}:instance-profile/${local.name_prefix}-ami-bake-instance-profile",
       ] : [],
     )
   }
@@ -626,7 +626,7 @@ data "aws_iam_policy_document" "github_deploy_compute_policy" {
     effect  = "Allow"
     actions = ["iam:PassRole"]
     resources = [
-      "arn:aws:iam::886601940523:role/${local.name_prefix}-splat-worker-instance-role",
+      "arn:aws:iam::${data.aws_caller_identity.worker.account_id}:role/${local.name_prefix}-splat-worker-instance-role",
     ]
     condition {
       test     = "StringEquals"
@@ -649,7 +649,7 @@ data "aws_iam_policy_document" "github_deploy_compute_policy" {
       # Wildcard covers all env-scoped deploy managed policies (core, storage,
       # compute, network, cdn) so a new split policy can be created without
       # first updating this document to list its ARN.
-      "arn:aws:iam::886601940523:policy/${local.name_prefix}-github-deploy-*",
+      "arn:aws:iam::${data.aws_caller_identity.worker.account_id}:policy/${local.name_prefix}-github-deploy-*",
     ]
   }
 
@@ -664,7 +664,7 @@ data "aws_iam_policy_document" "github_deploy_compute_policy" {
       "iam:SetDefaultPolicyVersion",
     ]
     resources = [
-      "arn:aws:iam::886601940523:policy/${local.name_prefix}-github-deploy-*",
+      "arn:aws:iam::${data.aws_caller_identity.worker.account_id}:policy/${local.name_prefix}-github-deploy-*",
     ]
   }
 
@@ -743,28 +743,28 @@ data "aws_iam_policy_document" "github_deploy_network_policy" {
     ]
     resources = [
       # Constructed ARNs — table does not exist yet on first apply.
-      "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-scenes",
-      "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-scenes/index/*",
-      "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-profiles",
-      "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-profiles/index/*",
-      "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-usernames",
-      "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-follows",
-      "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-follows/index/*",
-      "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-reactions",
-      "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-comment-reactions",
-      "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-comments",
-      "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-notifications",
-      "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-bookmarks",
-      "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-bookmarks/index/*",
-      "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-shots",
-      "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-tours",
-      "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-worker-amis",
-      "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-presence-connections",
-      "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-presence-connections/index/*",
-      "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-users",
-      "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-job-quota-events",
-      "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-audit-logs",
-      "arn:aws:dynamodb:${var.aws_region}:886601940523:table/${local.name_prefix}-audit-logs/index/*",
+      "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:table/${local.name_prefix}-scenes",
+      "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:table/${local.name_prefix}-scenes/index/*",
+      "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:table/${local.name_prefix}-profiles",
+      "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:table/${local.name_prefix}-profiles/index/*",
+      "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:table/${local.name_prefix}-usernames",
+      "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:table/${local.name_prefix}-follows",
+      "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:table/${local.name_prefix}-follows/index/*",
+      "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:table/${local.name_prefix}-reactions",
+      "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:table/${local.name_prefix}-comment-reactions",
+      "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:table/${local.name_prefix}-comments",
+      "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:table/${local.name_prefix}-notifications",
+      "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:table/${local.name_prefix}-bookmarks",
+      "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:table/${local.name_prefix}-bookmarks/index/*",
+      "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:table/${local.name_prefix}-shots",
+      "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:table/${local.name_prefix}-tours",
+      "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:table/${local.name_prefix}-worker-amis",
+      "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:table/${local.name_prefix}-presence-connections",
+      "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:table/${local.name_prefix}-presence-connections/index/*",
+      "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:table/${local.name_prefix}-users",
+      "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:table/${local.name_prefix}-job-quota-events",
+      "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:table/${local.name_prefix}-audit-logs",
+      "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:table/${local.name_prefix}-audit-logs/index/*",
     ]
   }
 
@@ -851,12 +851,12 @@ data "aws_iam_policy_document" "github_deploy_network_policy" {
     ]
     resources = [
       # Constructed ARN for the upload Lambda (does not exist yet on first apply).
-      "arn:aws:lambda:${var.aws_region}:886601940523:function:${var.name}-upload-lambda",
+      "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:function:${var.name}-upload-lambda",
       # Constructed ARN for the Google Drive import Lambda.
-      "arn:aws:lambda:${var.aws_region}:886601940523:function:${var.name}-gdrive-import-lambda",
+      "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:function:${var.name}-gdrive-import-lambda",
       # Constructed ARNs for the presence WebSocket Lambdas (websocket-api.tf).
-      "arn:aws:lambda:${var.aws_region}:886601940523:function:${var.name}-presence-authorizer",
-      "arn:aws:lambda:${var.aws_region}:886601940523:function:${var.name}-presence-lambda",
+      "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:function:${var.name}-presence-authorizer",
+      "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:function:${var.name}-presence-lambda",
     ]
   }
 
@@ -878,7 +878,7 @@ data "aws_iam_policy_document" "github_deploy_network_policy" {
       "sns:ListTagsForResource",
     ]
     resources = [
-      "arn:aws:sns:${var.aws_region}:886601940523:${local.name_prefix}-admin-notifications",
+      "arn:aws:sns:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:${local.name_prefix}-admin-notifications",
     ]
   }
 
@@ -901,9 +901,9 @@ data "aws_iam_policy_document" "github_deploy_network_policy" {
       "events:ListTagsForResource",
     ]
     resources = [
-      "arn:aws:events:${var.aws_region}:886601940523:rule/${local.name_prefix}-asg-manual-mode-check",
-      "arn:aws:events:${var.aws_region}:886601940523:rule/${local.name_prefix}-attempts-reap",
-      "arn:aws:events:${var.aws_region}:886601940523:rule/${local.name_prefix}-retention-sweep",
+      "arn:aws:events:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:rule/${local.name_prefix}-asg-manual-mode-check",
+      "arn:aws:events:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:rule/${local.name_prefix}-attempts-reap",
+      "arn:aws:events:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:rule/${local.name_prefix}-retention-sweep",
     ]
   }
 }
@@ -995,7 +995,7 @@ data "aws_iam_policy_document" "github_deploy_cdn_policy" {
       "cloudfront:ListTagsForResource",
     ]
     resources = [
-      "arn:aws:cloudfront::886601940523:function/${local.name_prefix}-*",
+      "arn:aws:cloudfront::${data.aws_caller_identity.worker.account_id}:function/${local.name_prefix}-*",
     ]
   }
 
@@ -1020,7 +1020,7 @@ data "aws_iam_policy_document" "github_deploy_cdn_policy" {
     # and are not known until after the first apply, so a specific ARN reference
     # cannot be used for CreateDistribution.
     resources = [
-      "arn:aws:cloudfront::886601940523:distribution/*",
+      "arn:aws:cloudfront::${data.aws_caller_identity.worker.account_id}:distribution/*",
     ]
   }
 
@@ -1098,7 +1098,7 @@ data "aws_iam_policy_document" "github_deploy_cdn_policy" {
       "acm:RemoveTagsFromCertificate",
     ]
     resources = [
-      "arn:aws:acm:us-east-1:886601940523:certificate/*",
+      "arn:aws:acm:us-east-1:${data.aws_caller_identity.worker.account_id}:certificate/*",
     ]
   }
 
@@ -1116,11 +1116,11 @@ data "aws_iam_policy_document" "github_deploy_cdn_policy" {
       "cloudwatch:ListTagsForResource",
     ]
     resources = [
-      "arn:aws:cloudwatch:${var.aws_region}:886601940523:alarm:${local.name_prefix}-sqs-scale-out",
-      "arn:aws:cloudwatch:${var.aws_region}:886601940523:alarm:${local.name_prefix}-sqs-scale-in",
-      "arn:aws:cloudwatch:${var.aws_region}:886601940523:alarm:${local.name_prefix}-sqs-scale-out-priority",
-      "arn:aws:cloudwatch:${var.aws_region}:886601940523:alarm:${local.name_prefix}-sqs-scale-in-priority",
-      "arn:aws:cloudwatch:${var.aws_region}:886601940523:alarm:TargetTracking-${local.name_prefix}-splat-worker-asg-*",
+      "arn:aws:cloudwatch:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:alarm:${local.name_prefix}-sqs-scale-out",
+      "arn:aws:cloudwatch:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:alarm:${local.name_prefix}-sqs-scale-in",
+      "arn:aws:cloudwatch:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:alarm:${local.name_prefix}-sqs-scale-out-priority",
+      "arn:aws:cloudwatch:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:alarm:${local.name_prefix}-sqs-scale-in-priority",
+      "arn:aws:cloudwatch:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:alarm:TargetTracking-${local.name_prefix}-splat-worker-asg-*",
     ]
   }
 
@@ -1150,9 +1150,9 @@ data "aws_iam_policy_document" "github_deploy_cdn_policy" {
       "logs:UntagResource",
     ]
     resources = [
-      "arn:aws:logs:${var.aws_region}:886601940523:log-group:/aws/lambda/${var.name}-*",
-      "arn:aws:logs:${var.aws_region}:886601940523:log-group:/aws/apigateway/${var.name}-*",
-      "arn:aws:logs:${var.aws_region}:886601940523:log-group:/${var.project_name}/${var.environment}/worker",
+      "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:log-group:/aws/lambda/${var.name}-*",
+      "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:log-group:/aws/apigateway/${var.name}-*",
+      "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:log-group:/${var.project_name}/${var.environment}/worker",
     ]
   }
 

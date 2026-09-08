@@ -6,6 +6,7 @@ const {
   DescribeInstanceTypesCommand,
   DescribeLaunchTemplateVersionsCommand,
   CreateLaunchTemplateVersionCommand,
+  ModifyLaunchTemplateCommand,
 } = require("@aws-sdk/client-ec2");
 const {
   AutoScalingClient,
@@ -33,10 +34,25 @@ const ALLOWED_INSTANCE_TYPES = ["g5g.xlarge", "g5g.16xlarge"];
  * Admin-only. Updates the GPU worker fleet at runtime — no Terraform apply,
  * no GitHub Actions deploy:
  *   - amiId / instanceType -> ec2:CreateLaunchTemplateVersion (a new launch
- *     template version, never the default). aws_autoscaling_group.worker
- *     references version = "$Latest", so new instances pick this up on the
- *     very next scale-out. The Terraform-tracked default version is
- *     untouched, so `terraform plan` stays clean.
+ *     template version) followed by ec2:ModifyLaunchTemplate to point the
+ *     template's Default Version at that new version. aws_autoscaling_group.
+ *     worker references version = "$Latest" (so new instances pick this up
+ *     on the very next scale-out regardless), but moving the Default Version
+ *     too is what makes the change visible on the template itself — the AWS
+ *     Console's Launch Templates page, `aws ec2 describe-launch-templates`,
+ *     and any other reader that doesn't explicitly ask for $Latest all show
+ *     the Default Version.
+ *
+ *     This intentionally creates Terraform drift on image_id/instance_type:
+ *     aws_launch_template.worker (compute.tf) still declares
+ *     image_id = var.worker_ami_id, but the live Default Version now diverges
+ *     from that var every time this endpoint runs. compute.tf's
+ *     lifecycle.ignore_changes = [image_id, instance_type] on the launch
+ *     template is what stops `terraform apply` from reverting an admin-page
+ *     change back to var.worker_ami_id — same pattern as maxSize below.
+ *     var.worker_ami_id is effectively just the bootstrap/initial value from
+ *     here on; the launch template's Default Version is the live source of
+ *     truth once an admin has changed it here.
  *   - maxSize -> autoscaling:UpdateAutoScalingGroup. compute.tf's
  *     lifecycle.ignore_changes on max_size keeps Terraform from reverting it.
  *
@@ -198,12 +214,26 @@ exports.handler = async (event) => {
       }),
     );
 
-    // Deliberately NOT calling ModifyLaunchTemplate / SetLaunchTemplateDefaultVersion:
-    // the ASG already launches from "$Latest", and leaving the default version
-    // alone is what keeps Terraform's plan clean (see compute.tf / admin-asg.tf).
-    result.launchTemplateVersion = Number(
-      versionOut.LaunchTemplateVersion?.VersionNumber,
+    const newVersionNumber = Number(versionOut.LaunchTemplateVersion?.VersionNumber);
+
+    // Point the template's Default Version at the version we just created, so
+    // the change is visible on the launch template itself (AWS Console,
+    // describe-launch-templates, etc. all show the Default Version unless a
+    // caller explicitly asks for $Latest) instead of only being picked up by
+    // the ASG's own "$Latest" reference. This deliberately diverges the live
+    // template from what compute.tf declares (var.worker_ami_id /
+    // var.worker_instance_type) — compute.tf's
+    // lifecycle.ignore_changes = [image_id, instance_type] on the launch
+    // template is what stops the next `terraform apply` from reverting this.
+    await ec2.send(
+      new ModifyLaunchTemplateCommand({
+        LaunchTemplateId: LAUNCH_TEMPLATE_ID,
+        DefaultVersion: String(newVersionNumber),
+      }),
     );
+
+    result.launchTemplateVersion = newVersionNumber;
+    result.launchTemplateDefaultVersion = newVersionNumber;
     if (amiId !== undefined) result.amiId = amiId;
     if (instanceType !== undefined) result.instanceType = instanceType;
   }

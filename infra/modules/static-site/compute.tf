@@ -161,6 +161,21 @@ resource "aws_launch_template" "worker" {
     Project     = var.project_name
     ManagedBy   = "terraform"
   }
+
+  lifecycle {
+    # image_id / instance_type: as of admin-asg.tf's ec2:ModifyLaunchTemplate
+    # grant, POST /admin/asg-config (admin-asg-config-update.js) can move this
+    # template's Default Version to a new image_id/instance_type at runtime,
+    # with no Terraform apply. Without ignore_changes here, the next apply
+    # would see that live drift against var.worker_ami_id /
+    # var.worker_instance_type and silently revert an admin-driven AMI change
+    # back to whatever this file declares. var.worker_ami_id is therefore only
+    # the bootstrap/initial AMI from here on — the launch template's Default
+    # Version is the live source of truth once an admin has changed it via the
+    # admin page. Same rationale as max_size on aws_autoscaling_group.worker
+    # below.
+    ignore_changes = [image_id, instance_type]
+  }
 }
 
 # ── Auto Scaling Group ────────────────────────────────────────────────────────

@@ -4,12 +4,6 @@ variable "aws_region" {
   default     = "us-east-1"
 }
 
-variable "aws_account_id" {
-  description = "AWS account ID."
-  type        = string
-  default     = "886601940523"
-}
-
 variable "github_owner" {
   description = "GitHub organisation or user that owns the repo."
   type        = string
@@ -27,6 +21,11 @@ variable "local_dev_iam_users" {
     List of IAM user ARNs permitted to assume the local-developer role.
     These users are intentionally absent from the GitHub deploy-role trust policy.
     REVIEW THIS LIST before every bootstrap apply.
+
+    NOTE: variable defaults are constant expressions and cannot call
+    data.aws_caller_identity, so the account ID here is a literal. It must
+    match "aws_account_id" in infra/config.json — scripts/check-infra-config.sh
+    verifies this on every commit.
   EOT
   type        = list(string)
   default     = ["arn:aws:iam::886601940523:user/terraadmin"]

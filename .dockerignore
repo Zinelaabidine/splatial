@@ -1,0 +1,13 @@
+# The local act runner image (.github/docker/Dockerfile) needs no repo files,
+# but the build context is the repo root. Keep it small so builds stay fast.
+.git
+**/node_modules
+**/.next
+**/out
+**/.terraform
+**/*.tfstate
+**/*.tfstate.*
+**/.terraform.lock.hcl
+graphify-out
+*.log
+.DS_Store

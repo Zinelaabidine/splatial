@@ -33,6 +33,15 @@ require_cmd() {
 require_cmd terraform
 require_cmd node
 require_cmd npm
+require_cmd jq
+
+# --- Infra config single-source-of-truth consistency ---
+step "infra config consistency (infra/config.json)"
+if ./scripts/check-infra-config.sh; then
+  pass "infra config consistency"
+else
+  fail "infra config consistency check failed — see output above"
+fi
 
 # --- Terraform format ---
 step "terraform fmt (check)"

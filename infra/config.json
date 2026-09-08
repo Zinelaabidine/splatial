@@ -1,0 +1,15 @@
+{
+  "_comment": "Single source of truth for account-wide/cross-environment constants. Read by Terraform (via jsondecode(file(...)) in each root's main.tf) and by GitHub Actions (via the 'Load infra config' step in .github/workflows/*.yml, which parses this file with jq into $GITHUB_ENV). Do not hardcode these values anywhere else -- update them here only. See infra/bootstrap/backend.tf and infra/envs/*/backend.tf for the one documented exception (Terraform 'backend' blocks cannot reference variables/locals/functions, so tf_state_bucket must also be copied literally there; scripts/check-infra-config.sh enforces that those literals stay in sync with this file).",
+
+  "aws_account_id": "886601940523",
+  "project_name": "splatial",
+  "tf_state_bucket": "openspacenexus-terraform-state",
+  "hosted_zone_name": "openspacenexus.store",
+  "certificate_domain_name": "*.openspacenexus.store",
+
+  "domain_names": {
+    "dev": "splatial-dev.openspacenexus.store",
+    "staging": "splatial-staging.openspacenexus.store",
+    "prod": "splatial.openspacenexus.store"
+  }
+}

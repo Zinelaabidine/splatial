@@ -2,17 +2,32 @@
 #
 # Lets an admin change the GPU worker's AMI, instance type, and ASG max size
 # from the admin page (GET/POST /admin/asg-config) WITHOUT a Terraform apply
-# or GitHub Actions deploy.
+# or GitHub Actions deploy — and have it show up on the launch template
+# itself (Default Version), not just on the next scale-out.
 #
-# How this avoids Terraform drift:
-#   - aws_autoscaling_group.worker already references the launch template as
-#     version = "$Latest" (see compute.tf). The admin handler calls
-#     ec2:CreateLaunchTemplateVersion to publish a new AMI/instance type as a
-#     new version — it never touches the template's default version, so
-#     Terraform (which tracks the default version's content) sees no diff on
-#     the next plan.
+# How this avoids Terraform reverting the change on the next apply:
+#   - The admin handler calls ec2:CreateLaunchTemplateVersion to publish a new
+#     AMI/instance type as a new version, then ec2:ModifyLaunchTemplate to
+#     point the template's Default Version at it. That's what makes the
+#     change visible wherever something reads "the template" without asking
+#     for $Latest explicitly (AWS Console, describe-launch-templates, etc).
+#     aws_autoscaling_group.worker also already references
+#     version = "$Latest" (see compute.tf), so new instances pick this up on
+#     the very next scale-out regardless of the Default Version move.
+#   - Moving the Default Version this way genuinely diverges the live
+#     template from what compute.tf declares (image_id = var.worker_ami_id,
+#     instance_type = var.worker_instance_type). compute.tf's
+#     lifecycle.ignore_changes = [image_id, instance_type] on
+#     aws_launch_template.worker (and .worker_priority in
+#     compute-priority.tf) is what stops the next `terraform apply` from
+#     reverting an admin-driven change back to those vars. Practically:
+#     var.worker_ami_id / var.worker_instance_type are only the
+#     bootstrap/initial values now — once an admin has changed the AMI here,
+#     the launch template's Default Version is the live source of truth, and
+#     Terraform will not fight it.
 #   - max_size is a live ASG attribute, not a launch template attribute, so it
-#     genuinely would drift; compute.tf's lifecycle.ignore_changes covers it.
+#     genuinely would drift too; compute.tf's lifecycle.ignore_changes on the
+#     ASG covers that the same way.
 #
 # Reuses the existing dispatcher Lambda (upload_lambda) and Cognito authorizer,
 # same pattern as admin-logs.tf. The handler additionally enforces admin-group
@@ -58,6 +73,23 @@ resource "aws_iam_role_policy" "admin_asg_config" {
         Sid    = "CreateWorkerLaunchTemplateVersion"
         Effect = "Allow"
         Action = ["ec2:CreateLaunchTemplateVersion"]
+        Resource = [
+          "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:launch-template/${aws_launch_template.worker.id}",
+          "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:launch-template/${aws_launch_template.worker_priority.id}",
+        ]
+      },
+      {
+        # ModifyLaunchTemplate (specifically SetDefaultVersion via the
+        # DefaultVersion param) also supports resource-level permission.
+        # Called right after CreateLaunchTemplateVersion above to move the
+        # template's Default Version to the version just created — this is
+        # what makes an admin-page AMI/instance-type change visible on the
+        # launch template itself instead of only affecting $Latest. See the
+        # file header comment for the Terraform-drift implication
+        # (compute.tf's lifecycle.ignore_changes on image_id/instance_type).
+        Sid    = "SetWorkerLaunchTemplateDefaultVersion"
+        Effect = "Allow"
+        Action = ["ec2:ModifyLaunchTemplate"]
         Resource = [
           "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:launch-template/${aws_launch_template.worker.id}",
           "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:launch-template/${aws_launch_template.worker_priority.id}",

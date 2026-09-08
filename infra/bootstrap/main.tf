@@ -28,7 +28,14 @@
 #   - infra/bootstrap/backend.tf    (state bucket must exist before first run)
 # ──────────────────────────────────────────────────────────────────────────────
 
+# Single source of truth for account-wide constants (project name, TF state
+# bucket name, account ID, domain config) — see infra/config.json. Terraform
+# reads it here via jsondecode(file()); GitHub Actions reads the same file
+# via jq in each workflow's "Load infra config" step. Do not hardcode these
+# values anywhere else.
 locals {
+  cfg = jsondecode(file("${path.module}/../config.json"))
+
   github_repo_full = "${var.github_owner}/${var.github_repo}"
 
   # GitHub Actions environments — must match the `environment:` field in deploy.yml.
@@ -36,10 +43,14 @@ locals {
   environments = ["dev", "staging", "prod"]
 }
 
+# Resolves the AWS account ID dynamically instead of hardcoding it — avoids a
+# second, driftable copy of the account ID living in Terraform state/HCL.
+data "aws_caller_identity" "current" {}
+
 # ─── Terraform Remote State ───────────────────────────────────────────────────
 
 resource "aws_s3_bucket" "terraform_state" {
-  bucket = "openspacenexus-terraform-state"
+  bucket = local.cfg.tf_state_bucket
 
   tags = {
     Name      = "terraform-state"
@@ -137,7 +148,7 @@ data "aws_iam_policy_document" "github_deploy_trust" {
 resource "aws_iam_role" "github_deploy" {
   for_each = toset(local.environments)
 
-  name        = "splatial-${each.key}-github-deploy-role"
+  name        = "${local.cfg.project_name}-${each.key}-github-deploy-role"
   description = "Assumed by GitHub Actions (OIDC) for ${each.key} deployments. Trust policy managed in infra/bootstrap."
 
   assume_role_policy = data.aws_iam_policy_document.github_deploy_trust[each.key].json
@@ -177,7 +188,7 @@ data "aws_iam_policy_document" "local_dev_trust" {
 }
 
 resource "aws_iam_role" "local_dev" {
-  name        = "splatial-local-dev-role"
+  name        = "${local.cfg.project_name}-local-dev-role"
   description = "Assumed by local developers running Terraform. Not used by GitHub Actions."
 
   assume_role_policy = data.aws_iam_policy_document.local_dev_trust.json
@@ -236,7 +247,7 @@ data "aws_iam_policy_document" "bootstrap_ci_trust" {
 }
 
 resource "aws_iam_role" "bootstrap_ci" {
-  name        = "splatial-bootstrap-ci-role"
+  name        = "${local.cfg.project_name}-bootstrap-ci-role"
   description = "Assumed by bootstrap.yml via OIDC. Manages IAM/OIDC resources only. No static keys."
 
   assume_role_policy = data.aws_iam_policy_document.bootstrap_ci_trust.json
@@ -286,10 +297,10 @@ data "aws_iam_policy_document" "bootstrap_ci_permissions" {
       "iam:DeleteRolePolicy",
     ]
     resources = [
-      "arn:aws:iam::${var.aws_account_id}:role/splatial-*-github-deploy-role",
-      "arn:aws:iam::${var.aws_account_id}:role/splatial-local-dev-role",
-      "arn:aws:iam::${var.aws_account_id}:role/splatial-bootstrap-ci-role",
-      "arn:aws:iam::${var.aws_account_id}:role/splatial-github-ami-bake-role",
+      "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.cfg.project_name}-*-github-deploy-role",
+      "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.cfg.project_name}-local-dev-role",
+      "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.cfg.project_name}-bootstrap-ci-role",
+      "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.cfg.project_name}-github-ami-bake-role",
     ]
   }
 
@@ -303,8 +314,8 @@ data "aws_iam_policy_document" "bootstrap_ci_permissions" {
       "s3:DeleteObject",
     ]
     resources = [
-      "arn:aws:s3:::openspacenexus-terraform-state",
-      "arn:aws:s3:::openspacenexus-terraform-state/*",
+      "arn:aws:s3:::${local.cfg.tf_state_bucket}",
+      "arn:aws:s3:::${local.cfg.tf_state_bucket}/*",
     ]
   }
 
@@ -327,7 +338,7 @@ data "aws_iam_policy_document" "bootstrap_ci_permissions" {
       "s3:GetBucketLocation",
       "s3:ListAllMyBuckets",
     ]
-    resources = ["arn:aws:s3:::openspacenexus-terraform-state"]
+    resources = ["arn:aws:s3:::${local.cfg.tf_state_bucket}"]
   }
 
   statement {
@@ -339,7 +350,7 @@ data "aws_iam_policy_document" "bootstrap_ci_permissions" {
 }
 
 resource "aws_iam_role_policy" "bootstrap_ci" {
-  name   = "splatial-bootstrap-ci-policy"
+  name   = "${local.cfg.project_name}-bootstrap-ci-policy"
   role   = aws_iam_role.bootstrap_ci.id
   policy = data.aws_iam_policy_document.bootstrap_ci_permissions.json
 }
@@ -400,7 +411,7 @@ data "aws_iam_policy_document" "github_ami_bake_trust" {
 }
 
 resource "aws_iam_role" "github_ami_bake" {
-  name        = "splatial-github-ami-bake-role"
+  name        = "${local.cfg.project_name}-github-ami-bake-role"
   description = "Assumed by bake-worker-ami.yml via OIDC to build/bake GPU worker AMIs. Trust policy managed in infra/bootstrap; permissions attached from infra/envs/dev."
 
   assume_role_policy = data.aws_iam_policy_document.github_ami_bake_trust.json

@@ -31,9 +31,10 @@
 #           6938fd4d98bab03faadb97b34396831e3780aea1 \
 #           1c58a3a8518e8759bf075b76b750d4f2df264fcd
 #
-#     Then import it into bootstrap state:
+#     Then import it into bootstrap state (substitute aws_account_id from
+#     infra/config.json for <ACCOUNT_ID>):
 #       terraform import aws_iam_openid_connect_provider.github \
-#         arn:aws:iam::886601940523:oidc-provider/token.actions.githubusercontent.com
+#         arn:aws:iam::<ACCOUNT_ID>:oidc-provider/token.actions.githubusercontent.com
 #
 #     And create + import the bootstrap CI role:
 #       aws iam create-role --role-name splatial-bootstrap-ci-role \
@@ -82,14 +83,30 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # infra/config.json is the single source of truth for AWS_ACCOUNT_ID,
+      # PROJECT_NAME, TF_STATE_BUCKET, HOSTED_ZONE_NAME, and
+      # CERTIFICATE_DOMAIN_NAME. Terraform reads the same file directly
+      # (jsondecode(file(...))); GitHub Actions can't call AWS before
+      # authenticating, so it reads the file here instead and exports the
+      # values for later steps in this job via $GITHUB_ENV.
+      - name: Load infra config
+        run: |
+          jq -r '
+            "AWS_ACCOUNT_ID=" + .aws_account_id,
+            "PROJECT_NAME=" + .project_name,
+            "TF_STATE_BUCKET=" + .tf_state_bucket,
+            "HOSTED_ZONE_NAME=" + .hosted_zone_name,
+            "CERTIFICATE_DOMAIN_NAME=" + .certificate_domain_name
+          ' infra/config.json >> "$GITHUB_ENV"
+
       # ── AWS Authentication ──────────────────────────────────────────────────
       # Uses OIDC — no static keys stored anywhere.
-      # splatial-bootstrap-ci-role trusts tokens with job_workflow_ref pointing
+      # <project>-bootstrap-ci-role trusts tokens with job_workflow_ref pointing
       # at exactly this file on main, so no other workflow can assume it.
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::886601940523:role/splatial-bootstrap-ci-role
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/${{ env.PROJECT_NAME }}-bootstrap-ci-role
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Verify AWS Identity

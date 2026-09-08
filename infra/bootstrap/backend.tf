@@ -3,6 +3,12 @@ terraform {
   # separate key.  The bucket itself is also managed in this root (see main.tf).
   # On the very first run, init with -backend=false, apply to create the bucket,
   # then run init again to migrate local state to S3.
+  #
+  # NOTE: Terraform `backend` blocks are parsed before any variables, locals,
+  # or functions are available, so this bucket name cannot reference
+  # infra/config.json directly. "tf_state_bucket" in infra/config.json is the
+  # canonical value — this literal must match it exactly.
+  # scripts/check-infra-config.sh enforces that on every commit.
   backend "s3" {
     bucket       = "openspacenexus-terraform-state"
     key          = "bootstrap/terraform.tfstate"

@@ -1,0 +1,90 @@
+flowchart LR
+
+  subgraph Browser["Browser (Next.js static export)"]
+    Viewer["Splat Viewer\n(WebGL/WebGPU)"]
+    UploadUI["Upload / Dashboard UI"]
+    SocialUI["Social & Explore UI\n(feed, profiles, comments)"]
+    AdminUI["Admin UI\n(ASG, users, AMIs)"]
+  end
+
+  subgraph Edge["Edge & Auth"]
+    CF["CloudFront\n+ URL-rewrite Function"]
+    Cognito["Cognito User Pool\n(JWT)"]
+  end
+
+  subgraph API["Serverless API Tier"]
+    APIGW["API Gateway HTTP API\n(REST, Cognito JWT authorizer)"]
+    WSGW["API Gateway WebSocket\n(presence, token via query param)"]
+    Dispatcher["Lambda Dispatcher\nupload.js router -> ~90 handlers"]
+    EventBridge["EventBridge schedules\nattempts-reap * retention-sweep\nasg-manual-mode-check"]
+  end
+
+  subgraph Data["Data Plane"]
+    DDB[("DynamoDB\nscenes, users, profiles, comments,\nreactions, follows, bookmarks,\nnotifications, shots, tours,\npresence, audit-logs, job-quota,\nworker-amis")]
+    S3Raw[("S3 raw-scenes\nmultipart upload")]
+    S3Splat[("S3 splat-scenes\n.ply output")]
+    S3Site[("S3 static site")]
+  end
+
+  subgraph Queue["Queueing (standard SQS, not FIFO)"]
+    SQSFree[["processing-queue\nfree tier"]]
+    SQSPri[["processing-queue-priority\npaid tier"]]
+    DLQFree[["DLQ\n3x retry"]]
+    DLQPri[["DLQ priority\n3x retry"]]
+  end
+
+  subgraph Compute["GPU Compute"]
+    ASGFree["ASG worker\nSpot, price-capacity-optimized\ng5g.xlarge (ARM Graviton)\nmin 0, scale via SQS depth"]
+    ASGPri["ASG worker-priority\n100% On-Demand\ng5g.xlarge"]
+    WorkerPy["worker.py\n(shared pre-baked AMI)\nSIGTERM checkpoint + requeue"]
+  end
+
+  %% Static assets
+  CF --> S3Site
+  Viewer -.-> CF
+  UploadUI -.-> CF
+  SocialUI -.-> CF
+  AdminUI -.-> CF
+
+  %% Auth
+  UploadUI -- "sign in" --> Cognito
+  APIGW -- authorizer --> Cognito
+  WSGW -- "$connect authorizer" --> Cognito
+
+  %% REST + WS traffic
+  UploadUI -- "POST /upload/*" --> APIGW
+  SocialUI -- "REST" --> APIGW
+  AdminUI -- "REST /admin/*" --> APIGW
+  Viewer -- "wss ?token=" --> WSGW
+  APIGW --> Dispatcher
+  WSGW --> Dispatcher
+  EventBridge -- "invoke" --> Dispatcher
+
+  %% Data access
+  Dispatcher -- "metadata" --> DDB
+  Dispatcher -- "presigned PUT" --> UploadUI
+  UploadUI -- "multipart PUT" --> S3Raw
+  Dispatcher -- "presigned GET" --> Viewer
+  Viewer -- "GET .ply (direct)" --> S3Splat
+
+  %% Queueing
+  Dispatcher -- "SendMessage\nfree-tier job" --> SQSFree
+  Dispatcher -- "SendMessage\npaid-tier job" --> SQSPri
+  SQSFree -. "maxReceiveCount 3" .-> DLQFree
+  SQSPri -. "maxReceiveCount 3" .-> DLQPri
+
+  %% Compute scaling
+  SQSFree -- "queue depth\nstep scaling" --> ASGFree
+  SQSPri -- "queue depth\nstep scaling" --> ASGPri
+  ASGFree --> WorkerPy
+  ASGPri --> WorkerPy
+
+  %% Worker data path
+  WorkerPy -- "download raw" --> S3Raw
+  WorkerPy -- "upload .ply" --> S3Splat
+  WorkerPy -- "attempt heartbeat/patch" --> APIGW
+
+  %% Admin/ops control plane
+  AdminUI -.-> Dispatcher
+  Dispatcher -. "live launch-template version\n(AMI / instance type / max size)" .-> ASGFree
+  Dispatcher -. "same control path" .-> ASGPri

@@ -273,7 +273,7 @@ export default function WorkerAmiPanel() {
               <input
                 value={regBaseAmiId}
                 onChange={(e) => setRegBaseAmiId(e.target.value)}
-                placeholder="ami-0a6913682d6d953eb"
+                placeholder="ami-01ce7dc9f9762db2c"
                 className="w-full rounded-lg border border-[var(--nord-hairline)] bg-[var(--nord-surface)] px-3 py-2 text-sm text-[var(--nord-ink)] outline-none focus:border-[#3b82f6]"
               />
             </div>

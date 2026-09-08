@@ -31,7 +31,8 @@
 #     worker on it.
 #
 # AUTHENTICATION
-#   Assumes splatial-github-ami-bake-role via GitHub OIDC. Trust is scoped in
+#   Assumes <project_name>-github-ami-bake-role (see infra/config.json) via
+#   GitHub OIDC. Trust is scoped in
 #   infra/bootstrap/main.tf to job_workflow_ref for exactly this file on main
 #   — no other workflow can assume it. Combined with workflow_dispatch-only
 #   triggering and the `environment: ami-bake` protection rule below, running
@@ -51,7 +52,7 @@ on:
       base_ami_id:
         description: "AMI to build from (incremental bake). Defaults to the current dev worker AMI — update if a different one is now registered/live."
         type: string
-        default: "ami-0a6913682d6d953eb"
+        default: "ami-01ce7dc9f9762db2c"
         required: true
       label:
         description: "Short label for this bake, e.g. 'fix-colmap-timeout' (used in the new AMI's Name tag)"
@@ -74,9 +75,6 @@ concurrency:
 env:
   AWS_REGION: us-east-1
   INSTANCE_TYPE: g5g.xlarge
-  NAME_PREFIX: splatial-dev
-  RAW_SCENES_BUCKET: splatial-dev-raw-scenes
-  INSTANCE_PROFILE_NAME: splatial-dev-ami-bake-instance-profile
 
 jobs:
   bake:
@@ -89,10 +87,36 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # infra/config.json is the single source of truth for AWS_ACCOUNT_ID,
+      # PROJECT_NAME, TF_STATE_BUCKET, HOSTED_ZONE_NAME, and
+      # CERTIFICATE_DOMAIN_NAME. Terraform reads the same file directly
+      # (jsondecode(file(...))); GitHub Actions can't call AWS before
+      # authenticating, so it reads the file here instead and exports the
+      # values for later steps in this job via $GITHUB_ENV. This workflow
+      # only ever targets dev (see enable_ami_bake_resources in
+      # infra/modules/static-site/variables.tf), so NAME_PREFIX/
+      # RAW_SCENES_BUCKET/INSTANCE_PROFILE_NAME are derived here with a
+      # fixed "-dev" suffix rather than looked up from config.json.
+      - name: Load infra config
+        run: |
+          jq -r '
+            "AWS_ACCOUNT_ID=" + .aws_account_id,
+            "PROJECT_NAME=" + .project_name,
+            "TF_STATE_BUCKET=" + .tf_state_bucket,
+            "HOSTED_ZONE_NAME=" + .hosted_zone_name,
+            "CERTIFICATE_DOMAIN_NAME=" + .certificate_domain_name
+          ' infra/config.json >> "$GITHUB_ENV"
+          PROJECT_NAME="$(jq -r '.project_name' infra/config.json)"
+          {
+            echo "NAME_PREFIX=${PROJECT_NAME}-dev"
+            echo "RAW_SCENES_BUCKET=${PROJECT_NAME}-dev-raw-scenes"
+            echo "INSTANCE_PROFILE_NAME=${PROJECT_NAME}-dev-ami-bake-instance-profile"
+          } >> "$GITHUB_ENV"
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::886601940523:role/splatial-github-ami-bake-role
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/${{ env.PROJECT_NAME }}-github-ami-bake-role
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Verify AWS identity
@@ -110,7 +134,7 @@ jobs:
             echo "run_key=${RUN_KEY}"
             echo "timestamp=${TIMESTAMP}"
             echo "safe_label=${SAFE_LABEL}"
-            echo "image_name=splatial-worker-${SAFE_LABEL}-${SHORT_SHA}-${TIMESTAMP}"
+            echo "image_name=${{ env.PROJECT_NAME }}-worker-${SAFE_LABEL}-${SHORT_SHA}-${TIMESTAMP}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Look up dev networking (subnet + security group)
@@ -162,8 +186,8 @@ jobs:
       - name: Launch builder instance
         id: launch
         run: |
-          TAGS="ResourceType=instance,Tags=[{Key=Name,Value=${{ env.NAME_PREFIX }}-ami-bake-builder},{Key=Purpose,Value=ami-bake},{Key=Environment,Value=dev},{Key=Project,Value=splatial},{Key=ManagedBy,Value=github-actions-bake},{Key=GitSha,Value=${{ steps.ctx.outputs.short_sha }}},{Key=RunUrl,Value=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}}]"
-          VOL_TAGS="ResourceType=volume,Tags=[{Key=Purpose,Value=ami-bake},{Key=Environment,Value=dev},{Key=Project,Value=splatial},{Key=ManagedBy,Value=github-actions-bake}]"
+          TAGS="ResourceType=instance,Tags=[{Key=Name,Value=${{ env.NAME_PREFIX }}-ami-bake-builder},{Key=Purpose,Value=ami-bake},{Key=Environment,Value=dev},{Key=Project,Value=${{ env.PROJECT_NAME }}},{Key=ManagedBy,Value=github-actions-bake},{Key=GitSha,Value=${{ steps.ctx.outputs.short_sha }}},{Key=RunUrl,Value=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}}]"
+          VOL_TAGS="ResourceType=volume,Tags=[{Key=Purpose,Value=ami-bake},{Key=Environment,Value=dev},{Key=Project,Value=${{ env.PROJECT_NAME }}},{Key=ManagedBy,Value=github-actions-bake}]"
 
           INSTANCE_ID=$(aws ec2 run-instances \
             --image-id "${{ inputs.base_ami_id }}" \
@@ -264,8 +288,8 @@ jobs:
       - name: Create image
         id: image
         run: |
-          IMAGE_TAGS="ResourceType=image,Tags=[{Key=Purpose,Value=ami-bake},{Key=Environment,Value=dev},{Key=Project,Value=splatial},{Key=ManagedBy,Value=github-actions-bake},{Key=GitSha,Value=${{ steps.ctx.outputs.short_sha }}},{Key=BaseAmi,Value=${{ inputs.base_ami_id }}}]"
-          SNAP_TAGS="ResourceType=snapshot,Tags=[{Key=Purpose,Value=ami-bake},{Key=Environment,Value=dev},{Key=Project,Value=splatial},{Key=ManagedBy,Value=github-actions-bake}]"
+          IMAGE_TAGS="ResourceType=image,Tags=[{Key=Purpose,Value=ami-bake},{Key=Environment,Value=dev},{Key=Project,Value=${{ env.PROJECT_NAME }}},{Key=ManagedBy,Value=github-actions-bake},{Key=GitSha,Value=${{ steps.ctx.outputs.short_sha }}},{Key=BaseAmi,Value=${{ inputs.base_ami_id }}}]"
+          SNAP_TAGS="ResourceType=snapshot,Tags=[{Key=Purpose,Value=ami-bake},{Key=Environment,Value=dev},{Key=Project,Value=${{ env.PROJECT_NAME }}},{Key=ManagedBy,Value=github-actions-bake}]"
 
           IMAGE_ID=$(aws ec2 create-image \
             --instance-id "${{ steps.launch.outputs.instance_id }}" \
