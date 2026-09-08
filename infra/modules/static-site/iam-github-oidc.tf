@@ -74,6 +74,7 @@ data "aws_iam_policy_document" "github_deploy_policy" {
       "arn:aws:apigateway:${var.aws_region}::/apis",
       "arn:aws:apigateway:${var.aws_region}::/apis/*",
       "arn:aws:apigateway:${var.aws_region}::/account",
+      "arn:aws:apigateway:${var.aws_region}::/tags/*",
     ]
   }
 
@@ -92,6 +93,9 @@ data "aws_iam_policy_document" "github_deploy_policy" {
     resources = [
       "arn:aws:apigateway:${var.aws_region}::/domainnames",
       "arn:aws:apigateway:${var.aws_region}::/domainnames/*",
+      # Tag-on-create for custom domains uses PUT on /tags/<resource-arn>, not
+      # the domain name ARN itself.
+      "arn:aws:apigateway:${var.aws_region}::/tags/*",
     ]
   }
 
@@ -189,6 +193,22 @@ data "aws_iam_policy_document" "github_deploy_policy" {
       test     = "StringEquals"
       variable = "iam:PassedToService"
       values   = ["lambda.amazonaws.com"]
+    }
+  }
+
+  statement {
+    sid    = "IAMPassRoleToAPIGateway"
+    effect = "Allow"
+    actions = [
+      "iam:PassRole",
+    ]
+    resources = [
+      "arn:aws:iam::${data.aws_caller_identity.worker.account_id}:role/splatial-apigateway-cloudwatch-role",
+    ]
+    condition {
+      test     = "StringEquals"
+      variable = "iam:PassedToService"
+      values   = ["apigateway.amazonaws.com"]
     }
   }
 
@@ -519,7 +539,9 @@ data "aws_iam_policy_document" "github_deploy_compute_policy" {
       "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:volume/*",
       "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:network-interface/*",
       "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:subnet/*",
+      "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.worker.account_id}:key-pair/*",
       "arn:aws:ec2:${var.aws_region}::image/${var.worker_ami_id}",
+      "arn:aws:iam::${data.aws_caller_identity.worker.account_id}:instance-profile/${local.name_prefix}-splat-worker-instance-profile",
     ]
   }
 
@@ -610,9 +632,14 @@ data "aws_iam_policy_document" "github_deploy_compute_policy" {
     sid     = "IAMPassRoleToEC2"
     effect  = "Allow"
     actions = ["iam:PassRole"]
-    resources = [
-      "arn:aws:iam::${data.aws_caller_identity.worker.account_id}:role/${local.name_prefix}-splat-worker-instance-role",
-    ]
+    resources = concat(
+      [
+        "arn:aws:iam::${data.aws_caller_identity.worker.account_id}:role/${local.name_prefix}-splat-worker-instance-role",
+      ],
+      var.enable_ami_bake_resources ? [
+        "arn:aws:iam::${data.aws_caller_identity.worker.account_id}:role/${local.name_prefix}-ami-bake-instance-role",
+      ] : [],
+    )
     condition {
       test     = "StringEquals"
       variable = "iam:PassedToService"
