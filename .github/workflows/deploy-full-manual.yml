@@ -202,8 +202,6 @@ jobs:
             -target=module.static_site.aws_iam_policy.github_deploy_network_policy
             -target=module.static_site.aws_iam_role_policy_attachment.github_deploy_network
             -target=module.static_site.time_sleep.network_iam_propagation
-            -target=module.static_site.aws_route.worker_spot_igw
-            -target=module.static_site.aws_route.worker_spot_nat
             -target=module.static_site.aws_iam_policy.github_deploy_cdn_policy
             -target=module.static_site.aws_iam_role_policy_attachment.github_deploy_cdn
             -target=module.static_site.time_sleep.cdn_iam_propagation
